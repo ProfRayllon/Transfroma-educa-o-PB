@@ -1,0 +1,4 @@
+USE transforma_db;
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS avatar MEDIUMTEXT DEFAULT NULL AFTER `function`;

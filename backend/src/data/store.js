@@ -22,6 +22,7 @@ function mapUserRow(row) {
     registration: row.registration,
     role: row.role,
     function: row.function,
+    avatar: row.avatar,
     status: row.status,
     lastAccess: row.last_access,
     createdAt: formatDate(row.created_at, true),
@@ -138,6 +139,8 @@ async function createPool() {
 }
 
 async function ensureMysqlSchema() {
+  await pool.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar MEDIUMTEXT DEFAULT NULL AFTER `function`')
+
   await pool.execute(`
     CREATE TABLE IF NOT EXISTS courses (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -169,8 +172,8 @@ async function seedMysqlIfNeeded() {
 
   for (const user of users) {
     await pool.execute(
-      `INSERT INTO users (id, name, email, password_hash, registration, role, \`function\`, status, last_access, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO users (id, name, email, password_hash, registration, role, \`function\`, avatar, status, last_access, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         user.id,
         user.name,
@@ -179,6 +182,7 @@ async function seedMysqlIfNeeded() {
         user.registration,
         user.role,
         user.function,
+        user.avatar || null,
         user.status,
         user.lastAccess || null,
         user.createdAt,
@@ -347,8 +351,8 @@ async function createUser(payload) {
 
   const passwordHash = await bcrypt.hash(payload.password, 10)
   const [result] = await pool.execute(
-    `INSERT INTO users (name, email, password_hash, registration, role, \`function\`, status, last_access, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO users (name, email, password_hash, registration, role, \`function\`, avatar, status, last_access, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       payload.name,
       payload.email,
@@ -356,6 +360,7 @@ async function createUser(payload) {
       payload.registration || null,
       payload.role,
       payload.function || null,
+      payload.avatar || null,
       payload.status || 'ativo',
       null,
       new Date().toISOString().slice(0, 10),
@@ -391,6 +396,7 @@ async function updateUser(id, updates) {
     registration: updates.registration,
     role: updates.role,
     '`function`': updates.function,
+    avatar: updates.avatar,
     status: updates.status,
   }
 

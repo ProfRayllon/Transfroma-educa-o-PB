@@ -52,8 +52,18 @@ export function AuthProvider({ children }) {
       setUser(null)
     }
 
+    const handleUserUpdated = (event) => {
+      if (!event.detail) return
+      localStorage.setItem(USER_KEY, JSON.stringify(event.detail))
+      setUser(event.detail)
+    }
+
     window.addEventListener(UNAUTHORIZED_EVENT, handleUnauthorized)
-    return () => window.removeEventListener(UNAUTHORIZED_EVENT, handleUnauthorized)
+    window.addEventListener('transforma:user-updated', handleUserUpdated)
+    return () => {
+      window.removeEventListener(UNAUTHORIZED_EVENT, handleUnauthorized)
+      window.removeEventListener('transforma:user-updated', handleUserUpdated)
+    }
   }, [])
 
   const login = async (email, password) => {

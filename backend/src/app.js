@@ -96,6 +96,24 @@ function coursePayload(body) {
   return { payload }
 }
 
+function avatarPayload(body) {
+  const avatar = body.avatar || null
+
+  if (avatar !== null && typeof avatar !== 'string') {
+    return { error: 'Foto invalida.' }
+  }
+
+  if (avatar && !avatar.startsWith('data:image/')) {
+    return { error: 'Envie uma imagem valida.' }
+  }
+
+  if (avatar && Buffer.byteLength(avatar, 'utf8') > 4 * 1024 * 1024) {
+    return { error: 'A foto deve ter no maximo 4 MB.' }
+  }
+
+  return { avatar }
+}
+
 async function materialPayload(body, actor, currentMaterial) {
   const payload = {
     course: body.course,
@@ -179,6 +197,19 @@ app.get('/api/auth/me', auth, async (req, res) => {
   const user = await store.getUserById(req.user.id)
   if (!user) return res.status(404).json({ message: 'Usuario nao encontrado.' })
   res.json(sanitizeUser(user))
+})
+
+app.patch('/api/auth/me/avatar', auth, async (req, res) => {
+  const { avatar, error } = avatarPayload(req.body)
+  if (error) return res.status(400).json({ message: error })
+
+  try {
+    const user = await store.updateUser(req.user.id, { avatar })
+    if (!user) return res.status(404).json({ message: 'Usuario nao encontrado.' })
+    res.json(sanitizeUser(user))
+  } catch {
+    res.status(500).json({ message: 'Erro ao salvar foto.' })
+  }
 })
 
 app.get('/api/users', auth, requireRole('administrador', 'supervisor'), async (req, res) => {

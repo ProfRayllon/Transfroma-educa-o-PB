@@ -88,7 +88,7 @@ function ChangePasswordSection() {
 
 export default function Perfil() {
   const { user } = useAuth()
-  const { photo, setPhoto } = useAvatar()
+  const { photo, setPhoto, saving: photoSaving, error: photoError } = useAvatar()
   const inputRef = useRef(null)
   const [editMode, setEditMode] = useState(false)
   const [form, setForm] = useState({ name: user?.name || '', email: user?.email || '' })
@@ -100,16 +100,25 @@ export default function Perfil() {
   const handleFile = (file) => {
     if (!file || !file.type.startsWith('image/')) return
     const reader = new FileReader()
-    reader.onload = e => {
-      setPhoto(e.target.result)
-      setPhotoSaved(true)
-      setTimeout(() => setPhotoSaved(false), 3000)
+    reader.onload = async e => {
+      try {
+        await setPhoto(e.target.result)
+        setPhotoSaved(true)
+        setTimeout(() => setPhotoSaved(false), 3000)
+      } catch {
+        setPhotoSaved(false)
+      }
     }
     reader.readAsDataURL(file)
   }
 
-  const handleRemovePhoto = () => {
-    setPhoto(null)
+  const handleRemovePhoto = async () => {
+    try {
+      await setPhoto(null)
+      setPhotoSaved(false)
+    } catch {
+      setPhotoSaved(false)
+    }
   }
 
   const handleSave = () => {
@@ -163,15 +172,17 @@ export default function Perfil() {
               <div className="flex items-center gap-2 mt-3">
                 <button
                   onClick={() => inputRef.current?.click()}
-                  className="text-xs font-medium text-brand-700 hover:text-brand-900 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
+                  disabled={photoSaving}
+                  className="text-xs font-medium text-brand-700 hover:text-brand-900 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <Camera size={12} />
-                  {photo ? 'Trocar foto' : 'Adicionar foto'}
+                  {photoSaving ? 'Salvando...' : photo ? 'Trocar foto' : 'Adicionar foto'}
                 </button>
                 {photo && (
                   <button
                     onClick={handleRemovePhoto}
-                    className="text-xs font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
+                    disabled={photoSaving}
+                    className="text-xs font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <Trash2 size={12} />
                     Remover
@@ -181,6 +192,11 @@ export default function Perfil() {
                   <span className="text-xs text-green-700 flex items-center gap-1">
                     <CheckCircle size={12} />
                     Foto salva!
+                  </span>
+                )}
+                {photoError && (
+                  <span className="text-xs text-red-600">
+                    {photoError}
                   </span>
                 )}
               </div>
