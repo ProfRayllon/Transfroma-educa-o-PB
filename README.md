@@ -96,6 +96,31 @@ DATA_MODE=mysql
 - Ajuste `CORS_ORIGINS` para a URL real do frontend.
 - Valide em staging/preview antes de ativar deploy automatico em producao.
 
+## Deploy inicial no Render
+
+O repositorio ja inclui um arquivo [render.yaml](/c:/Users/rayll/Desktop/Transforma%20Educação%20PB/transforma/render.yaml) para subir:
+
+- `transforma-api` como Web Service Node
+- `transforma-web` como Static Site Vite
+
+O `autoDeployTrigger` foi deixado como `off` nos dois servicos para o primeiro deploy ser manual.
+
+### Passos
+
+1. No Render, escolha **New > Blueprint** e conecte este repositorio.
+2. Confirme a leitura do `render.yaml`.
+3. Informe os valores pedidos para:
+   `SEED_ADMIN_PASSWORD`, `SEED_SUPERVISOR_PASSWORD` e `SEED_DEFAULT_PASSWORD`.
+4. Execute o primeiro deploy manual.
+5. Teste o login e as telas principais usando as URLs `onrender.com`.
+
+### Observacoes
+
+- O frontend recebe `VITE_API_BASE_URL` apontando para a URL publica do backend.
+- O backend recebe `CORS_ORIGINS` apontando para a URL publica do frontend.
+- Se voce trocar para dominio proprio depois, atualize `CORS_ORIGINS` no backend para incluir o novo dominio do frontend.
+- Quando estiver estavel, voce pode mudar `autoDeployTrigger` para `checksPass` ou `commit`.
+
 ## Estrutura do projeto
 
 ```text

@@ -1,0 +1,47 @@
+services:
+  - type: web
+    name: transforma-api
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeployTrigger: off
+    healthCheckPath: /api/health
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 8h
+      - key: DATA_MODE
+        value: mock
+      - key: CORS_ORIGINS
+        fromService:
+          name: transforma-web
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+      - key: SEED_SUPERVISOR_PASSWORD
+        sync: false
+      - key: SEED_DEFAULT_PASSWORD
+        sync: false
+
+  - type: web
+    name: transforma-web
+    runtime: static
+    rootDir: frontend
+    plan: free
+    buildCommand: npm install && npm run build
+    staticPublishPath: frontend/dist
+    autoDeployTrigger: off
+    envVars:
+      - key: VITE_API_BASE_URL
+        fromService:
+          name: transforma-api
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
