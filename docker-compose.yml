@@ -9,6 +9,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     expose:
       - "3001"
     networks:
