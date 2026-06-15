@@ -1,0 +1,12 @@
+Coloque aqui as imagens usadas diretamente no sistema:
+
+  login-bg.jpg   → foto de fundo do painel ESQUERDO da tela de login
+  logo.png       → logo do sistema (usada na sidebar e no login)
+
+Formatos aceitos: JPG, PNG, SVG, WEBP
+
+Dicas:
+  - login-bg.jpg: use a foto com o homem sorrindo (fundo roxo). Proporção ideal 9:16.
+  - logo.png: use a logo oficial com fundo transparente (PNG ou SVG).
+
+Os arquivos ficam acessíveis em tempo de execução pelo caminho /login-bg.jpg e /logo.png.
