@@ -72,12 +72,7 @@ const materials = [
   },
 ]
 
-const people = [
-  { id: 1, userId: 3, name: 'Ana Moura', function: 'Professor/Produtor', supervisorId: 2, supervisorName: 'Marcos Lima', attendanceStatus: 'registrada', attendanceTime: '08:00', completedActivities: 85, openOccurrences: 0, status: 'ativo' },
-  { id: 2, userId: 4, name: 'Joao Teixeira', function: 'Professor/Produtor', supervisorId: 2, supervisorName: 'Marcos Lima', attendanceStatus: 'pendente', attendanceTime: null, completedActivities: 60, openOccurrences: 1, status: 'ativo' },
-  { id: 3, userId: 5, name: 'Camila Nunes', function: 'Tutor', supervisorId: 1, supervisorName: 'Juliana Santos', attendanceStatus: 'registrada', attendanceTime: '08:10', completedActivities: 65, openOccurrences: 0, status: 'ativo' },
-  { id: 4, userId: 6, name: 'Lucas Ferreira', function: 'Tecnico', supervisorId: 2, supervisorName: 'Marcos Lima', attendanceStatus: 'registrada', attendanceTime: '07:45', completedActivities: 88, openOccurrences: 0, status: 'ativo' },
-]
+const people = []
 
 const occurrences = [
   { id: 1, userId: 4, userName: 'Joao Teixeira', type: 'Entrega atrasada', description: 'Material entregue com atraso de 2 dias.', severity: 'baixa', status: 'em_analise', createdBy: 'Juliana Santos', resolvedBy: null, createdAt: '2026-06-03' },
