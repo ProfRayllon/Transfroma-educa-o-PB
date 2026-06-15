@@ -4,7 +4,7 @@ import { Plus, Upload, CheckCircle, FileText, Clock, Eye, Search, Filter, X, Mor
 import Badge from '../components/ui/Badge'
 import StatCard from '../components/ui/StatCard'
 import Modal from '../components/ui/Modal'
-import { mockUsers, mockCourses, mockPeople } from '../data/mockData'
+import { mockUsers, mockPeople } from '../data/mockData'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 
@@ -26,8 +26,6 @@ const REVIEW_STATUS_OPTIONS = [
   { value: 'reprovado', label: 'Reprovado' },
   { value: 'ajuste_solicitado', label: 'Ajuste solicitado' },
 ]
-
-const COURSES = ['Todos', ...mockCourses.map(c => c.name)]
 
 const producers = mockUsers.filter(u => ['professor', 'supervisor', 'administrador'].includes(u.role))
 
@@ -218,7 +216,7 @@ function getSupervisor(responsibleId) {
   return person.supervisorName
 }
 
-function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove }) {
+function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove, courses }) {
   const isNew = !material?.id
   const [form, setForm] = useState(() => ({
     course: defaultCourse && defaultCourse !== 'Todos' ? defaultCourse : '',
@@ -284,7 +282,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove 
           <label className="block text-xs font-medium text-gray-600 mb-1.5">Curso *</label>
           <select name="course" value={form.course} onChange={handleChange} className="select-field" required>
             <option value="">Selecionar curso...</option>
-            {mockCourses.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+            {courses.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
           </select>
         </div>
 
@@ -411,7 +409,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove 
 
 export default function Producao() {
   const { user, can } = useAuth()
-  const { materials, setMaterials } = useData()
+  const { materials, setMaterials, courses } = useData()
   const location = useLocation()
   const navigate = useNavigate()
   const initialCourse = location.state?.course || 'Todos'
@@ -425,6 +423,7 @@ export default function Producao() {
 
   const canApprove = can('approve_material') || user?.role === 'administrador'
   const canEdit = can('edit_producao') || ['administrador', 'supervisor', 'professor'].includes(user?.role)
+  const courseOptions = ['Todos', ...courses.map(c => c.name)]
 
   const filtered = useMemo(() => {
     return materials.filter(m => {
@@ -546,7 +545,7 @@ export default function Producao() {
               onChange={e => { setFilters(f => ({ ...f, course: e.target.value })); setPage(1) }}
               className="select-field"
             >
-              {COURSES.map(c => <option key={c}>{c}</option>)}
+              {courseOptions.map(c => <option key={c}>{c}</option>)}
             </select>
           </div>
           <div className="w-28">
@@ -729,6 +728,7 @@ export default function Producao() {
         onSave={handleSave}
         defaultCourse={filters.course}
         canApprove={canApprove}
+        courses={courses}
       />
     </div>
   )
