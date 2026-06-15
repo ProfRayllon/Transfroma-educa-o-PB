@@ -5,7 +5,7 @@ const cors = require('cors')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 
-const { users, materials, people, occurrences, notifications } = require('./data/mockData')
+const store = require('./data/store')
 
 const app = express()
 
@@ -28,8 +28,8 @@ function sanitizeUser(user) {
   return safeUser
 }
 
-function findUserById(userId) {
-  return users.find((user) => user.id === Number(userId))
+async function findUserById(userId) {
+  return store.getUserById(userId)
 }
 
 function isManager(role) {
@@ -46,7 +46,7 @@ function canEditMaterial(user, material) {
   return user.role === 'professor' && material.responsibleId === user.id
 }
 
-function materialPayload(body, actor, currentMaterial) {
+async function materialPayload(body, actor, currentMaterial) {
   const payload = {
     course: body.course,
     session: body.session,
@@ -66,7 +66,7 @@ function materialPayload(body, actor, currentMaterial) {
     payload.responsibleId = Number(body.responsibleId) || currentMaterial?.responsibleId
 
     if (payload.responsibleId) {
-      const responsible = findUserById(payload.responsibleId)
+      const responsible = await findUserById(payload.responsibleId)
       payload.responsibleName = responsible?.name || body.responsibleName || currentMaterial?.responsibleName || ''
       payload.responsibleRole = responsible?.function || body.responsibleRole || currentMaterial?.responsibleRole || ''
     }
@@ -79,7 +79,7 @@ function materialPayload(body, actor, currentMaterial) {
   payload.reviewNotes = currentMaterial?.reviewNotes || ''
   payload.responsibleId = actor.id
 
-  const actorUser = findUserById(actor.id)
+  const actorUser = await findUserById(actor.id)
   payload.responsibleName = actorUser?.name || currentMaterial?.responsibleName || ''
   payload.responsibleRole = actorUser?.function || currentMaterial?.responsibleRole || ''
 
@@ -112,7 +112,7 @@ function requireRole(...roles) {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body
-    const user = users.find((entry) => entry.email.toLowerCase() === email?.toLowerCase())
+    const user = await store.getUserByEmail(email || '')
     if (!user) return res.status(401).json({ message: 'E-mail ou senha incorretos.' })
 
     const valid = await bcrypt.compare(password, user.passwordHash)
@@ -125,13 +125,14 @@ app.post('/api/auth/login', async (req, res) => {
   }
 })
 
-app.get('/api/auth/me', auth, (req, res) => {
-  const user = users.find((entry) => entry.id === req.user.id)
+app.get('/api/auth/me', auth, async (req, res) => {
+  const user = await store.getUserById(req.user.id)
   if (!user) return res.status(404).json({ message: 'Usuario nao encontrado.' })
   res.json(sanitizeUser(user))
 })
 
-app.get('/api/users', auth, requireRole('administrador', 'supervisor'), (req, res) => {
+app.get('/api/users', auth, requireRole('administrador', 'supervisor'), async (req, res) => {
+  const users = await store.listUsers()
   res.json(users.map(sanitizeUser))
 })
 
@@ -142,155 +143,120 @@ app.post('/api/users', auth, requireRole('administrador'), async (req, res) => {
     return res.status(400).json({ message: 'A senha inicial deve ter pelo menos 8 caracteres.' })
   }
 
-  if (users.some((user) => user.email.toLowerCase() === String(rest.email || '').toLowerCase())) {
+  const existing = await store.getUserByEmail(String(rest.email || ''))
+  if (existing) {
     return res.status(409).json({ message: 'Ja existe um usuario com esse e-mail.' })
   }
 
-  const passwordHash = await bcrypt.hash(password, 10)
-  const newUser = {
-    id: Date.now(),
-    ...rest,
-    passwordHash,
-    createdAt: new Date().toISOString().split('T')[0],
-    lastAccess: null,
-  }
-
-  users.push(newUser)
-  res.status(201).json(sanitizeUser(newUser))
+  const user = await store.createUser({ ...rest, password })
+  res.status(201).json(sanitizeUser(user))
 })
 
 app.put('/api/users/:id', auth, requireRole('administrador'), async (req, res) => {
-  const idx = users.findIndex((user) => user.id === Number(req.params.id))
-  if (idx === -1) return res.status(404).json({ message: 'Usuario nao encontrado.' })
+  const current = await store.getUserById(req.params.id)
+  if (!current) return res.status(404).json({ message: 'Usuario nao encontrado.' })
 
-  const { password, passwordHash, id, ...updates } = req.body
-
-  if (updates.email && users.some((user) => user.id !== users[idx].id && user.email.toLowerCase() === String(updates.email).toLowerCase())) {
-    return res.status(409).json({ message: 'Ja existe um usuario com esse e-mail.' })
-  }
-
-  users[idx] = { ...users[idx], ...updates }
-
-  if (password) {
-    if (password.length < 8) {
-      return res.status(400).json({ message: 'A nova senha deve ter pelo menos 8 caracteres.' })
+  if (req.body.email && req.body.email.toLowerCase() !== current.email.toLowerCase()) {
+    const existing = await store.getUserByEmail(req.body.email)
+    if (existing) {
+      return res.status(409).json({ message: 'Ja existe um usuario com esse e-mail.' })
     }
-
-    users[idx].passwordHash = await bcrypt.hash(password, 10)
   }
 
-  res.json(sanitizeUser(users[idx]))
+  if (req.body.password && req.body.password.length < 8) {
+    return res.status(400).json({ message: 'A nova senha deve ter pelo menos 8 caracteres.' })
+  }
+
+  const user = await store.updateUser(req.params.id, req.body)
+  res.json(sanitizeUser(user))
 })
 
-app.delete('/api/users/:id', auth, requireRole('administrador'), (req, res) => {
-  const idx = users.findIndex((user) => user.id === Number(req.params.id))
-  if (idx === -1) return res.status(404).json({ message: 'Usuario nao encontrado.' })
-  users.splice(idx, 1)
+app.delete('/api/users/:id', auth, requireRole('administrador'), async (req, res) => {
+  const deleted = await store.deleteUser(req.params.id)
+  if (!deleted) return res.status(404).json({ message: 'Usuario nao encontrado.' })
   res.status(204).end()
 })
 
-app.get('/api/materials', auth, (req, res) => {
-  if (req.user.role === 'professor') {
-    return res.json(materials.filter((material) => material.responsibleId === req.user.id))
-  }
-
+app.get('/api/materials', auth, async (req, res) => {
+  const materials = await store.listMaterials(req.user)
   res.json(materials)
 })
 
-app.post('/api/materials', auth, requireRole('administrador', 'supervisor', 'professor'), (req, res) => {
-  const material = {
-    id: Date.now(),
-    ...materialPayload(req.body, req.user),
+app.post('/api/materials', auth, requireRole('administrador', 'supervisor', 'professor'), async (req, res) => {
+  const payload = await materialPayload(req.body, req.user)
+  const material = await store.createMaterial({
+    ...payload,
     createdAt: new Date().toISOString().split('T')[0],
-  }
-
-  materials.push(material)
+  })
   res.status(201).json(material)
 })
 
-app.put('/api/materials/:id', auth, requireRole('administrador', 'supervisor', 'professor'), (req, res) => {
-  const idx = materials.findIndex((material) => material.id === Number(req.params.id))
-  if (idx === -1) return res.status(404).json({ message: 'Material nao encontrado.' })
-  if (!canEditMaterial(req.user, materials[idx])) {
+app.put('/api/materials/:id', auth, requireRole('administrador', 'supervisor', 'professor'), async (req, res) => {
+  const current = await store.getMaterialById(req.params.id)
+  if (!current) return res.status(404).json({ message: 'Material nao encontrado.' })
+  if (!canEditMaterial(req.user, current)) {
     return res.status(403).json({ message: 'Voce nao tem permissao para editar este material.' })
   }
 
-  materials[idx] = {
-    ...materials[idx],
-    ...materialPayload(req.body, req.user, materials[idx]),
-  }
-
-  res.json(materials[idx])
+  const payload = await materialPayload(req.body, req.user, current)
+  const material = await store.updateMaterial(req.params.id, payload)
+  res.json(material)
 })
 
-app.patch('/api/materials/:id/approve', auth, requireRole('administrador', 'supervisor'), (req, res) => {
-  const idx = materials.findIndex((material) => material.id === Number(req.params.id))
-  if (idx === -1) return res.status(404).json({ message: 'Material nao encontrado.' })
-  materials[idx] = { ...materials[idx], status: 'aprovado', reviewStatus: 'aprovado' }
-  res.json(materials[idx])
+app.patch('/api/materials/:id/approve', auth, requireRole('administrador', 'supervisor'), async (req, res) => {
+  const material = await store.approveMaterial(req.params.id)
+  if (!material) return res.status(404).json({ message: 'Material nao encontrado.' })
+  res.json(material)
 })
 
-app.get('/api/people', auth, (req, res) => {
-  if (isAttendanceManager(req.user.role)) {
-    return res.json(people)
-  }
-
-  res.json(people.filter((person) => person.userId === req.user.id))
+app.get('/api/people', auth, async (req, res) => {
+  const people = await store.listPeople(req.user)
+  res.json(people)
 })
 
-app.put('/api/people/:id/attendance', auth, requireRole('administrador', 'supervisor', 'gestao'), (req, res) => {
-  const idx = people.findIndex((person) => person.id === Number(req.params.id))
-  if (idx === -1) return res.status(404).json({ message: 'Registro nao encontrado.' })
-  people[idx] = { ...people[idx], ...req.body }
-  res.json(people[idx])
+app.put('/api/people/:id/attendance', auth, requireRole('administrador', 'supervisor', 'gestao'), async (req, res) => {
+  const person = await store.updateAttendance(req.params.id, req.body)
+  if (!person) return res.status(404).json({ message: 'Registro nao encontrado.' })
+  res.json(person)
 })
 
-app.get('/api/occurrences', auth, (req, res) => {
-  if (isAttendanceManager(req.user.role)) {
-    return res.json(occurrences)
-  }
-
-  res.json(occurrences.filter((occurrence) => occurrence.userId === req.user.id))
+app.get('/api/occurrences', auth, async (req, res) => {
+  const occurrences = await store.listOccurrences(req.user)
+  res.json(occurrences)
 })
 
-app.post('/api/occurrences', auth, requireRole('administrador', 'supervisor'), (req, res) => {
-  const occurrence = {
-    id: Date.now(),
+app.post('/api/occurrences', auth, requireRole('administrador', 'supervisor'), async (req, res) => {
+  const occurrence = await store.createOccurrence({
     ...req.body,
     status: 'aberta',
     createdBy: req.user.id,
     resolvedBy: null,
     createdAt: new Date().toISOString().split('T')[0],
-  }
-
-  occurrences.push(occurrence)
+  })
   res.status(201).json(occurrence)
 })
 
-app.put('/api/occurrences/:id', auth, requireRole('administrador', 'supervisor'), (req, res) => {
-  const idx = occurrences.findIndex((occurrence) => occurrence.id === Number(req.params.id))
-  if (idx === -1) return res.status(404).json({ message: 'Ocorrencia nao encontrada.' })
-  occurrences[idx] = { ...occurrences[idx], ...req.body }
-  res.json(occurrences[idx])
+app.put('/api/occurrences/:id', auth, requireRole('administrador', 'supervisor'), async (req, res) => {
+  const occurrence = await store.updateOccurrence(req.params.id, req.body)
+  if (!occurrence) return res.status(404).json({ message: 'Ocorrencia nao encontrada.' })
+  res.json(occurrence)
 })
 
-app.get('/api/notifications', auth, (req, res) => {
-  res.json(notifications.filter((notification) => notification.userId === req.user.id))
+app.get('/api/notifications', auth, async (req, res) => {
+  const notifications = await store.listNotifications(req.user.id)
+  res.json(notifications)
 })
 
-app.patch('/api/notifications/:id/read', auth, (req, res) => {
-  const idx = notifications.findIndex((notification) => notification.id === Number(req.params.id))
-  if (idx === -1) return res.status(404).end()
-  if (notifications[idx].userId !== req.user.id) {
+app.patch('/api/notifications/:id/read', auth, async (req, res) => {
+  const notification = await store.markNotificationRead(req.params.id, req.user.id)
+  if (!notification) {
     return res.status(403).json({ message: 'Voce nao pode alterar notificacoes de outro usuario.' })
   }
-
-  notifications[idx].readAt = new Date().toISOString()
-  res.json(notifications[idx])
+  res.json(notification)
 })
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', system: 'Transforma Educacao PB 2026', timestamp: new Date().toISOString() })
+  res.json({ status: 'ok', system: 'Transforma Educacao PB 2026', dataMode: store.DATA_MODE, timestamp: new Date().toISOString() })
 })
 
 module.exports = app
