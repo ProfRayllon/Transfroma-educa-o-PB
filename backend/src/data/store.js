@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs')
 const { users, materials, people, occurrences, notifications } = require('./mockData')
 
 const DATA_MODE = process.env.DATA_MODE || 'mock'
+const MYSQL_AUTO_SEED = process.env.MYSQL_AUTO_SEED === 'true'
 
 let pool
 
@@ -233,7 +234,10 @@ async function initStore() {
   if (!isMysqlMode()) return
 
   await createPool()
-  await seedMysqlIfNeeded()
+
+  if (MYSQL_AUTO_SEED) {
+    await seedMysqlIfNeeded()
+  }
 }
 
 async function getUserByEmail(email) {
@@ -682,6 +686,7 @@ async function markNotificationRead(id, userId) {
 
 module.exports = {
   DATA_MODE,
+  MYSQL_AUTO_SEED,
   initStore,
   getUserByEmail,
   getUserById,

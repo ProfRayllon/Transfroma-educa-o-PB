@@ -244,7 +244,7 @@ docker compose down
 
 ## Banco MySQL
 
-Se quiser migrar de mock para MySQL depois:
+Para criar o schema:
 
 ```bash
 mysql -u root -p < database/schema.sql
@@ -253,12 +253,29 @@ mysql -u root -p < database/schema.sql
 Depois ajuste no `backend/.env`:
 
 ```env
-DB_HOST=localhost
+DB_HOST=host.docker.internal
 DB_PORT=3306
-DB_USER=root
+DB_USER=transforma_app
 DB_PASSWORD=sua_senha
 DB_NAME=transforma_db
 DATA_MODE=mysql
+MYSQL_AUTO_SEED=false
 ```
 
-Hoje o projeto continua operando em `mock`, que e o caminho mais simples para a primeira subida na VPS.
+Se quiser popular o MySQL vazio com os dados mock uma unica vez, defina:
+
+```env
+MYSQL_AUTO_SEED=true
+```
+
+Depois da primeira subida, volte para `false`.
+
+## Limpar dados fake em producao
+
+Para apagar os dados mock/operacionais e manter apenas o admin seed de `id = 1`:
+
+```bash
+mysql -u root -p transforma_db < database/cleanup_keep_admin.sql
+```
+
+Depois, entre no painel com o admin restante e atualize nome, e-mail e senha para os dados reais.
