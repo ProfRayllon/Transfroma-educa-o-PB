@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect } from 'react'
-import { mockUsers } from '../data/mockData'
+import { createContext, useContext, useEffect, useState } from 'react'
+import api, { getApiErrorMessage, TOKEN_KEY, UNAUTHORIZED_EVENT, USER_KEY } from '../lib/api'
 
 const AuthContext = createContext(null)
 
@@ -8,31 +8,69 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const stored = localStorage.getItem('transforma_user')
-    if (stored) {
+    let active = true
+
+    async function restoreSession() {
+      const storedUser = localStorage.getItem(USER_KEY)
+      const storedToken = localStorage.getItem(TOKEN_KEY)
+
+      if (!storedUser || !storedToken) {
+        localStorage.removeItem(USER_KEY)
+        localStorage.removeItem(TOKEN_KEY)
+        if (active) setLoading(false)
+        return
+      }
+
       try {
-        setUser(JSON.parse(stored))
+        const parsedUser = JSON.parse(storedUser)
+        if (active) setUser(parsedUser)
+
+        const { data } = await api.get('/auth/me')
+        localStorage.setItem(USER_KEY, JSON.stringify(data))
+
+        if (active) setUser(data)
       } catch {
-        localStorage.removeItem('transforma_user')
+        localStorage.removeItem(USER_KEY)
+        localStorage.removeItem(TOKEN_KEY)
+        if (active) setUser(null)
+      } finally {
+        if (active) setLoading(false)
       }
     }
-    setLoading(false)
+
+    restoreSession()
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      localStorage.removeItem(USER_KEY)
+      localStorage.removeItem(TOKEN_KEY)
+      setUser(null)
+    }
+
+    window.addEventListener(UNAUTHORIZED_EVENT, handleUnauthorized)
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, handleUnauthorized)
   }, [])
 
   const login = async (email, password) => {
-    const found = mockUsers.find(
-      u => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-    )
-    if (!found) throw new Error('E-mail ou senha incorretos.')
-
-    const { password: _, ...safeUser } = found
-    localStorage.setItem('transforma_user', JSON.stringify(safeUser))
-    setUser(safeUser)
-    return safeUser
+    try {
+      const { data } = await api.post('/auth/login', { email, password })
+      localStorage.setItem(TOKEN_KEY, data.token)
+      localStorage.setItem(USER_KEY, JSON.stringify(data.user))
+      setUser(data.user)
+      return data.user
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error, 'E-mail ou senha incorretos.'))
+    }
   }
 
   const logout = () => {
-    localStorage.removeItem('transforma_user')
+    localStorage.removeItem(USER_KEY)
+    localStorage.removeItem(TOKEN_KEY)
     setUser(null)
   }
 
@@ -60,7 +98,7 @@ const PERMISSIONS = {
   supervisor: [
     'view_producao', 'edit_producao', 'approve_material',
     'view_pessoas', 'edit_frequencia', 'edit_ocorrencias',
-    'view_relatorios',
+    'view_relatorios', 'view_acessos',
   ],
   professor: [
     'view_producao', 'create_material', 'edit_own_material', 'view_review_status',

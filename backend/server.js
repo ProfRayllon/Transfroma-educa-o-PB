@@ -6,25 +6,96 @@ const jwt = require('jsonwebtoken')
 
 const app = express()
 const PORT = process.env.PORT || 3001
-const JWT_SECRET = process.env.JWT_SECRET || 'transforma_secret_dev'
+const JWT_SECRET = process.env.JWT_SECRET
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h'
+const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:5174')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean)
 
-app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:5174'] }))
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET nao configurado. Defina a variavel no arquivo .env antes de iniciar o backend.')
+}
+
+app.use(cors({ origin: corsOrigins }))
 app.use(express.json())
 
-// In-memory data (replace with MySQL queries in production)
 const { users, materials, people, occurrences, notifications } = require('./src/data/mockData')
 
-// ── Auth middleware ──────────────────────────────────────────────────────────
+function sanitizeUser(user) {
+  const { passwordHash: _, ...safeUser } = user
+  return safeUser
+}
+
+function findUserById(userId) {
+  return users.find((user) => user.id === Number(userId))
+}
+
+function isManager(role) {
+  return ['administrador', 'supervisor'].includes(role)
+}
+
+function isAttendanceManager(role) {
+  return ['administrador', 'supervisor', 'gestao'].includes(role)
+}
+
+function canEditMaterial(user, material) {
+  if (!material) return false
+  if (isManager(user.role)) return true
+  return user.role === 'professor' && material.responsibleId === user.id
+}
+
+function materialPayload(body, actor, currentMaterial) {
+  const payload = {
+    course: body.course,
+    session: body.session,
+    theme: body.theme,
+    objective: body.objective,
+    type: body.type,
+    duration: body.duration,
+    deliveryDate: body.deliveryDate,
+    originalLink: body.originalLink,
+    adjustedLink: body.adjustedLink,
+  }
+
+  if (isManager(actor.role)) {
+    payload.status = body.status || currentMaterial?.status || 'pendente'
+    payload.reviewStatus = body.reviewStatus || currentMaterial?.reviewStatus || 'pendente'
+    payload.reviewNotes = body.reviewNotes ?? currentMaterial?.reviewNotes ?? ''
+    payload.responsibleId = Number(body.responsibleId) || currentMaterial?.responsibleId
+
+    if (payload.responsibleId) {
+      const responsible = findUserById(payload.responsibleId)
+      payload.responsibleName = responsible?.name || body.responsibleName || currentMaterial?.responsibleName || ''
+      payload.responsibleRole = responsible?.function || body.responsibleRole || currentMaterial?.responsibleRole || ''
+    }
+
+    return payload
+  }
+
+  payload.status = currentMaterial?.status || 'em_producao'
+  payload.reviewStatus = currentMaterial?.reviewStatus || 'pendente'
+  payload.reviewNotes = currentMaterial?.reviewNotes || ''
+  payload.responsibleId = actor.id
+
+  const actorUser = findUserById(actor.id)
+  payload.responsibleName = actorUser?.name || currentMaterial?.responsibleName || ''
+  payload.responsibleRole = actorUser?.function || currentMaterial?.responsibleRole || ''
+
+  return payload
+}
+
 function auth(req, res, next) {
   const header = req.headers.authorization
   if (!header || !header.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Token não fornecido.' })
+    return res.status(401).json({ message: 'Token nao fornecido.' })
   }
+
   try {
     req.user = jwt.verify(header.slice(7), JWT_SECRET)
     next()
   } catch {
-    res.status(401).json({ message: 'Token inválido ou expirado.' })
+    res.status(401).json({ message: 'Token invalido ou expirado.' })
   }
 }
 
@@ -37,106 +108,152 @@ function requireRole(...roles) {
   }
 }
 
-// ── Auth routes ──────────────────────────────────────────────────────────────
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body
-    const user = users.find(u => u.email.toLowerCase() === email?.toLowerCase())
+    const user = users.find((entry) => entry.email.toLowerCase() === email?.toLowerCase())
     if (!user) return res.status(401).json({ message: 'E-mail ou senha incorretos.' })
 
     const valid = await bcrypt.compare(password, user.passwordHash)
     if (!valid) return res.status(401).json({ message: 'E-mail ou senha incorretos.' })
 
-    const { passwordHash: _, ...safeUser } = user
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '8h' })
-
-    res.json({ token, user: safeUser })
-  } catch (err) {
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
+    res.json({ token, user: sanitizeUser(user) })
+  } catch {
     res.status(500).json({ message: 'Erro interno do servidor.' })
   }
 })
 
 app.get('/api/auth/me', auth, (req, res) => {
-  const user = users.find(u => u.id === req.user.id)
-  if (!user) return res.status(404).json({ message: 'Usuário não encontrado.' })
-  const { passwordHash: _, ...safeUser } = user
-  res.json(safeUser)
+  const user = users.find((entry) => entry.id === req.user.id)
+  if (!user) return res.status(404).json({ message: 'Usuario nao encontrado.' })
+  res.json(sanitizeUser(user))
 })
 
-// ── Users routes ─────────────────────────────────────────────────────────────
-app.get('/api/users', auth, (req, res) => {
-  const list = users.map(({ passwordHash: _, ...u }) => u)
-  res.json(list)
+app.get('/api/users', auth, requireRole('administrador', 'supervisor'), (req, res) => {
+  res.json(users.map(sanitizeUser))
 })
 
 app.post('/api/users', auth, requireRole('administrador'), async (req, res) => {
   const { password, ...rest } = req.body
-  const passwordHash = await bcrypt.hash(password || 'temp123', 10)
-  const newUser = { id: Date.now(), ...rest, passwordHash, createdAt: new Date().toISOString().split('T')[0] }
+
+  if (!password || password.length < 8) {
+    return res.status(400).json({ message: 'A senha inicial deve ter pelo menos 8 caracteres.' })
+  }
+
+  if (users.some((user) => user.email.toLowerCase() === String(rest.email || '').toLowerCase())) {
+    return res.status(409).json({ message: 'Ja existe um usuario com esse e-mail.' })
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10)
+  const newUser = {
+    id: Date.now(),
+    ...rest,
+    passwordHash,
+    createdAt: new Date().toISOString().split('T')[0],
+    lastAccess: null,
+  }
+
   users.push(newUser)
-  const { passwordHash: _, ...safe } = newUser
-  res.status(201).json(safe)
+  res.status(201).json(sanitizeUser(newUser))
 })
 
-app.put('/api/users/:id', auth, requireRole('administrador'), (req, res) => {
-  const idx = users.findIndex(u => u.id === Number(req.params.id))
-  if (idx === -1) return res.status(404).json({ message: 'Usuário não encontrado.' })
-  users[idx] = { ...users[idx], ...req.body }
-  const { passwordHash: _, ...safe } = users[idx]
-  res.json(safe)
+app.put('/api/users/:id', auth, requireRole('administrador'), async (req, res) => {
+  const idx = users.findIndex((user) => user.id === Number(req.params.id))
+  if (idx === -1) return res.status(404).json({ message: 'Usuario nao encontrado.' })
+
+  const { password, passwordHash, id, ...updates } = req.body
+
+  if (updates.email && users.some((user) => user.id !== users[idx].id && user.email.toLowerCase() === String(updates.email).toLowerCase())) {
+    return res.status(409).json({ message: 'Ja existe um usuario com esse e-mail.' })
+  }
+
+  users[idx] = { ...users[idx], ...updates }
+
+  if (password) {
+    if (password.length < 8) {
+      return res.status(400).json({ message: 'A nova senha deve ter pelo menos 8 caracteres.' })
+    }
+
+    users[idx].passwordHash = await bcrypt.hash(password, 10)
+  }
+
+  res.json(sanitizeUser(users[idx]))
 })
 
 app.delete('/api/users/:id', auth, requireRole('administrador'), (req, res) => {
-  const idx = users.findIndex(u => u.id === Number(req.params.id))
-  if (idx === -1) return res.status(404).json({ message: 'Usuário não encontrado.' })
+  const idx = users.findIndex((user) => user.id === Number(req.params.id))
+  if (idx === -1) return res.status(404).json({ message: 'Usuario nao encontrado.' })
   users.splice(idx, 1)
   res.status(204).end()
 })
 
-// ── Materials routes ──────────────────────────────────────────────────────────
 app.get('/api/materials', auth, (req, res) => {
+  if (req.user.role === 'professor') {
+    return res.json(materials.filter((material) => material.responsibleId === req.user.id))
+  }
+
   res.json(materials)
 })
 
-app.post('/api/materials', auth, (req, res) => {
-  const mat = { id: Date.now(), ...req.body, createdAt: new Date().toISOString().split('T')[0] }
-  materials.push(mat)
-  res.status(201).json(mat)
+app.post('/api/materials', auth, requireRole('administrador', 'supervisor', 'professor'), (req, res) => {
+  const material = {
+    id: Date.now(),
+    ...materialPayload(req.body, req.user),
+    createdAt: new Date().toISOString().split('T')[0],
+  }
+
+  materials.push(material)
+  res.status(201).json(material)
 })
 
-app.put('/api/materials/:id', auth, (req, res) => {
-  const idx = materials.findIndex(m => m.id === Number(req.params.id))
-  if (idx === -1) return res.status(404).json({ message: 'Material não encontrado.' })
-  materials[idx] = { ...materials[idx], ...req.body }
+app.put('/api/materials/:id', auth, requireRole('administrador', 'supervisor', 'professor'), (req, res) => {
+  const idx = materials.findIndex((material) => material.id === Number(req.params.id))
+  if (idx === -1) return res.status(404).json({ message: 'Material nao encontrado.' })
+  if (!canEditMaterial(req.user, materials[idx])) {
+    return res.status(403).json({ message: 'Voce nao tem permissao para editar este material.' })
+  }
+
+  materials[idx] = {
+    ...materials[idx],
+    ...materialPayload(req.body, req.user, materials[idx]),
+  }
+
   res.json(materials[idx])
 })
 
 app.patch('/api/materials/:id/approve', auth, requireRole('administrador', 'supervisor'), (req, res) => {
-  const idx = materials.findIndex(m => m.id === Number(req.params.id))
-  if (idx === -1) return res.status(404).json({ message: 'Material não encontrado.' })
+  const idx = materials.findIndex((material) => material.id === Number(req.params.id))
+  if (idx === -1) return res.status(404).json({ message: 'Material nao encontrado.' })
   materials[idx] = { ...materials[idx], status: 'aprovado', reviewStatus: 'aprovado' }
   res.json(materials[idx])
 })
 
-// ── People routes ─────────────────────────────────────────────────────────────
 app.get('/api/people', auth, (req, res) => {
-  res.json(people)
+  if (isAttendanceManager(req.user.role)) {
+    return res.json(people)
+  }
+
+  res.json(people.filter((person) => person.userId === req.user.id))
 })
 
-app.put('/api/people/:id/attendance', auth, (req, res) => {
-  const idx = people.findIndex(p => p.id === Number(req.params.id))
-  if (idx === -1) return res.status(404).json({ message: 'Registro não encontrado.' })
+app.put('/api/people/:id/attendance', auth, requireRole('administrador', 'supervisor', 'gestao'), (req, res) => {
+  const idx = people.findIndex((person) => person.id === Number(req.params.id))
+  if (idx === -1) return res.status(404).json({ message: 'Registro nao encontrado.' })
   people[idx] = { ...people[idx], ...req.body }
   res.json(people[idx])
 })
 
-// ── Occurrences routes ────────────────────────────────────────────────────────
 app.get('/api/occurrences', auth, (req, res) => {
-  res.json(occurrences)
+  if (isAttendanceManager(req.user.role)) {
+    return res.json(occurrences)
+  }
+
+  res.json(occurrences.filter((occurrence) => occurrence.userId === req.user.id))
 })
 
 app.post('/api/occurrences', auth, requireRole('administrador', 'supervisor'), (req, res) => {
-  const occ = {
+  const occurrence = {
     id: Date.now(),
     ...req.body,
     status: 'aberta',
@@ -144,36 +261,38 @@ app.post('/api/occurrences', auth, requireRole('administrador', 'supervisor'), (
     resolvedBy: null,
     createdAt: new Date().toISOString().split('T')[0],
   }
-  occurrences.push(occ)
-  res.status(201).json(occ)
+
+  occurrences.push(occurrence)
+  res.status(201).json(occurrence)
 })
 
 app.put('/api/occurrences/:id', auth, requireRole('administrador', 'supervisor'), (req, res) => {
-  const idx = occurrences.findIndex(o => o.id === Number(req.params.id))
-  if (idx === -1) return res.status(404).json({ message: 'Ocorrência não encontrada.' })
+  const idx = occurrences.findIndex((occurrence) => occurrence.id === Number(req.params.id))
+  if (idx === -1) return res.status(404).json({ message: 'Ocorrencia nao encontrada.' })
   occurrences[idx] = { ...occurrences[idx], ...req.body }
   res.json(occurrences[idx])
 })
 
-// ── Notifications routes ──────────────────────────────────────────────────────
 app.get('/api/notifications', auth, (req, res) => {
-  const userNotifs = notifications.filter(n => n.userId === req.user.id)
-  res.json(userNotifs)
+  res.json(notifications.filter((notification) => notification.userId === req.user.id))
 })
 
 app.patch('/api/notifications/:id/read', auth, (req, res) => {
-  const idx = notifications.findIndex(n => n.id === Number(req.params.id))
+  const idx = notifications.findIndex((notification) => notification.id === Number(req.params.id))
   if (idx === -1) return res.status(404).end()
+  if (notifications[idx].userId !== req.user.id) {
+    return res.status(403).json({ message: 'Voce nao pode alterar notificacoes de outro usuario.' })
+  }
+
   notifications[idx].readAt = new Date().toISOString()
   res.json(notifications[idx])
 })
 
-// ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', system: 'Transforma Educação PB 2026', timestamp: new Date().toISOString() })
+  res.json({ status: 'ok', system: 'Transforma Educacao PB 2026', timestamp: new Date().toISOString() })
 })
 
 app.listen(PORT, () => {
-  console.log(`\n🚀 Transforma API rodando em http://localhost:${PORT}`)
-  console.log(`   Health check: http://localhost:${PORT}/api/health\n`)
+  console.log(`\nTransforma API rodando em http://localhost:${PORT}`)
+  console.log(`Health check: http://localhost:${PORT}/api/health\n`)
 })
