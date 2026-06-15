@@ -18,10 +18,19 @@ import Modal from '../components/ui/Modal'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 
-const TRAIL_OPTIONS = [
-  'TRILHAS TRANSVERSAIS',
-  'TRILHAS DA FORMACAO GERAL BASICA',
-]
+const PRIMARY_TRAILS = {
+  'TRILHAS TRANSVERSAIS': [
+    'Educacao Socioemocional',
+    'Educacao, Ciencia e Tecnologia',
+    'Gestao Pedagogica',
+    'Inclusao, Diversidade e Equidade',
+  ],
+  'TRILHAS DA FORMACAO GERAL BASICA': [
+    'Area de Linguagens',
+    'Area de Ciencias Humanas',
+    'Area de Matematica e Ciencias da Natureza',
+  ],
+}
 
 const TRAIL_COLORS = {
   'TRILHAS TRANSVERSAIS': {
@@ -38,8 +47,8 @@ const TRAIL_COLORS = {
   },
 }
 
-function getTrailColor(trail) {
-  return TRAIL_COLORS[trail] || {
+function getTrailColor(primaryTrail) {
+  return TRAIL_COLORS[primaryTrail] || {
     pill: 'bg-gray-100 text-gray-700 border-gray-200',
     bar: '#6B7280',
     grad: 'from-gray-500 to-gray-700',
@@ -157,7 +166,7 @@ function MultiSelectFilter({ label, placeholder, options, values, onChange }) {
 
 function CourseCard({ course, materials, onEdit }) {
   const navigate = useNavigate()
-  const color = getTrailColor(course.trail)
+  const color = getTrailColor(course.primaryTrail)
   const alert = deadlineBadge(course.deadline)
 
   const courseMaterials = materials.filter((material) => material.course === course.name)
@@ -177,7 +186,7 @@ function CourseCard({ course, materials, onEdit }) {
 
         <div className="absolute left-3 bottom-3">
           <span className={`inline-flex items-center px-2.5 py-1 rounded-full border text-[10px] font-semibold bg-white/90 backdrop-blur-sm ${color.pill}`}>
-            {course.trail}
+            {course.primaryTrail}
           </span>
         </div>
 
@@ -193,6 +202,7 @@ function CourseCard({ course, materials, onEdit }) {
       <div className="p-4 flex flex-col flex-1 gap-3">
         <div>
           <h3 className="font-semibold text-gray-900 text-sm leading-tight">{course.name}</h3>
+          <p className="text-xs font-medium text-gray-600 mt-1">{course.trail || '--'}</p>
           <p className="text-xs text-gray-500 mt-1">Supervisor: {course.supervisorName || '--'}</p>
         </div>
 
@@ -271,6 +281,7 @@ function CourseModal({ course, open, onClose, onSave }) {
   const fileRef = useRef(null)
   const [form, setForm] = useState(() => course || {
     name: '',
+    primaryTrail: '',
     trail: '',
     totalSessions: 12,
     supervisorName: '',
@@ -282,6 +293,15 @@ function CourseModal({ course, open, onClose, onSave }) {
 
   const handleChange = (event) => {
     const { name, value } = event.target
+    if (name === 'primaryTrail') {
+      setForm((current) => ({
+        ...current,
+        primaryTrail: value,
+        trail: '',
+      }))
+      return
+    }
+
     setForm((current) => ({
       ...current,
       [name]: name === 'totalSessions' ? Number(value) : value,
@@ -309,7 +329,8 @@ function CourseModal({ course, open, onClose, onSave }) {
     onClose()
   }
 
-  const color = getTrailColor(form.trail)
+  const color = getTrailColor(form.primaryTrail)
+  const secondaryTrailOptions = form.primaryTrail ? PRIMARY_TRAILS[form.primaryTrail] || [] : []
 
   return (
     <Modal open={open} onClose={onClose} title={form.id ? 'Editar curso' : 'Novo curso'} size="md">
@@ -363,16 +384,33 @@ function CourseModal({ course, open, onClose, onSave }) {
           </div>
 
           <div className="col-span-2">
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">Trilha *</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Trilha principal *</label>
+            <select
+              name="primaryTrail"
+              value={form.primaryTrail || ''}
+              onChange={handleChange}
+              required
+              className="select-field"
+            >
+              <option value="">Selecionar trilha principal...</option>
+              {Object.keys(PRIMARY_TRAILS).map((trail) => (
+                <option key={trail} value={trail}>{trail}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Trilha secundaria *</label>
             <select
               name="trail"
               value={form.trail || ''}
               onChange={handleChange}
               required
               className="select-field"
+              disabled={!form.primaryTrail}
             >
-              <option value="">Selecionar trilha...</option>
-              {TRAIL_OPTIONS.map((trail) => (
+              <option value="">{form.primaryTrail ? 'Selecionar trilha secundaria...' : 'Escolha a trilha principal primeiro'}</option>
+              {secondaryTrailOptions.map((trail) => (
                 <option key={trail} value={trail}>{trail}</option>
               ))}
             </select>
@@ -457,6 +495,7 @@ export default function Cursos() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editCourse, setEditCourse] = useState(null)
   const [filters, setFilters] = useState({
+    primaryTrails: [],
     trails: [],
     courses: [],
     supervisors: [],
@@ -466,6 +505,7 @@ export default function Cursos() {
   const canManage = user?.role === 'administrador' || user?.role === 'supervisor'
 
   const filterOptions = useMemo(() => ({
+    primaryTrails: Array.from(new Set(courses.map((course) => course.primaryTrail).filter(Boolean))),
     trails: Array.from(new Set(courses.map((course) => course.trail).filter(Boolean))),
     courses: Array.from(new Set(courses.map((course) => course.name).filter(Boolean))),
     supervisors: Array.from(new Set(courses.map((course) => course.supervisorName).filter(Boolean))),
@@ -476,6 +516,7 @@ export default function Cursos() {
     const query = search.trim().toLowerCase()
 
     return courses.filter((course) => {
+      if (filters.primaryTrails.length > 0 && !filters.primaryTrails.includes(course.primaryTrail)) return false
       if (filters.trails.length > 0 && !filters.trails.includes(course.trail)) return false
       if (filters.courses.length > 0 && !filters.courses.includes(course.name)) return false
       if (filters.supervisors.length > 0 && !filters.supervisors.includes(course.supervisorName)) return false
@@ -485,6 +526,7 @@ export default function Cursos() {
 
       return [
         course.name,
+        course.primaryTrail,
         course.trail,
         course.supervisorName,
         course.coordinatorName,
@@ -504,6 +546,7 @@ export default function Cursos() {
   const clearFilters = () => {
     setFilters({
       trails: [],
+      primaryTrails: [],
       courses: [],
       supervisors: [],
       coordinators: [],
@@ -592,10 +635,17 @@ export default function Cursos() {
           Filtros
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 xl:grid-cols-5 gap-3">
           <MultiSelectFilter
-            label="Trilha"
-            placeholder="Todas as trilhas"
+            label="Trilha principal"
+            placeholder="Todas as trilhas principais"
+            options={filterOptions.primaryTrails}
+            values={filters.primaryTrails}
+            onChange={(values) => setFilters((current) => ({ ...current, primaryTrails: values }))}
+          />
+          <MultiSelectFilter
+            label="Trilha secundaria"
+            placeholder="Todas as trilhas secundarias"
             options={filterOptions.trails}
             values={filters.trails}
             onChange={(values) => setFilters((current) => ({ ...current, trails: values }))}
