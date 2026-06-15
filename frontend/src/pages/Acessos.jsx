@@ -35,7 +35,7 @@ const PERMISSIONS_MAP = {
   gestao: ['Acessa Gestao de Pessoas', 'Registra frequencia', 'Atualiza informacoes funcionais', 'Visualiza ocorrencias'],
 }
 
-function UserFormModal({ user: editUser, open, onClose, onSave, saving }) {
+function UserFormModal({ user: editUser, open, onClose, onSave, saving, error }) {
   const isNew = !editUser?.id
   const [form, setForm] = useState(editUser || {
     name: '', email: '', registration: '', role: 'professor', function: 'Professor/Produtor', status: 'ativo', password: '',
@@ -49,9 +49,10 @@ function UserFormModal({ user: editUser, open, onClose, onSave, saving }) {
 
   const handleChange = (e) => setForm((current) => ({ ...current, [e.target.name]: e.target.value }))
 
-  const handleSubmit = async () => {
-    await onSave(form)
-    onClose()
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    const saved = await onSave(form)
+    if (saved) onClose()
   }
 
   return (
@@ -63,20 +64,25 @@ function UserFormModal({ user: editUser, open, onClose, onSave, saving }) {
       footer={(
         <>
           <button onClick={onClose} className="btn-secondary" disabled={saving}>Cancelar</button>
-          <button onClick={handleSubmit} className="btn-primary" disabled={saving}>
+          <button type="submit" form="user-form" className="btn-primary" disabled={saving}>
             {saving ? 'Salvando...' : 'Salvar'}
           </button>
         </>
       )}
     >
-      <div className="space-y-4">
+      <form id="user-form" onSubmit={handleSubmit} className="space-y-4">
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </div>
+        )}
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">Nome completo</label>
-          <input name="name" value={form.name || ''} onChange={handleChange} className="input-field" placeholder="Nome do usuario" />
+          <input name="name" value={form.name || ''} onChange={handleChange} className="input-field" placeholder="Nome do usuario" required />
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">E-mail</label>
-          <input name="email" value={form.email || ''} onChange={handleChange} type="email" className="input-field" placeholder="email@exemplo.com" />
+          <input name="email" value={form.email || ''} onChange={handleChange} type="email" className="input-field" placeholder="email@exemplo.com" required />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -104,9 +110,18 @@ function UserFormModal({ user: editUser, open, onClose, onSave, saving }) {
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">{isNew ? 'Senha inicial' : 'Nova senha (opcional)'}</label>
-          <input name="password" value={form.password || ''} onChange={handleChange} type="password" className="input-field" placeholder="Minimo de 8 caracteres" />
+          <input
+            name="password"
+            value={form.password || ''}
+            onChange={handleChange}
+            type="password"
+            className="input-field"
+            placeholder="Minimo de 8 caracteres"
+            minLength={8}
+            required={isNew}
+          />
         </div>
-      </div>
+      </form>
     </Modal>
   )
 }
@@ -205,6 +220,7 @@ export default function Acessos() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [formError, setFormError] = useState('')
 
   const isAdmin = user?.role === 'administrador'
   const canViewUsers = ['administrador', 'supervisor'].includes(user?.role)
@@ -263,18 +279,22 @@ export default function Acessos() {
     try {
       setSaving(true)
       setError('')
+      setFormError('')
 
       if (form.id) {
         const { data } = await api.put(`/users/${form.id}`, form)
         setUsers((current) => current.map((listedUser) => (listedUser.id === form.id ? data : listedUser)))
-        return
+        return true
       }
 
       const { data } = await api.post('/users', form)
       setUsers((current) => [...current, data])
+      return true
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Nao foi possivel salvar o usuario.'))
-      throw err
+      const message = getApiErrorMessage(err, 'Nao foi possivel salvar o usuario.')
+      setError(message)
+      setFormError(message)
+      return false
     } finally {
       setSaving(false)
     }
@@ -310,7 +330,7 @@ export default function Acessos() {
           <p className="page-subtitle">Gerencie usuarios, perfis e permissoes do sistema Transforma.</p>
         </div>
         {isAdmin && (
-          <button onClick={() => { setEditUser(null); setEditOpen(true) }} className="btn-primary">
+          <button onClick={() => { setEditUser(null); setFormError(''); setEditOpen(true) }} className="btn-primary">
             <Plus size={15} />
             Novo usuario
           </button>
@@ -392,7 +412,7 @@ export default function Acessos() {
                 <UserRow
                   key={listedUser.id}
                   user={listedUser}
-                  onEdit={(userItem) => { setEditUser(userItem); setEditOpen(true) }}
+                  onEdit={(userItem) => { setEditUser(userItem); setFormError(''); setEditOpen(true) }}
                   onDelete={(userItem) => setDeleteUser(userItem)}
                   onViewPerms={(role) => setPermsRole(role)}
                   canManage={isAdmin}
@@ -419,6 +439,7 @@ export default function Acessos() {
         onClose={() => setEditOpen(false)}
         onSave={handleSave}
         saving={saving}
+        error={formError}
       />
       <PermissionsModal
         role={permsRole}

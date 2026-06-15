@@ -34,6 +34,9 @@ const COURSE_TRAILS = {
   ],
 }
 
+const USER_ROLES = ['administrador', 'supervisor', 'professor', 'tutor', 'tecnico', 'gestao']
+const USER_STATUSES = ['ativo', 'inativo', 'pendente', 'desligado', 'substituido']
+
 app.use(cors({ origin: corsOrigins }))
 app.use(express.json({ limit: '5mb' }))
 
@@ -112,6 +115,68 @@ function avatarPayload(body) {
   }
 
   return { avatar }
+}
+
+function userPayload(body, { requirePassword = false } = {}) {
+  const payload = {
+    name: String(body.name || '').trim(),
+    email: String(body.email || '').trim().toLowerCase(),
+    registration: String(body.registration || '').trim() || null,
+    role: String(body.role || '').trim(),
+    function: String(body.function || '').trim() || null,
+    status: String(body.status || 'ativo').trim(),
+    password: body.password ? String(body.password) : '',
+  }
+
+  const missing = []
+  if (!payload.name) missing.push('nome')
+  if (!payload.email) missing.push('e-mail')
+  if (!payload.role) missing.push('perfil')
+
+  if (missing.length > 0) {
+    return { error: `Preencha os campos obrigatorios: ${missing.join(', ')}.` }
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) {
+    return { error: 'Informe um e-mail valido.' }
+  }
+
+  if (!USER_ROLES.includes(payload.role)) {
+    return { error: 'Perfil de acesso invalido.' }
+  }
+
+  if (!USER_STATUSES.includes(payload.status)) {
+    return { error: 'Status invalido.' }
+  }
+
+  if (payload.registration && payload.registration.length > 30) {
+    return { error: 'A matricula deve ter no maximo 30 caracteres.' }
+  }
+
+  if (payload.function && payload.function.length > 100) {
+    return { error: 'A funcao deve ter no maximo 100 caracteres.' }
+  }
+
+  if (requirePassword && payload.password.length < 8) {
+    return { error: 'A senha inicial deve ter pelo menos 8 caracteres.' }
+  }
+
+  if (!requirePassword && payload.password && payload.password.length < 8) {
+    return { error: 'A nova senha deve ter pelo menos 8 caracteres.' }
+  }
+
+  if (!payload.password) {
+    delete payload.password
+  }
+
+  return { payload }
+}
+
+function mysqlUserErrorMessage(error) {
+  if (error.code === 'ER_DUP_ENTRY') return 'Ja existe um usuario com esse e-mail.'
+  if (error.code === 'ER_DATA_TOO_LONG') return 'Um dos campos ultrapassou o tamanho permitido.'
+  if (error.code === 'WARN_DATA_TRUNCATED') return 'Um dos campos possui valor invalido.'
+  return 'Erro ao salvar usuario.'
 }
 
 async function materialPayload(body, actor, currentMaterial) {
@@ -218,38 +283,42 @@ app.get('/api/users', auth, requireRole('administrador', 'supervisor'), async (r
 })
 
 app.post('/api/users', auth, requireRole('administrador'), async (req, res) => {
-  const { password, ...rest } = req.body
+  const { payload, error } = userPayload(req.body, { requirePassword: true })
+  if (error) return res.status(400).json({ message: error })
 
-  if (!password || password.length < 8) {
-    return res.status(400).json({ message: 'A senha inicial deve ter pelo menos 8 caracteres.' })
-  }
-
-  const existing = await store.getUserByEmail(String(rest.email || ''))
-  if (existing) {
-    return res.status(409).json({ message: 'Ja existe um usuario com esse e-mail.' })
-  }
-
-  const user = await store.createUser({ ...rest, password })
-  res.status(201).json(sanitizeUser(user))
-})
-
-app.put('/api/users/:id', auth, requireRole('administrador'), async (req, res) => {
-  const current = await store.getUserById(req.params.id)
-  if (!current) return res.status(404).json({ message: 'Usuario nao encontrado.' })
-
-  if (req.body.email && req.body.email.toLowerCase() !== current.email.toLowerCase()) {
-    const existing = await store.getUserByEmail(req.body.email)
+  try {
+    const existing = await store.getUserByEmail(payload.email)
     if (existing) {
       return res.status(409).json({ message: 'Ja existe um usuario com esse e-mail.' })
     }
-  }
 
-  if (req.body.password && req.body.password.length < 8) {
-    return res.status(400).json({ message: 'A nova senha deve ter pelo menos 8 caracteres.' })
+    const user = await store.createUser(payload)
+    res.status(201).json(sanitizeUser(user))
+  } catch (err) {
+    res.status(500).json({ message: mysqlUserErrorMessage(err) })
   }
+})
 
-  const user = await store.updateUser(req.params.id, req.body)
-  res.json(sanitizeUser(user))
+app.put('/api/users/:id', auth, requireRole('administrador'), async (req, res) => {
+  try {
+    const current = await store.getUserById(req.params.id)
+    if (!current) return res.status(404).json({ message: 'Usuario nao encontrado.' })
+
+    const { payload, error } = userPayload(req.body)
+    if (error) return res.status(400).json({ message: error })
+
+    if (payload.email && payload.email.toLowerCase() !== current.email.toLowerCase()) {
+      const existing = await store.getUserByEmail(payload.email)
+      if (existing) {
+        return res.status(409).json({ message: 'Ja existe um usuario com esse e-mail.' })
+      }
+    }
+
+    const user = await store.updateUser(req.params.id, payload)
+    res.json(sanitizeUser(user))
+  } catch (err) {
+    res.status(500).json({ message: mysqlUserErrorMessage(err) })
+  }
 })
 
 app.delete('/api/users/:id', auth, requireRole('administrador'), async (req, res) => {
