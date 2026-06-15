@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/opt/transforma}"
-HEALTH_URL="${HEALTH_URL:-http://127.0.0.1/api/health}"
+HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8080/api/health}"
 
 cd "$APP_DIR"
 
