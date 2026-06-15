@@ -233,6 +233,48 @@ git pull
 docker compose up --build -d
 ```
 
+## Deploy automatico via GitHub Actions
+
+O projeto agora pode fazer deploy automatico na VPS a cada `push` na branch `main`.
+
+### 1. Adicionar uma chave SSH exclusiva do GitHub na VPS
+
+Na VPS:
+
+```bash
+mkdir -p /root/.ssh
+nano /root/.ssh/authorized_keys
+```
+
+Cole a chave publica que sera usada pelo GitHub Actions e salve.
+
+### 2. Configurar os secrets no GitHub
+
+No repositorio, abra:
+
+- `Settings`
+- `Secrets and variables`
+- `Actions`
+
+Crie estes secrets:
+
+- `VPS_HOST` -> IP ou hostname da VPS
+- `VPS_USER` -> usuario SSH, por exemplo `root`
+- `VPS_PORT` -> normalmente `22`
+- `VPS_SSH_KEY` -> chave privada SSH usada pelo GitHub Actions
+
+### 3. Fluxo
+
+Depois disso, sempre que voce fizer:
+
+```bash
+git add .
+git commit -m "sua alteracao"
+git push origin main
+```
+
+o workflow [deploy-vps.yml](/c:/Users/rayll/Desktop/Transforma%20Educa%C3%A7%C3%A3o%20PB/transforma/.github/workflows/deploy-vps.yml) conecta na VPS, atualiza `/opt/transforma`, recria os containers e valida o health check.
+
 ## Comandos uteis
 
 ```bash
