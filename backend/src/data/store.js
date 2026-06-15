@@ -126,7 +126,7 @@ async function seedMysqlIfNeeded() {
 
   for (const user of users) {
     await pool.execute(
-      `INSERT INTO users (id, name, email, password_hash, registration, role, function, status, last_access, created_at)
+      `INSERT INTO users (id, name, email, password_hash, registration, role, \`function\`, status, last_access, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         user.id,
@@ -173,7 +173,7 @@ async function seedMysqlIfNeeded() {
   for (const person of people) {
     await pool.execute(
       `INSERT INTO people_management
-       (id, user_id, supervisor_id, function, attendance_status, attendance_time, completed_activities_percentage, open_occurrences_count, status)
+       (id, user_id, supervisor_id, \`function\`, attendance_status, attendance_time, completed_activities_percentage, open_occurrences_count, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         person.id,
@@ -280,7 +280,7 @@ async function createUser(payload) {
 
   const passwordHash = await bcrypt.hash(payload.password, 10)
   const [result] = await pool.execute(
-    `INSERT INTO users (name, email, password_hash, registration, role, function, status, last_access, created_at)
+    `INSERT INTO users (name, email, password_hash, registration, role, \`function\`, status, last_access, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       payload.name,
@@ -323,7 +323,7 @@ async function updateUser(id, updates) {
     email: updates.email,
     registration: updates.registration,
     role: updates.role,
-    function: updates.function,
+    '`function`': updates.function,
     status: updates.status,
   }
 
@@ -506,6 +506,7 @@ async function updateAttendance(id, updates) {
   const fields = []
   const values = []
   const mapped = {
+    '`function`': updates.function,
     attendance_status: updates.attendanceStatus,
     attendance_time: updates.attendanceTime,
     completed_activities_percentage: updates.completedActivities,
