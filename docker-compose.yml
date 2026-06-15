@@ -1,0 +1,33 @@
+services:
+  api:
+    build:
+      context: ./backend
+    container_name: transforma-api
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+    expose:
+      - "3001"
+    networks:
+      - transforma-net
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: /api
+    container_name: transforma-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:8080:80"
+    networks:
+      - transforma-net
+
+networks:
+  transforma-net:
+    driver: bridge
