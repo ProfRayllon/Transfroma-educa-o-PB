@@ -1,6 +1,6 @@
 const mysql = require('mysql2/promise')
 const bcrypt = require('bcryptjs')
-const { users, materials, people, occurrences, notifications } = require('./mockData')
+const { users, courses, materials, people, occurrences, notifications } = require('./mockData')
 
 const DATA_MODE = process.env.DATA_MODE || 'mock'
 const MYSQL_AUTO_SEED = process.env.MYSQL_AUTO_SEED === 'true'
@@ -47,6 +47,22 @@ function mapMaterialRow(row) {
     reviewStatus: row.review_status,
     reviewNotes: row.review_notes,
     createdAt: formatDate(row.created_at),
+  }
+}
+
+function mapCourseRow(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    primaryTrail: row.primary_trail,
+    trail: row.secondary_trail,
+    totalSessions: row.total_sessions,
+    supervisorName: row.supervisor_name,
+    coordinatorName: row.coordinator_name,
+    startDate: formatDate(row.start_date),
+    deadline: formatDate(row.deadline),
+    image: row.image,
+    createdAt: formatDate(row.created_at, true),
   }
 }
 
@@ -119,6 +135,32 @@ async function createPool() {
   })
 
   await pool.query('SELECT 1')
+}
+
+async function ensureMysqlSchema() {
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS courses (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(200) NOT NULL,
+      primary_trail ENUM('TRILHAS TRANSVERSAIS','TRILHAS DA FORMACAO GERAL BASICA') NOT NULL,
+      secondary_trail VARCHAR(150) NOT NULL,
+      total_sessions INT NOT NULL DEFAULT 0,
+      supervisor_name VARCHAR(150) NOT NULL,
+      coordinator_name VARCHAR(150) NOT NULL,
+      start_date DATE DEFAULT NULL,
+      deadline DATE DEFAULT NULL,
+      image MEDIUMTEXT DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY unique_courses_name (name),
+      INDEX idx_courses_primary_trail (primary_trail),
+      INDEX idx_courses_secondary_trail (secondary_trail),
+      INDEX idx_courses_supervisor (supervisor_name),
+      INDEX idx_courses_coordinator (coordinator_name),
+      CONSTRAINT chk_courses_total_sessions
+        CHECK (total_sessions >= 0)
+    ) ENGINE=InnoDB
+  `)
 }
 
 async function seedMysqlIfNeeded() {
@@ -228,12 +270,33 @@ async function seedMysqlIfNeeded() {
       ]
     )
   }
+
+  for (const course of courses) {
+    await pool.execute(
+      `INSERT INTO courses
+       (id, name, primary_trail, secondary_trail, total_sessions, supervisor_name, coordinator_name, start_date, deadline, image)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        course.id,
+        course.name,
+        course.primaryTrail,
+        course.trail,
+        course.totalSessions || 0,
+        course.supervisorName,
+        course.coordinatorName,
+        course.startDate || null,
+        course.deadline || null,
+        course.image || null,
+      ]
+    )
+  }
 }
 
 async function initStore() {
   if (!isMysqlMode()) return
 
   await createPool()
+  await ensureMysqlSchema()
 
   if (MYSQL_AUTO_SEED) {
     await seedMysqlIfNeeded()
@@ -360,6 +423,102 @@ async function deleteUser(id) {
   }
 
   const [result] = await pool.execute('DELETE FROM users WHERE id = ?', [id])
+  return result.affectedRows > 0
+}
+
+async function listCourses() {
+  if (!isMysqlMode()) {
+    return courses.slice().sort((a, b) => String(a.name).localeCompare(String(b.name)))
+  }
+
+  const [rows] = await pool.execute('SELECT * FROM courses ORDER BY name')
+  return rows.map(mapCourseRow)
+}
+
+async function getCourseById(id) {
+  if (!isMysqlMode()) {
+    return courses.find((course) => course.id === Number(id)) || null
+  }
+
+  const [rows] = await pool.execute('SELECT * FROM courses WHERE id = ? LIMIT 1', [id])
+  return rows[0] ? mapCourseRow(rows[0]) : null
+}
+
+async function createCourse(payload) {
+  if (!isMysqlMode()) {
+    const course = {
+      id: Date.now(),
+      ...payload,
+      totalSessions: Number(payload.totalSessions) || 0,
+      createdAt: new Date().toISOString().slice(0, 19),
+    }
+    courses.push(course)
+    return course
+  }
+
+  const [result] = await pool.execute(
+    `INSERT INTO courses
+     (name, primary_trail, secondary_trail, total_sessions, supervisor_name, coordinator_name, start_date, deadline, image)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      payload.name,
+      payload.primaryTrail,
+      payload.trail,
+      Number(payload.totalSessions) || 0,
+      payload.supervisorName,
+      payload.coordinatorName,
+      payload.startDate || null,
+      payload.deadline || null,
+      payload.image || null,
+    ]
+  )
+
+  return getCourseById(result.insertId)
+}
+
+async function updateCourse(id, payload) {
+  if (!isMysqlMode()) {
+    const idx = courses.findIndex((course) => course.id === Number(id))
+    if (idx === -1) return null
+    courses[idx] = {
+      ...courses[idx],
+      ...payload,
+      id: Number(id),
+      totalSessions: Number(payload.totalSessions) || 0,
+    }
+    return courses[idx]
+  }
+
+  await pool.execute(
+    `UPDATE courses
+     SET name = ?, primary_trail = ?, secondary_trail = ?, total_sessions = ?, supervisor_name = ?, coordinator_name = ?, start_date = ?, deadline = ?, image = ?
+     WHERE id = ?`,
+    [
+      payload.name,
+      payload.primaryTrail,
+      payload.trail,
+      Number(payload.totalSessions) || 0,
+      payload.supervisorName,
+      payload.coordinatorName,
+      payload.startDate || null,
+      payload.deadline || null,
+      payload.image || null,
+      id,
+    ]
+  )
+
+  return getCourseById(id)
+}
+
+async function deleteCourse(id) {
+  if (!isMysqlMode()) {
+    const idx = courses.findIndex((course) => course.id === Number(id))
+    if (idx === -1) return false
+    courses.splice(idx, 1)
+    return true
+  }
+
+  const [result] = await pool.execute('DELETE FROM courses WHERE id = ?', [id])
   return result.affectedRows > 0
 }
 
@@ -694,6 +853,11 @@ module.exports = {
   createUser,
   updateUser,
   deleteUser,
+  listCourses,
+  getCourseById,
+  createCourse,
+  updateCourse,
+  deleteCourse,
   listMaterials,
   getMaterialById,
   createMaterial,

@@ -1,14 +1,83 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { mockMaterials, mockCourses } from '../data/mockData'
+import { useAuth } from './AuthContext'
+import api, { getApiErrorMessage } from '../lib/api'
 
 const DataContext = createContext(null)
 
 export function DataProvider({ children }) {
+  const { user } = useAuth()
   const [materials, setMaterials] = useState(mockMaterials)
   const [courses, setCourses] = useState(mockCourses)
+  const [coursesLoading, setCoursesLoading] = useState(false)
+  const [coursesError, setCoursesError] = useState(null)
+
+  const loadCourses = useCallback(async () => {
+    if (!user) {
+      setCourses(mockCourses)
+      setCoursesError(null)
+      return
+    }
+
+    setCoursesLoading(true)
+    setCoursesError(null)
+
+    try {
+      const { data } = await api.get('/courses')
+      setCourses(data)
+    } catch (error) {
+      setCoursesError(getApiErrorMessage(error, 'Erro ao carregar cursos.'))
+    } finally {
+      setCoursesLoading(false)
+    }
+  }, [user])
+
+  useEffect(() => {
+    loadCourses()
+  }, [loadCourses])
+
+  const saveCourse = async (course) => {
+    try {
+      const request = course.id
+        ? api.put(`/courses/${course.id}`, course)
+        : api.post('/courses', course)
+      const { data } = await request
+
+      setCourses((current) => {
+        if (course.id) {
+          return current.map((item) => (item.id === data.id ? data : item))
+        }
+
+        return [...current, data].sort((a, b) => String(a.name).localeCompare(String(b.name)))
+      })
+
+      return data
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error, 'Erro ao salvar curso.'))
+    }
+  }
+
+  const deleteCourse = async (courseId) => {
+    try {
+      await api.delete(`/courses/${courseId}`)
+      setCourses((current) => current.filter((course) => course.id !== courseId))
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error, 'Erro ao excluir curso.'))
+    }
+  }
 
   return (
-    <DataContext.Provider value={{ materials, setMaterials, courses, setCourses }}>
+    <DataContext.Provider value={{
+      materials,
+      setMaterials,
+      courses,
+      setCourses,
+      coursesLoading,
+      coursesError,
+      loadCourses,
+      saveCourse,
+      deleteCourse,
+    }}>
       {children}
     </DataContext.Provider>
   )

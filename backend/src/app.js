@@ -20,8 +20,22 @@ if (!JWT_SECRET) {
   throw new Error('JWT_SECRET nao configurado. Defina a variavel no arquivo .env antes de iniciar o backend.')
 }
 
+const COURSE_TRAILS = {
+  'TRILHAS TRANSVERSAIS': [
+    'Educacao Socioemocional',
+    'Educacao, Ciencia e Tecnologia',
+    'Gestao Pedagogica',
+    'Inclusao, Diversidade e Equidade',
+  ],
+  'TRILHAS DA FORMACAO GERAL BASICA': [
+    'Area de Linguagens',
+    'Area de Ciencias Humanas',
+    'Area de Matematica e Ciencias da Natureza',
+  ],
+}
+
 app.use(cors({ origin: corsOrigins }))
-app.use(express.json())
+app.use(express.json({ limit: '5mb' }))
 
 function sanitizeUser(user) {
   const { passwordHash: _, ...safeUser } = user
@@ -44,6 +58,42 @@ function canEditMaterial(user, material) {
   if (!material) return false
   if (isManager(user.role)) return true
   return user.role === 'professor' && material.responsibleId === user.id
+}
+
+function coursePayload(body) {
+  const payload = {
+    name: String(body.name || '').trim(),
+    primaryTrail: String(body.primaryTrail || '').trim(),
+    trail: String(body.trail || '').trim(),
+    totalSessions: Number(body.totalSessions) || 0,
+    supervisorName: String(body.supervisorName || '').trim(),
+    coordinatorName: String(body.coordinatorName || '').trim(),
+    startDate: body.startDate || null,
+    deadline: body.deadline || null,
+    image: body.image || null,
+  }
+
+  const missing = []
+  if (!payload.name) missing.push('nome')
+  if (!payload.primaryTrail) missing.push('trilha principal')
+  if (!payload.trail) missing.push('trilha secundaria')
+  if (!payload.supervisorName) missing.push('supervisor')
+  if (!payload.coordinatorName) missing.push('coordenador')
+  if (payload.totalSessions <= 0) missing.push('carga horaria total')
+
+  if (missing.length > 0) {
+    return { error: `Preencha os campos obrigatorios: ${missing.join(', ')}.` }
+  }
+
+  if (!COURSE_TRAILS[payload.primaryTrail]) {
+    return { error: 'Trilha principal invalida.' }
+  }
+
+  if (!COURSE_TRAILS[payload.primaryTrail].includes(payload.trail)) {
+    return { error: 'Trilha secundaria invalida para a trilha principal selecionada.' }
+  }
+
+  return { payload }
 }
 
 async function materialPayload(body, actor, currentMaterial) {
@@ -175,6 +225,58 @@ app.delete('/api/users/:id', auth, requireRole('administrador'), async (req, res
   const deleted = await store.deleteUser(req.params.id)
   if (!deleted) return res.status(404).json({ message: 'Usuario nao encontrado.' })
   res.status(204).end()
+})
+
+app.get('/api/courses', auth, async (req, res) => {
+  try {
+    const courses = await store.listCourses()
+    res.json(courses)
+  } catch {
+    res.status(500).json({ message: 'Erro ao carregar cursos.' })
+  }
+})
+
+app.post('/api/courses', auth, requireRole('administrador', 'supervisor'), async (req, res) => {
+  const { payload, error } = coursePayload(req.body)
+  if (error) return res.status(400).json({ message: error })
+
+  try {
+    const course = await store.createCourse(payload)
+    res.status(201).json(course)
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ message: 'Ja existe um curso com esse nome.' })
+    }
+    res.status(500).json({ message: 'Erro ao criar curso.' })
+  }
+})
+
+app.put('/api/courses/:id', auth, requireRole('administrador', 'supervisor'), async (req, res) => {
+  const current = await store.getCourseById(req.params.id)
+  if (!current) return res.status(404).json({ message: 'Curso nao encontrado.' })
+
+  const { payload, error } = coursePayload(req.body)
+  if (error) return res.status(400).json({ message: error })
+
+  try {
+    const course = await store.updateCourse(req.params.id, payload)
+    res.json(course)
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ message: 'Ja existe um curso com esse nome.' })
+    }
+    res.status(500).json({ message: 'Erro ao atualizar curso.' })
+  }
+})
+
+app.delete('/api/courses/:id', auth, requireRole('administrador', 'supervisor'), async (req, res) => {
+  try {
+    const deleted = await store.deleteCourse(req.params.id)
+    if (!deleted) return res.status(404).json({ message: 'Curso nao encontrado.' })
+    res.status(204).end()
+  } catch {
+    res.status(500).json({ message: 'Erro ao excluir curso.' })
+  }
 })
 
 app.get('/api/materials', auth, async (req, res) => {

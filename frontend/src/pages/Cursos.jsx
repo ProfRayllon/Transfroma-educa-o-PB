@@ -277,7 +277,7 @@ function CourseCard({ course, materials, onEdit }) {
   )
 }
 
-function CourseModal({ course, open, onClose, onSave }) {
+function CourseModal({ course, open, onClose, onSave, saving = false, error = null }) {
   const fileRef = useRef(null)
   const [form, setForm] = useState(() => course || {
     name: '',
@@ -319,14 +319,12 @@ function CourseModal({ course, open, onClose, onSave }) {
     reader.readAsDataURL(file)
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
-    onSave({
+    await onSave({
       ...form,
-      id: form.id || Date.now(),
       totalSessions: Number(form.totalSessions) || 0,
     })
-    onClose()
   }
 
   const color = getTrailColor(form.primaryTrail)
@@ -478,9 +476,14 @@ function CourseModal({ course, open, onClose, onSave }) {
         </div>
 
         <div className="flex gap-3 justify-end pt-2">
+          {error && (
+            <div className="mr-auto text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
+              {error}
+            </div>
+          )}
           <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
-          <button type="submit" className="btn-primary">
-            {form.id ? 'Salvar alteracoes' : 'Criar curso'}
+          <button type="submit" disabled={saving} className="btn-primary disabled:opacity-60 disabled:cursor-not-allowed">
+            {saving ? 'Salvando...' : form.id ? 'Salvar alteracoes' : 'Criar curso'}
           </button>
         </div>
       </form>
@@ -490,10 +493,12 @@ function CourseModal({ course, open, onClose, onSave }) {
 
 export default function Cursos() {
   const { user } = useAuth()
-  const { materials, courses, setCourses } = useData()
+  const { materials, courses, coursesLoading, coursesError, saveCourse } = useData()
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editCourse, setEditCourse] = useState(null)
+  const [savingCourse, setSavingCourse] = useState(false)
+  const [saveError, setSaveError] = useState(null)
   const [filters, setFilters] = useState({
     primaryTrails: [],
     trails: [],
@@ -534,13 +539,19 @@ export default function Cursos() {
     })
   }, [courses, filters, search])
 
-  const handleSave = (form) => {
-    if (form.id && courses.find((course) => course.id === form.id)) {
-      setCourses((current) => current.map((course) => (course.id === form.id ? form : course)))
-      return
-    }
+  const handleSave = async (form) => {
+    setSavingCourse(true)
+    setSaveError(null)
 
-    setCourses((current) => [...current, form])
+    try {
+      await saveCourse(form)
+      setModalOpen(false)
+      setEditCourse(null)
+    } catch (error) {
+      setSaveError(error.message || 'Erro ao salvar curso.')
+    } finally {
+      setSavingCourse(false)
+    }
   }
 
   const clearFilters = () => {
@@ -556,11 +567,13 @@ export default function Cursos() {
 
   const openNew = () => {
     setEditCourse(null)
+    setSaveError(null)
     setModalOpen(true)
   }
 
   const openEdit = (course) => {
     setEditCourse(course)
+    setSaveError(null)
     setModalOpen(true)
   }
 
@@ -700,7 +713,18 @@ export default function Cursos() {
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {coursesError && (
+        <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {coursesError}
+        </div>
+      )}
+
+      {coursesLoading ? (
+        <div className="card p-12 text-center text-gray-400">
+          <BookOpen size={32} className="mx-auto mb-3 opacity-40 animate-pulse" />
+          <p className="text-sm">Carregando cursos...</p>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="card p-12 text-center text-gray-400">
           <BookOpen size={32} className="mx-auto mb-3 opacity-40" />
           <p className="text-sm">Nenhum curso encontrado.</p>
@@ -719,6 +743,8 @@ export default function Cursos() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onSave={handleSave}
+        saving={savingCourse}
+        error={saveError}
       />
     </div>
   )

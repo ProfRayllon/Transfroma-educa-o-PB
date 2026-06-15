@@ -25,6 +25,8 @@ const users = [
   { id: 1, name: 'Juliana Santos', email: 'admin@transforma.pb.gov.br', registration: 'ADM-001', role: 'administrador', function: 'Administrador', status: 'ativo', lastAccess: '2026-06-08T08:30:00', createdAt: '2025-01-10' },
 ].map(withPassword)
 
+const courses = []
+
 const materials = []
 
 const people = []
@@ -33,4 +35,4 @@ const occurrences = []
 
 const notifications = []
 
-module.exports = { users, materials, people, occurrences, notifications }
+module.exports = { users, courses, materials, people, occurrences, notifications }
