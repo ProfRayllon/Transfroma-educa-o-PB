@@ -139,7 +139,17 @@ async function createPool() {
 }
 
 async function ensureMysqlSchema() {
-  await pool.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar MEDIUMTEXT DEFAULT NULL AFTER `function`')
+  const [avatarColumns] = await pool.execute(
+    `SELECT COLUMN_NAME
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'users'
+       AND COLUMN_NAME = 'avatar'`
+  )
+
+  if (avatarColumns.length === 0) {
+    await pool.execute('ALTER TABLE users ADD COLUMN avatar MEDIUMTEXT DEFAULT NULL AFTER `function`')
+  }
 
   await pool.execute(`
     CREATE TABLE IF NOT EXISTS courses (
