@@ -108,6 +108,26 @@ export function DataProvider({ children }) {
     }
   }
 
+  const updateMaterialStatus = async (materialId, statusUpdate) => {
+    try {
+      const { data } = await api.patch(`/materials/${materialId}/status`, statusUpdate)
+      setMaterials((current) => current.map((item) => (item.id === data.id ? data : item)))
+      return data
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error, 'Erro ao atualizar status.'))
+    }
+  }
+
+  const updateMaterialSession = async (materialId, session) => {
+    try {
+      const { data } = await api.patch(`/materials/${materialId}/session`, { session })
+      setMaterials((current) => current.map((item) => (item.id === data.id ? data : item)))
+      return data
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error, 'Erro ao mover sessao.'))
+    }
+  }
+
   return (
     <DataContext.Provider value={{
       materials,
@@ -123,6 +143,8 @@ export function DataProvider({ children }) {
       deleteCourse,
       saveMaterial,
       approveMaterial,
+      updateMaterialStatus,
+      updateMaterialSession,
     }}>
       {children}
     </DataContext.Provider>

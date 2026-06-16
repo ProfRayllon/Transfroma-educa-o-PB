@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Plus, Upload, CheckCircle, FileText, Clock, Eye, Search, Filter, X, MoreVertical, ExternalLink, CheckSquare, ArrowLeft, Link2 } from 'lucide-react'
+import { Plus, Upload, CheckCircle, FileText, Clock, Eye, Search, Filter, X, MoreVertical, ExternalLink, CheckSquare, ArrowLeft, Link2, ChevronUp, ChevronDown } from 'lucide-react'
 import Badge from '../components/ui/Badge'
 import StatCard from '../components/ui/StatCard'
 import Modal from '../components/ui/Modal'
@@ -92,6 +92,35 @@ function AvatarChip({ name, role }) {
         <div className="text-[10px] text-gray-400">{role}</div>
       </div>
     </div>
+  )
+}
+
+function InlineStatusSelect({ value, options, onChange }) {
+  const STATUS_COLORS = {
+    em_execucao: 'text-blue-700 bg-blue-50 border-blue-200',
+    validado: 'text-green-700 bg-green-50 border-green-200',
+    em_ajustes: 'text-orange-700 bg-orange-50 border-orange-200',
+    revisao_linguistica: 'text-purple-700 bg-purple-50 border-purple-200',
+    edicao: 'text-amber-700 bg-amber-50 border-amber-200',
+    concluido: 'text-teal-700 bg-teal-50 border-teal-200',
+    esperando_material: 'text-gray-600 bg-gray-50 border-gray-200',
+    aprovado: 'text-green-700 bg-green-50 border-green-200',
+    ajuste_solicitado: 'text-red-700 bg-red-50 border-red-200',
+    em_producao: 'text-blue-700 bg-blue-50 border-blue-200',
+    em_revisao: 'text-orange-700 bg-orange-50 border-orange-200',
+  }
+  const colorCls = STATUS_COLORS[value] || 'text-gray-600 bg-gray-50 border-gray-200'
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      onClick={e => e.stopPropagation()}
+      className={`text-xs font-medium px-2 py-0.5 rounded-md border cursor-pointer focus:outline-none focus:ring-1 focus:ring-brand-400 ${colorCls}`}
+    >
+      {options.map(o => (
+        <option key={o.value} value={o.value}>{o.label}</option>
+      ))}
+    </select>
   )
 }
 
@@ -417,7 +446,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
 
 export default function Producao() {
   const { user, can } = useAuth()
-  const { materials, setMaterials, courses, materialAssignees, saveMaterial, approveMaterial } = useData()
+  const { materials, setMaterials, courses, materialAssignees, saveMaterial, approveMaterial, updateMaterialStatus, updateMaterialSession } = useData()
   const location = useLocation()
   const navigate = useNavigate()
   const initialCourse = location.state?.course || 'Todos'
@@ -433,7 +462,25 @@ export default function Producao() {
   const isCoordinator = user?.role === 'coordenador' || (user?.function || '').toLowerCase().includes('coordenador')
   const canApprove = can('approve_material') || user?.role === 'administrador' || isCoordinator
   const canEdit = can('edit_producao') || ['administrador', 'supervisor', 'professor'].includes(user?.role) || isCoordinator
+  const canMoveSessions = user?.role === 'administrador' || user?.role === 'supervisor' || isCoordinator
   const courseOptions = ['Todos', ...courses.map(c => c.name)]
+
+  const getCanEditMaterial = (material) => {
+    if (!user) return false
+    if (user.role === 'administrador') return true
+    if (isCoordinator) {
+      const course = courses.find(c => c.name === material.course)
+      return course?.coordinatorId === user.id || course?.coordinatorName === user.name
+    }
+    if (user.role === 'supervisor') {
+      const course = courses.find(c => c.name === material.course)
+      return course?.supervisorId === user.id || course?.supervisorName === user.name
+    }
+    if (user.role === 'professor') {
+      return material.responsibleId === user.id
+    }
+    return false
+  }
 
   const filtered = useMemo(() => {
     return materials.filter(m => {
@@ -493,6 +540,24 @@ export default function Producao() {
       return false
     } finally {
       setSavingMaterial(false)
+    }
+  }
+
+  const handleStatusChange = async (mat, field, value) => {
+    try {
+      await updateMaterialStatus(mat.id, { [field]: value })
+    } catch {
+      setMaterials(prev => prev.map(m => m.id === mat.id ? { ...m, [field]: value } : m))
+    }
+  }
+
+  const handleMoveSession = async (mat, direction) => {
+    const newSession = Number(mat.session) + direction
+    if (newSession < 1) return
+    try {
+      await updateMaterialSession(mat.id, newSession)
+    } catch {
+      setMaterials(prev => prev.map(m => m.id === mat.id ? { ...m, session: newSession } : m))
     }
   }
 
@@ -660,9 +725,36 @@ export default function Producao() {
               </tr>
             </thead>
             <tbody>
-              {paged.map(mat => (
+              {paged.map(mat => {
+                const canEditThis = getCanEditMaterial(mat)
+                const canApproveThis = canApprove && (user?.role === 'administrador' || isCoordinator ||
+                  (user?.role === 'supervisor' && courses.find(c => c.name === mat.course)?.supervisorId === user.id))
+                return (
                 <tr key={mat.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                  <td className="table-cell text-center font-semibold text-gray-600">{mat.session}</td>
+                  <td className="table-cell text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      {canMoveSessions && canEditThis ? (
+                        <div className="flex flex-col">
+                          <button
+                            onClick={() => handleMoveSession(mat, -1)}
+                            disabled={Number(mat.session) <= 1}
+                            className="p-0.5 text-gray-300 hover:text-brand-600 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                            title="Mover para sessão anterior"
+                          >
+                            <ChevronUp size={13} />
+                          </button>
+                          <button
+                            onClick={() => handleMoveSession(mat, 1)}
+                            className="p-0.5 text-gray-300 hover:text-brand-600 transition-colors"
+                            title="Mover para próxima sessão"
+                          >
+                            <ChevronDown size={13} />
+                          </button>
+                        </div>
+                      ) : null}
+                      <span className="font-semibold text-gray-600">{mat.session}</span>
+                    </div>
+                  </td>
                   <td className="table-cell">
                     <div className="font-medium text-gray-800 text-sm">{mat.theme}</div>
                   </td>
@@ -672,7 +764,17 @@ export default function Producao() {
                   <td className="table-cell"><TypeBadge type={mat.type} /></td>
                   <td className="table-cell text-xs text-gray-500">{mat.duration}</td>
                   <td className="table-cell"><AvatarChip name={mat.responsibleName} role={mat.responsibleRole} /></td>
-                  <td className="table-cell"><Badge status={mat.status} /></td>
+                  <td className="table-cell">
+                    {canEditThis && user?.role !== 'supervisor' ? (
+                      <InlineStatusSelect
+                        value={mat.status}
+                        options={STATUS_OPTIONS.filter(s => s.value)}
+                        onChange={val => handleStatusChange(mat, 'status', val)}
+                      />
+                    ) : (
+                      <Badge status={mat.status} />
+                    )}
+                  </td>
                   <td className="table-cell hidden lg:table-cell text-xs text-gray-500">
                     {mat.deliveryDate ? new Date(mat.deliveryDate).toLocaleDateString('pt-BR') : '—'}
                   </td>
@@ -682,7 +784,17 @@ export default function Producao() {
                   <td className="table-cell hidden xl:table-cell">
                     <LinkChip url={mat.adjustedLink} />
                   </td>
-                  <td className="table-cell"><Badge status={mat.reviewStatus} /></td>
+                  <td className="table-cell">
+                    {canApproveThis ? (
+                      <InlineStatusSelect
+                        value={mat.reviewStatus}
+                        options={REVIEW_STATUS_OPTIONS}
+                        onChange={val => handleStatusChange(mat, 'reviewStatus', val)}
+                      />
+                    ) : (
+                      <Badge status={mat.reviewStatus} />
+                    )}
+                  </td>
                   <td className="table-cell">
                     <ActionsMenu
                       material={mat}
@@ -690,12 +802,13 @@ export default function Producao() {
                       onEdit={m => { setEditMaterial(m); setEditOpen(true) }}
                       onApprove={handleApprove}
                       onRequestAdjust={handleRequestAdjust}
-                      canApprove={canApprove}
-                      canEdit={canEdit}
+                      canApprove={canApproveThis}
+                      canEdit={canEditThis}
                     />
                   </td>
                 </tr>
-              ))}
+                )
+              })}
               {paged.length === 0 && (
                 <tr>
                   <td colSpan={12} className="table-cell text-center py-10 text-gray-400 text-sm">

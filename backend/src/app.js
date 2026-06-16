@@ -527,6 +527,47 @@ app.patch('/api/materials/:id/approve', auth, async (req, res) => {
   res.json(material)
 })
 
+app.patch('/api/materials/:id/status', auth, async (req, res) => {
+  const actor = await store.getUserById(req.user.id)
+  if (!canManageProduction(actor)) return res.status(403).json({ message: 'Sem permissao para alterar status.' })
+
+  const current = await store.getMaterialById(req.params.id)
+  if (!current) return res.status(404).json({ message: 'Material nao encontrado.' })
+  if (!(await canEditMaterial(actor, current))) {
+    return res.status(403).json({ message: 'Voce nao tem permissao para editar este material.' })
+  }
+
+  const update = { ...current }
+  if (actor.role === 'professor') {
+    if (req.body.status) update.status = req.body.status
+  } else {
+    if (req.body.status) update.status = req.body.status
+    if (req.body.reviewStatus) update.reviewStatus = req.body.reviewStatus
+  }
+
+  const material = await store.updateMaterial(req.params.id, update)
+  if (!material) return res.status(404).json({ message: 'Material nao encontrado.' })
+  res.json(material)
+})
+
+app.patch('/api/materials/:id/session', auth, async (req, res) => {
+  const actor = await store.getUserById(req.user.id)
+  if (!canAssignMaterial(actor)) return res.status(403).json({ message: 'Sem permissao para mover sessoes.' })
+
+  const current = await store.getMaterialById(req.params.id)
+  if (!current) return res.status(404).json({ message: 'Material nao encontrado.' })
+  if (!(await canEditMaterial(actor, current))) {
+    return res.status(403).json({ message: 'Voce nao tem permissao para editar este material.' })
+  }
+
+  const session = Number(req.body.session)
+  if (!session || session < 1) return res.status(400).json({ message: 'Numero de sessao invalido.' })
+
+  const material = await store.updateMaterial(req.params.id, { ...current, session })
+  if (!material) return res.status(404).json({ message: 'Material nao encontrado.' })
+  res.json(material)
+})
+
 app.get('/api/people', auth, async (req, res) => {
   const people = await store.listPeople(req.user)
   res.json(people)
