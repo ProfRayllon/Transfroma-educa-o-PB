@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Plus, Upload, CheckCircle, FileText, Clock, Eye, Search, Filter, X, MoreVertical, ExternalLink, CheckSquare, ArrowLeft, Link2, ChevronUp, ChevronDown } from 'lucide-react'
+import { Plus, Upload, CheckCircle, FileText, Clock, Eye, Search, Filter, X, ExternalLink, CheckSquare, ArrowLeft, Link2, ChevronUp, ChevronDown, Pencil, Check, RotateCcw, SlidersHorizontal } from 'lucide-react'
 import Badge from '../components/ui/Badge'
 import StatCard from '../components/ui/StatCard'
 import Modal from '../components/ui/Modal'
@@ -142,71 +142,74 @@ function InlineStatusSelect({ value, options, onChange }) {
   )
 }
 
-function ActionsMenu({ material, onView, onEdit, onApprove, onRequestAdjust, canApprove, canEdit }) {
-  const [open, setOpen] = useState(false)
-
+function ActionButtons({ material, onView, onEdit, onApprove, onRequestAdjust, canApprove, canEdit }) {
   return (
-    <div className="flex items-center gap-1">
-      <button
-        onClick={() => onView(material)}
-        title="Visualizar"
-        className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
-      >
+    <div className="flex items-center gap-0.5">
+      <button onClick={() => onView(material)} title="Visualizar" className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
         <Eye size={14} />
       </button>
-
-      <div className="relative">
-        <button
-          onClick={() => setOpen(!open)}
-          className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          <MoreVertical size={15} />
+      {canEdit && (
+        <button onClick={() => onEdit(material)} title="Editar" className="p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors">
+          <Pencil size={14} />
         </button>
+      )}
+      {canApprove && (
+        <button onClick={() => onApprove(material)} title="Aprovar" className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors">
+          <Check size={14} />
+        </button>
+      )}
+      {canApprove && (
+        <button onClick={() => onRequestAdjust(material)} title="Solicitar ajuste" className="p-1.5 text-orange-500 hover:bg-orange-50 rounded-lg transition-colors">
+          <RotateCcw size={14} />
+        </button>
+      )}
+      {material.originalLink && (
+        <a href={material.originalLink} target="_blank" rel="noopener noreferrer" title="Abrir link original" className="p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-lg transition-colors">
+          <ExternalLink size={14} />
+        </a>
+      )}
+    </div>
+  )
+}
 
-        {open && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-            <div className="absolute right-0 top-7 w-44 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden">
-              {canEdit && (
-                <button
-                  onClick={() => { onEdit(material); setOpen(false) }}
-                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  Editar
-                </button>
-              )}
-              {canApprove && (
-                <button
-                  onClick={() => { onApprove(material); setOpen(false) }}
-                  className="w-full text-left px-4 py-2.5 text-sm text-green-700 hover:bg-green-50 transition-colors"
-                >
-                  Aprovar
-                </button>
-              )}
-              {canApprove && (
-                <button
-                  onClick={() => { onRequestAdjust(material); setOpen(false) }}
-                  className="w-full text-left px-4 py-2.5 text-sm text-orange-700 hover:bg-orange-50 transition-colors"
-                >
-                  Solicitar ajuste
-                </button>
-              )}
-              {material.originalLink && (
-                <a
-                  href={material.originalLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => setOpen(false)}
-                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
-                >
-                  <ExternalLink size={13} />
-                  Abrir link original
-                </a>
-              )}
-            </div>
-          </>
-        )}
-      </div>
+function ColumnsToggle({ cols, onChange }) {
+  const [open, setOpen] = useState(false)
+  const labels = {
+    tema: 'Tema',
+    objetivo: 'Objetivo',
+    tempo: 'Tempo',
+    dataEntrega: 'Data Entrega',
+    linkOriginal: 'Link Original',
+    linkAjustado: 'Link Ajustado',
+  }
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        title="Colunas visíveis"
+        className={`p-1.5 rounded-lg transition-colors ${open ? 'bg-brand-50 text-brand-600' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'}`}
+      >
+        <SlidersHorizontal size={15} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-9 w-44 bg-white rounded-xl shadow-xl border border-gray-100 z-50 p-1.5">
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 py-1.5">Colunas</p>
+            {Object.entries(labels).map(([key, label]) => (
+              <label key={key} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded-lg cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={cols[key]}
+                  onChange={() => onChange(key, !cols[key])}
+                  className="accent-brand-600 w-3.5 h-3.5"
+                />
+                <span className="text-xs text-gray-700">{label}</span>
+              </label>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -476,6 +479,15 @@ export default function Producao() {
   const [savingMaterial, setSavingMaterial] = useState(false)
   const [page, setPage] = useState(1)
   const perPage = 5
+  const [visibleCols, setVisibleCols] = useState({
+    tema: true,
+    objetivo: true,
+    tempo: true,
+    dataEntrega: true,
+    linkOriginal: true,
+    linkAjustado: true,
+  })
+  const toggleCol = (key, val) => setVisibleCols(c => ({ ...c, [key]: val }))
 
   const isCoordinator = user?.role === 'coordenador' || (user?.function || '').toLowerCase().includes('coordenador')
   const canApprove = can('approve_material') || user?.role === 'administrador' || isCoordinator
@@ -711,22 +723,25 @@ export default function Producao() {
 
       {/* Table */}
       <div className="card p-0 overflow-hidden">
+        <div className="flex items-center justify-end px-3 py-1.5 border-b border-gray-100">
+          <ColumnsToggle cols={visibleCols} onChange={toggleCol} />
+        </div>
         <div className="table-container">
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-100">
-                <th className="table-header w-16">Sessão</th>
-                <th className="table-header">Tema</th>
-                <th className="table-header hidden xl:table-cell">Objetivo</th>
+                <th className="table-header w-14">Sessão</th>
+                {visibleCols.tema && <th className="table-header">Tema</th>}
+                {visibleCols.objetivo && <th className="table-header">Objetivo</th>}
                 <th className="table-header w-24">Tipo</th>
-                <th className="table-header w-20">Tempo</th>
-                <th className="table-header">Responsável</th>
-                <th className="table-header w-28">Status</th>
-                <th className="table-header w-28 hidden lg:table-cell">Data entrega</th>
-                <th className="table-header hidden lg:table-cell">Link original</th>
-                <th className="table-header hidden xl:table-cell">Link ajustado</th>
-                <th className="table-header w-28">Status revisão</th>
-                <th className="table-header w-24">Ações</th>
+                {visibleCols.tempo && <th className="table-header w-16">Tempo</th>}
+                <th className="table-header w-10">Resp.</th>
+                <th className="table-header w-32">Status</th>
+                {visibleCols.dataEntrega && <th className="table-header w-24">Data entrega</th>}
+                {visibleCols.linkOriginal && <th className="table-header w-28">Link original</th>}
+                {visibleCols.linkAjustado && <th className="table-header w-28">Link ajustado</th>}
+                <th className="table-header w-32">Status revisão</th>
+                <th className="table-header w-28">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -760,14 +775,18 @@ export default function Producao() {
                       <span className="font-semibold text-gray-600">{mat.session}</span>
                     </div>
                   </td>
-                  <td className="table-cell">
-                    <div className="font-medium text-gray-800 text-sm">{mat.theme}</div>
-                  </td>
-                  <td className="table-cell hidden xl:table-cell">
-                    <div className="text-xs text-gray-500 max-w-[180px] line-clamp-2">{mat.objective}</div>
-                  </td>
+                  {visibleCols.tema && (
+                    <td className="table-cell">
+                      <div className="font-medium text-gray-700 truncate max-w-[160px]">{mat.theme}</div>
+                    </td>
+                  )}
+                  {visibleCols.objetivo && (
+                    <td className="table-cell">
+                      <div className="text-gray-500 max-w-[180px] line-clamp-2">{mat.objective}</div>
+                    </td>
+                  )}
                   <td className="table-cell"><TypeBadge type={mat.type} /></td>
-                  <td className="table-cell text-xs text-gray-500">{mat.duration}</td>
+                  {visibleCols.tempo && <td className="table-cell text-gray-500">{mat.duration}</td>}
                   <td className="table-cell"><AvatarTooltip name={mat.responsibleName} role={mat.responsibleRole} /></td>
                   <td className="table-cell">
                     {canEditThis && user?.role !== 'supervisor' ? (
@@ -780,15 +799,17 @@ export default function Producao() {
                       <Badge status={mat.status} />
                     )}
                   </td>
-                  <td className="table-cell hidden lg:table-cell text-xs text-gray-500">
-                    {mat.deliveryDate ? new Date(mat.deliveryDate).toLocaleDateString('pt-BR') : '—'}
-                  </td>
-                  <td className="table-cell hidden lg:table-cell">
-                    <LinkChip url={mat.originalLink} />
-                  </td>
-                  <td className="table-cell hidden xl:table-cell">
-                    <LinkChip url={mat.adjustedLink} />
-                  </td>
+                  {visibleCols.dataEntrega && (
+                    <td className="table-cell text-gray-500">
+                      {mat.deliveryDate ? new Date(mat.deliveryDate).toLocaleDateString('pt-BR') : '—'}
+                    </td>
+                  )}
+                  {visibleCols.linkOriginal && (
+                    <td className="table-cell"><LinkChip url={mat.originalLink} /></td>
+                  )}
+                  {visibleCols.linkAjustado && (
+                    <td className="table-cell"><LinkChip url={mat.adjustedLink} /></td>
+                  )}
                   <td className="table-cell">
                     {canApproveThis ? (
                       <InlineStatusSelect
@@ -801,7 +822,7 @@ export default function Producao() {
                     )}
                   </td>
                   <td className="table-cell">
-                    <ActionsMenu
+                    <ActionButtons
                       material={mat}
                       onView={m => setViewMaterial(m)}
                       onEdit={m => { setEditMaterial(m); setEditOpen(true) }}
@@ -816,7 +837,7 @@ export default function Producao() {
               })}
               {paged.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="table-cell text-center py-10 text-gray-400 text-sm">
+                  <td colSpan={20} className="table-cell text-center py-10 text-gray-400 text-sm">
                     Nenhum material encontrado com os filtros aplicados.
                   </td>
                 </tr>
