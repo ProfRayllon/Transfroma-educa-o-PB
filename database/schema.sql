@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(150) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   registration VARCHAR(30) DEFAULT NULL,
-  role ENUM('administrador','supervisor','professor','tutor','tecnico','gestao') NOT NULL DEFAULT 'professor',
+  role ENUM('administrador','coordenador','supervisor','professor','tutor','tecnico','gestao') NOT NULL DEFAULT 'professor',
   `function` VARCHAR(100) DEFAULT NULL,
   avatar MEDIUMTEXT DEFAULT NULL,
   status ENUM('ativo','inativo','pendente','desligado','substituido') NOT NULL DEFAULT 'ativo',
@@ -73,6 +73,19 @@ CREATE TABLE IF NOT EXISTS materials (
   CONSTRAINT fk_materials_responsible
     FOREIGN KEY (responsible_id) REFERENCES users(id)
     ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS course_producers (
+  course_id INT NOT NULL,
+  user_id INT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (course_id, user_id),
+  CONSTRAINT fk_course_producers_course
+    FOREIGN KEY (course_id) REFERENCES courses(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_course_producers_user
+    FOREIGN KEY (user_id) REFERENCES users(id)
+    ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS people_management (

@@ -257,9 +257,23 @@ function CourseCard({ course, materials, onEdit }) {
         </div>
 
         <div className="space-y-1.5 text-xs text-gray-500 pt-0.5">
-          <div className="flex items-center gap-2">
-            <PersonAvatar name={course.coordinatorName || course.supervisorName || course.name} avatar={course.coordinatorAvatar || course.supervisorAvatar} size="sm" />
-            <span className="truncate">{course.coordinatorName || 'Coordenador nao informado'}</span>
+          <div>
+            <div className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Professores/produtores</div>
+            {course.producers?.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {course.producers.slice(0, 4).map((producer) => (
+                  <div key={producer.id} className="flex items-center gap-1.5 min-w-0">
+                    <PersonAvatar name={producer.name} avatar={producer.avatar} size="sm" />
+                    <span className="truncate max-w-[120px]">{producer.name}</span>
+                  </div>
+                ))}
+                {course.producers.length > 4 && (
+                  <span className="text-[11px] text-gray-400">+{course.producers.length - 4}</span>
+                )}
+              </div>
+            ) : (
+              <span className="text-xs text-gray-400">Nenhum produtor vinculado</span>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1">
@@ -295,9 +309,11 @@ function CourseCard({ course, materials, onEdit }) {
   )
 }
 
-function CourseModal({ course, open, onClose, onSave, participants = { supervisors: [], coordinators: [] }, saving = false, error = null }) {
+function CourseModal({ course, open, onClose, onSave, participants = { supervisors: [], coordinators: [], producers: [] }, saving = false, error = null }) {
   const fileRef = useRef(null)
-  const [form, setForm] = useState(() => course || {
+  const [form, setForm] = useState(() => course
+    ? { ...course, producerIds: course.producerIds || course.producers?.map((producer) => producer.id) || [] }
+    : {
     name: '',
     primaryTrail: '',
     trail: '',
@@ -309,6 +325,7 @@ function CourseModal({ course, open, onClose, onSave, participants = { superviso
     startDate: '',
     deadline: '',
     image: null,
+    producerIds: [],
   })
 
   const handleChange = (event) => {
@@ -359,12 +376,24 @@ function CourseModal({ course, open, onClose, onSave, participants = { superviso
     reader.readAsDataURL(file)
   }
 
+  const toggleProducer = (producerId) => {
+    setForm((current) => {
+      const currentIds = current.producerIds || []
+      const nextIds = currentIds.includes(producerId)
+        ? currentIds.filter((id) => id !== producerId)
+        : [...currentIds, producerId]
+
+      return { ...current, producerIds: nextIds }
+    })
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     await onSave({
       ...form,
       supervisorId: Number(form.supervisorId) || null,
       coordinatorId: Number(form.coordinatorId) || null,
+      producerIds: (form.producerIds || []).map(Number).filter(Boolean),
       totalSessions: Number(form.totalSessions) || 0,
     })
   }
@@ -502,6 +531,34 @@ function CourseModal({ course, open, onClose, onSave, participants = { superviso
             </select>
           </div>
 
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Professores/produtores *</label>
+            <div className="rounded-xl border border-gray-200 bg-white max-h-44 overflow-y-auto divide-y divide-gray-100">
+              {participants.producers.length === 0 ? (
+                <div className="px-3 py-3 text-sm text-gray-400">Nenhum professor/produtor ativo encontrado.</div>
+              ) : (
+                participants.producers.map((producer) => {
+                  const checked = (form.producerIds || []).includes(producer.id)
+                  return (
+                    <label key={producer.id} className="flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleProducer(producer.id)}
+                        className="rounded border-gray-300 text-brand-700 focus:ring-brand-500"
+                      />
+                      <PersonAvatar name={producer.name} avatar={producer.avatar} size="sm" />
+                      <span className="truncate">{producer.name}</span>
+                    </label>
+                  )
+                })
+              )}
+            </div>
+            {(form.producerIds || []).length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">Selecione pelo menos um professor/produtor.</p>
+            )}
+          </div>
+
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">Data de inicio</label>
             <input
@@ -557,8 +614,8 @@ export default function Cursos() {
     coordinators: [],
   })
 
-  const isCoordinator = (user?.function || '').toLowerCase().includes('coordenador')
-  const canManage = user?.role === 'administrador' || isCoordinator
+  const isCoordinator = user?.role === 'coordenador' || (user?.function || '').toLowerCase().includes('coordenador')
+  const canManage = user?.role === 'administrador' || user?.role === 'supervisor' || isCoordinator
 
   const filterOptions = useMemo(() => ({
     primaryTrails: Array.from(new Set(courses.map((course) => course.primaryTrail).filter(Boolean))),

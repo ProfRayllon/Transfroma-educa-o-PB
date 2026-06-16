@@ -51,6 +51,17 @@ function mapMaterialRow(row) {
   }
 }
 
+function parseJsonArray(value) {
+  if (!value) return []
+  if (Array.isArray(value)) return value
+  if (Buffer.isBuffer(value)) value = value.toString('utf8')
+  try {
+    return JSON.parse(value)
+  } catch {
+    return []
+  }
+}
+
 function mapCourseRow(row) {
   return {
     id: row.id,
@@ -64,6 +75,7 @@ function mapCourseRow(row) {
     coordinatorId: row.coordinator_id,
     coordinatorName: row.coordinator_name,
     coordinatorAvatar: row.coordinator_avatar || null,
+    producers: parseJsonArray(row.producers).filter((producer) => producer.id),
     startDate: formatDate(row.start_date),
     deadline: formatDate(row.deadline),
     image: row.image,
@@ -72,7 +84,7 @@ function mapCourseRow(row) {
 }
 
 function isCoordinatorUser(user) {
-  return String(user?.function || '').toLowerCase().includes('coordenador')
+  return user?.role === 'coordenador' || String(user?.function || '').toLowerCase().includes('coordenador')
 }
 
 function canSeeAllCourses(user) {
@@ -151,6 +163,10 @@ async function createPool() {
 }
 
 async function ensureMysqlSchema() {
+  await pool.execute(
+    "ALTER TABLE users MODIFY role ENUM('administrador','coordenador','supervisor','professor','tutor','tecnico','gestao') NOT NULL DEFAULT 'professor'"
+  )
+
   const [avatarColumns] = await pool.execute(
     `SELECT COLUMN_NAME
      FROM INFORMATION_SCHEMA.COLUMNS
@@ -207,6 +223,21 @@ async function ensureMysqlSchema() {
   if (!existingCourseColumns.has('coordinator_id')) {
     await pool.execute('ALTER TABLE courses ADD COLUMN coordinator_id INT DEFAULT NULL AFTER supervisor_name')
   }
+
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS course_producers (
+      course_id INT NOT NULL,
+      user_id INT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (course_id, user_id),
+      CONSTRAINT fk_course_producers_course
+        FOREIGN KEY (course_id) REFERENCES courses(id)
+        ON DELETE CASCADE,
+      CONSTRAINT fk_course_producers_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE
+    ) ENGINE=InnoDB
+  `)
 }
 
 async function seedMysqlIfNeeded() {
@@ -499,7 +530,19 @@ async function listCourses(user) {
       s.avatar AS supervisor_avatar,
       COALESCE(s.name, c.supervisor_name) AS supervisor_name,
       co.avatar AS coordinator_avatar,
-      COALESCE(co.name, c.coordinator_name) AS coordinator_name
+      COALESCE(co.name, c.coordinator_name) AS coordinator_name,
+      COALESCE((
+        SELECT JSON_ARRAYAGG(JSON_OBJECT(
+          'id', u.id,
+          'name', u.name,
+          'avatar', u.avatar,
+          'function', u.\`function\`,
+          'role', u.role
+        ))
+        FROM course_producers cp
+        JOIN users u ON u.id = cp.user_id
+        WHERE cp.course_id = c.id
+      ), JSON_ARRAY()) AS producers
     FROM courses c
     LEFT JOIN users s ON s.id = c.supervisor_id
     LEFT JOIN users co ON co.id = c.coordinator_id
@@ -512,6 +555,12 @@ async function listCourses(user) {
     } else if (isCoordinatorUser(user)) {
       sql += ' WHERE c.coordinator_id = ? OR c.coordinator_name = ?'
       params.push(user.id, user.name)
+    } else if (user?.role === 'professor') {
+      sql += ` WHERE EXISTS (
+        SELECT 1 FROM course_producers cp
+        WHERE cp.course_id = c.id AND cp.user_id = ?
+      )`
+      params.push(user.id)
     } else {
       sql += ' WHERE 1 = 0'
     }
@@ -532,7 +581,19 @@ async function getCourseById(id) {
       s.avatar AS supervisor_avatar,
       COALESCE(s.name, c.supervisor_name) AS supervisor_name,
       co.avatar AS coordinator_avatar,
-      COALESCE(co.name, c.coordinator_name) AS coordinator_name
+      COALESCE(co.name, c.coordinator_name) AS coordinator_name,
+      COALESCE((
+        SELECT JSON_ARRAYAGG(JSON_OBJECT(
+          'id', u.id,
+          'name', u.name,
+          'avatar', u.avatar,
+          'function', u.\`function\`,
+          'role', u.role
+        ))
+        FROM course_producers cp
+        JOIN users u ON u.id = cp.user_id
+        WHERE cp.course_id = c.id
+      ), JSON_ARRAY()) AS producers
      FROM courses c
      LEFT JOIN users s ON s.id = c.supervisor_id
      LEFT JOIN users co ON co.id = c.coordinator_id
@@ -553,7 +614,19 @@ async function getCourseByName(name) {
       s.avatar AS supervisor_avatar,
       COALESCE(s.name, c.supervisor_name) AS supervisor_name,
       co.avatar AS coordinator_avatar,
-      COALESCE(co.name, c.coordinator_name) AS coordinator_name
+      COALESCE(co.name, c.coordinator_name) AS coordinator_name,
+      COALESCE((
+        SELECT JSON_ARRAYAGG(JSON_OBJECT(
+          'id', u.id,
+          'name', u.name,
+          'avatar', u.avatar,
+          'function', u.\`function\`,
+          'role', u.role
+        ))
+        FROM course_producers cp
+        JOIN users u ON u.id = cp.user_id
+        WHERE cp.course_id = c.id
+      ), JSON_ARRAY()) AS producers
      FROM courses c
      LEFT JOIN users s ON s.id = c.supervisor_id
      LEFT JOIN users co ON co.id = c.coordinator_id
@@ -564,11 +637,25 @@ async function getCourseByName(name) {
   return rows[0] ? mapCourseRow(rows[0]) : null
 }
 
+async function syncCourseProducers(courseId, producerIds = []) {
+  const ids = [...new Set(producerIds.map((id) => Number(id)).filter(Boolean))]
+
+  await pool.execute('DELETE FROM course_producers WHERE course_id = ?', [courseId])
+
+  for (const producerId of ids) {
+    await pool.execute(
+      'INSERT INTO course_producers (course_id, user_id) VALUES (?, ?)',
+      [courseId, producerId]
+    )
+  }
+}
+
 async function createCourse(payload) {
   if (!isMysqlMode()) {
     const course = {
       id: Date.now(),
       ...payload,
+      producers: payload.producers || [],
       totalSessions: Number(payload.totalSessions) || 0,
       createdAt: new Date().toISOString().slice(0, 19),
     }
@@ -595,6 +682,8 @@ async function createCourse(payload) {
     ]
   )
 
+  await syncCourseProducers(result.insertId, payload.producerIds)
+
   return getCourseById(result.insertId)
 }
 
@@ -606,6 +695,7 @@ async function updateCourse(id, payload) {
       ...courses[idx],
       ...payload,
       id: Number(id),
+      producers: payload.producers || [],
       totalSessions: Number(payload.totalSessions) || 0,
     }
     return courses[idx]
@@ -630,6 +720,8 @@ async function updateCourse(id, payload) {
       id,
     ]
   )
+
+  await syncCourseProducers(id, payload.producerIds)
 
   return getCourseById(id)
 }
@@ -657,6 +749,7 @@ async function listCourseParticipants() {
     return {
       supervisors: activeUsers.filter((user) => ['supervisor', 'administrador'].includes(user.role)).map(safeUser),
       coordinators: activeUsers.filter((user) => user.role === 'administrador' || isCoordinatorUser(user)).map(safeUser),
+      producers: activeUsers.filter((user) => user.role === 'professor').map(safeUser),
     }
   }
 
@@ -665,7 +758,7 @@ async function listCourseParticipants() {
      FROM users
      WHERE status = 'ativo'
        AND (
-        role IN ('administrador', 'supervisor')
+        role IN ('administrador', 'coordenador', 'supervisor', 'professor')
         OR LOWER(COALESCE(\`function\`, '')) LIKE '%coordenador%'
        )
      ORDER BY name`
@@ -675,6 +768,7 @@ async function listCourseParticipants() {
   return {
     supervisors: mapped.filter((user) => ['supervisor', 'administrador'].includes(user.role)),
     coordinators: mapped.filter((user) => user.role === 'administrador' || isCoordinatorUser(user)),
+    producers: mapped.filter((user) => user.role === 'professor'),
   }
 }
 
@@ -716,8 +810,13 @@ async function listMaterials(user) {
   const params = []
   let sql = 'SELECT m.* FROM materials m'
   if (user.role === 'professor') {
-    sql += ' WHERE m.responsible_id = ?'
-    params.push(user.id)
+    sql += ` LEFT JOIN courses c ON c.name = m.course
+      WHERE m.responsible_id = ?
+        OR EXISTS (
+          SELECT 1 FROM course_producers cp
+          WHERE cp.course_id = c.id AND cp.user_id = ?
+        )`
+    params.push(user.id, user.id)
   } else if (user.role === 'supervisor') {
     sql += ' LEFT JOIN courses c ON c.name = m.course WHERE c.supervisor_id = ? OR c.supervisor_name = ?'
     params.push(user.id, user.name)

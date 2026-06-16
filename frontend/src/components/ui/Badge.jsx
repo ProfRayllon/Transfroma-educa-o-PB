@@ -23,6 +23,7 @@ const variants = {
   cancelada: 'bg-gray-100 text-gray-600 border border-gray-200',
 
   administrador: 'bg-purple-100 text-purple-800 border border-purple-200',
+  coordenador: 'bg-violet-100 text-violet-800 border border-violet-200',
   supervisor: 'bg-blue-100 text-blue-800 border border-blue-200',
   professor: 'bg-indigo-100 text-indigo-800 border border-indigo-200',
   tutor: 'bg-pink-100 text-pink-800 border border-pink-200',
@@ -50,6 +51,7 @@ const labels = {
   substituido: 'Substituído',
   cancelada: 'Cancelada',
   administrador: 'Administrador',
+  coordenador: 'Coordenador',
   supervisor: 'Supervisor',
   professor: 'Professor/Produtor',
   tutor: 'Tutor',

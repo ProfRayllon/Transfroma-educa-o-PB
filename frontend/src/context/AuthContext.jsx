@@ -110,6 +110,10 @@ const PERMISSIONS = {
     'view_pessoas', 'edit_frequencia', 'edit_ocorrencias',
     'view_relatorios', 'view_acessos',
   ],
+  coordenador: [
+    'view_producao', 'edit_producao', 'approve_material',
+    'view_cursos', 'edit_cursos',
+  ],
   professor: [
     'view_producao', 'create_material', 'edit_own_material', 'view_review_status',
   ],

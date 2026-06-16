@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 
 const roleLabels = {
   administrador: 'Administrador',
+  coordenador: 'Coordenador',
   supervisor: 'Supervisor',
   professor: 'Professor/Produtor',
   tutor: 'Tutor',

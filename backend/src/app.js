@@ -34,7 +34,7 @@ const COURSE_TRAILS = {
   ],
 }
 
-const USER_ROLES = ['administrador', 'supervisor', 'professor', 'tutor', 'tecnico', 'gestao']
+const USER_ROLES = ['administrador', 'coordenador', 'supervisor', 'professor', 'tutor', 'tecnico', 'gestao']
 const USER_STATUSES = ['ativo', 'inativo', 'pendente', 'desligado', 'substituido']
 
 app.use(cors({ origin: corsOrigins }))
@@ -54,11 +54,11 @@ function isManager(role) {
 }
 
 function isCoordinator(user) {
-  return String(user?.function || '').toLowerCase().includes('coordenador')
+  return user?.role === 'coordenador' || String(user?.function || '').toLowerCase().includes('coordenador')
 }
 
 function canManageCourses(user) {
-  return user?.role === 'administrador' || isCoordinator(user)
+  return user?.role === 'administrador' || user?.role === 'supervisor' || isCoordinator(user)
 }
 
 function canManageProduction(user) {
@@ -96,6 +96,7 @@ async function coursePayload(body) {
     supervisorName: String(body.supervisorName || '').trim(),
     coordinatorId: Number(body.coordinatorId) || null,
     coordinatorName: String(body.coordinatorName || '').trim(),
+    producerIds: Array.isArray(body.producerIds) ? body.producerIds.map(Number).filter(Boolean) : [],
     startDate: body.startDate || null,
     deadline: body.deadline || null,
     image: body.image || null,
@@ -107,6 +108,7 @@ async function coursePayload(body) {
   if (!payload.trail) missing.push('trilha secundaria')
   if (!payload.supervisorId) missing.push('supervisor')
   if (!payload.coordinatorId) missing.push('coordenador')
+  if (payload.producerIds.length === 0) missing.push('professores/produtores')
   if (payload.totalSessions <= 0) missing.push('carga horaria total')
 
   if (missing.length > 0) {
@@ -133,6 +135,16 @@ async function coursePayload(body) {
 
   payload.supervisorName = supervisor.name
   payload.coordinatorName = coordinator.name
+  payload.producerIds = [...new Set(payload.producerIds)]
+  payload.producers = []
+
+  for (const producerId of payload.producerIds) {
+    const producer = await store.getUserById(producerId)
+    if (!producer || producer.role !== 'professor') {
+      return { error: 'Professor/produtor invalido.' }
+    }
+    payload.producers.push(sanitizeUser(producer))
+  }
 
   return { payload }
 }
@@ -395,7 +407,7 @@ app.get('/api/material-assignees', auth, async (req, res) => {
 
 app.post('/api/courses', auth, async (req, res) => {
   const actor = await store.getUserById(req.user.id)
-  if (!canManageCourses(actor)) return res.status(403).json({ message: 'Apenas coordenadores podem criar cursos.' })
+  if (!canManageCourses(actor)) return res.status(403).json({ message: 'Apenas administradores, coordenadores e supervisores podem criar cursos.' })
 
   const { payload, error } = await coursePayload(req.body)
   if (error) return res.status(400).json({ message: error })
@@ -413,12 +425,18 @@ app.post('/api/courses', auth, async (req, res) => {
 
 app.put('/api/courses/:id', auth, async (req, res) => {
   const actor = await store.getUserById(req.user.id)
-  if (!canManageCourses(actor)) return res.status(403).json({ message: 'Apenas coordenadores podem editar cursos.' })
+  if (!canManageCourses(actor)) return res.status(403).json({ message: 'Apenas administradores, coordenadores e supervisores podem editar cursos.' })
 
   const current = await store.getCourseById(req.params.id)
   if (!current) return res.status(404).json({ message: 'Curso nao encontrado.' })
 
-  if (actor.role !== 'administrador' && current.coordinatorId !== actor.id && current.coordinatorName !== actor.name) {
+  if (
+    actor.role !== 'administrador'
+    && current.coordinatorId !== actor.id
+    && current.coordinatorName !== actor.name
+    && current.supervisorId !== actor.id
+    && current.supervisorName !== actor.name
+  ) {
     return res.status(403).json({ message: 'Voce so pode editar cursos cadastrados para voce.' })
   }
 
@@ -438,12 +456,18 @@ app.put('/api/courses/:id', auth, async (req, res) => {
 
 app.delete('/api/courses/:id', auth, async (req, res) => {
   const actor = await store.getUserById(req.user.id)
-  if (!canManageCourses(actor)) return res.status(403).json({ message: 'Apenas coordenadores podem excluir cursos.' })
+  if (!canManageCourses(actor)) return res.status(403).json({ message: 'Apenas administradores, coordenadores e supervisores podem excluir cursos.' })
 
   try {
     const current = await store.getCourseById(req.params.id)
     if (!current) return res.status(404).json({ message: 'Curso nao encontrado.' })
-    if (actor.role !== 'administrador' && current.coordinatorId !== actor.id && current.coordinatorName !== actor.name) {
+    if (
+      actor.role !== 'administrador'
+      && current.coordinatorId !== actor.id
+      && current.coordinatorName !== actor.name
+      && current.supervisorId !== actor.id
+      && current.supervisorName !== actor.name
+    ) {
       return res.status(403).json({ message: 'Voce so pode excluir cursos cadastrados para voce.' })
     }
 

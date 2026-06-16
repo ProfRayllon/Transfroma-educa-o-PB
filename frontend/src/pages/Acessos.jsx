@@ -10,6 +10,7 @@ import api, { getApiErrorMessage } from '../lib/api'
 const ROLES = [
   { value: '', label: 'Todos os perfis' },
   { value: 'administrador', label: 'Administrador' },
+  { value: 'coordenador', label: 'Coordenador' },
   { value: 'supervisor', label: 'Supervisor' },
   { value: 'professor', label: 'Professor/Produtor' },
   { value: 'tutor', label: 'Tutor' },
@@ -19,6 +20,7 @@ const ROLES = [
 
 const ROLE_LABELS = {
   administrador: 'Administrador',
+  coordenador: 'Coordenador',
   supervisor: 'Supervisor',
   professor: 'Professor/Produtor',
   tutor: 'Tutor',
@@ -28,6 +30,7 @@ const ROLE_LABELS = {
 
 const PERMISSIONS_MAP = {
   administrador: ['Acessa tudo', 'Cria usuarios', 'Edita permissoes', 'Visualiza todas as telas', 'Edita todos os registros'],
+  coordenador: ['Acessa cursos vinculados', 'Cria e edita cursos', 'Atribui atividades', 'Acompanha producao dos seus cursos'],
   supervisor: ['Acessa Producao', 'Acessa Gestao de Pessoas', 'Aprova materiais', 'Edita ocorrencias', 'Registra frequencia', 'Visualiza relatorios'],
   professor: ['Acessa Producao', 'Cadastra materiais', 'Edita os proprios materiais', 'Visualiza status da revisao'],
   tutor: ['Acessa Gestao de Pessoas', 'Atualiza atividades', 'Visualiza ocorrencias'],
@@ -271,7 +274,7 @@ export default function Acessos() {
     total: users.length,
     admins: users.filter((listedUser) => listedUser.role === 'administrador').length,
     supervisors: users.filter((listedUser) => listedUser.role === 'supervisor').length,
-    others: users.filter((listedUser) => ['professor', 'tutor', 'tecnico', 'gestao'].includes(listedUser.role)).length,
+    others: users.filter((listedUser) => ['coordenador', 'professor', 'tutor', 'tecnico', 'gestao'].includes(listedUser.role)).length,
     active: users.filter((listedUser) => listedUser.status === 'ativo').length,
   }
 

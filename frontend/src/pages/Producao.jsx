@@ -412,7 +412,7 @@ export default function Producao() {
   const [page, setPage] = useState(1)
   const perPage = 5
 
-  const isCoordinator = (user?.function || '').toLowerCase().includes('coordenador')
+  const isCoordinator = user?.role === 'coordenador' || (user?.function || '').toLowerCase().includes('coordenador')
   const canApprove = can('approve_material') || user?.role === 'administrador' || isCoordinator
   const canEdit = can('edit_producao') || ['administrador', 'supervisor', 'professor'].includes(user?.role) || isCoordinator
   const courseOptions = ['Todos', ...courses.map(c => c.name)]

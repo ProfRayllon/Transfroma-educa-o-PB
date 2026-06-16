@@ -5,6 +5,7 @@ import { useAvatar } from '../context/AvatarContext'
 
 const ROLE_LABELS = {
   administrador: 'Administrador',
+  coordenador: 'Coordenador',
   supervisor: 'Supervisor',
   professor: 'Professor/Produtor',
   tutor: 'Tutor',
