@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   BookOpen,
   Calendar,
   Camera,
+  CheckCircle,
   ChevronDown,
   ChevronRight,
   Clock,
@@ -18,6 +19,7 @@ import {
 import Modal from '../components/ui/Modal'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
+import api from '../lib/api'
 
 const PRIMARY_TRAILS = {
   'TRILHAS TRANSVERSAIS': [
@@ -179,10 +181,11 @@ function MultiSelectFilter({ label, placeholder, options, values, onChange }) {
   )
 }
 
-function CourseCard({ course, materials, onEdit }) {
+function CourseCard({ course, materials, onEdit, ementaStatus }) {
   const navigate = useNavigate()
   const color = getTrailColor(course.primaryTrail)
   const alert = deadlineBadge(course.deadline)
+  const ementaApproved = ementaStatus?.coordinatorStatus === 'valido'
 
   const courseMaterials = materials.filter((material) => material.course === course.name)
   const totalContents = courseMaterials.length
@@ -302,10 +305,13 @@ function CourseCard({ course, materials, onEdit }) {
           </button>
           <button
             onClick={() => navigate(`/cursos/${course.id}/ementa`)}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 transition-colors border border-brand-100"
-            title="Ementa do curso"
+            className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors border
+              ${ementaApproved
+                ? 'text-green-700 bg-green-50 hover:bg-green-100 border-green-200'
+                : 'text-brand-700 bg-brand-50 hover:bg-brand-100 border-brand-100'}`}
+            title={ementaApproved ? 'Ementa aprovada' : 'Ementa do curso'}
           >
-            <FileText size={13} />
+            {ementaApproved ? <CheckCircle size={13} /> : <FileText size={13} />}
             Ementa
           </button>
           <button
@@ -603,6 +609,15 @@ export default function Cursos() {
   const [editCourse, setEditCourse] = useState(null)
   const [savingCourse, setSavingCourse] = useState(false)
   const [saveError, setSaveError] = useState(null)
+  const [ementaStatuses, setEmentaStatuses] = useState({})
+
+  useEffect(() => {
+    api.get('/ementas').then(({ data }) => {
+      const map = {}
+      data.forEach((e) => { map[e.courseId] = e })
+      setEmentaStatuses(map)
+    }).catch(() => {})
+  }, [])
   const [filters, setFilters] = useState({
     primaryTrails: [],
     trails: [],
@@ -833,7 +848,7 @@ export default function Cursos() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
           {filtered.map((course) => (
-            <CourseCard key={course.id} course={course} materials={materials} onEdit={openEdit} />
+            <CourseCard key={course.id} course={course} materials={materials} onEdit={openEdit} ementaStatus={ementaStatuses[course.id]} />
           ))}
         </div>
       )}

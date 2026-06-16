@@ -1395,6 +1395,27 @@ async function markNotificationRead(id, userId) {
   return rows[0] ? mapNotificationRow(rows[0]) : null
 }
 
+async function getAllEmentas() {
+  if (!isMysqlMode()) {
+    return ementas_data.map((e) => ({
+      courseId: e.courseId,
+      professorStatus: e.professorStatus,
+      supervisorStatus: e.supervisorStatus,
+      coordinatorStatus: e.coordinatorStatus,
+    }))
+  }
+
+  const [rows] = await pool.execute(
+    'SELECT course_id, professor_status, supervisor_status, coordinator_status FROM ementas'
+  )
+  return rows.map((r) => ({
+    courseId: r.course_id,
+    professorStatus: r.professor_status,
+    supervisorStatus: r.supervisor_status,
+    coordinatorStatus: r.coordinator_status,
+  }))
+}
+
 module.exports = {
   DATA_MODE,
   MYSQL_AUTO_SEED,
@@ -1419,6 +1440,7 @@ module.exports = {
   updateMaterial,
   approveMaterial,
   deleteMaterial,
+  getAllEmentas,
   getEmentaByCourseId,
   saveEmenta,
   updateEmentaStatus,

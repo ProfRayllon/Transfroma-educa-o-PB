@@ -14,10 +14,9 @@ const STEPS = [
   { id: 3, title: 'Objetivos', desc: 'Geral e específicos' },
   { id: 4, title: 'Competências', desc: 'Técnicas, pedagógicas e socioemocionais' },
   { id: 5, title: 'Ementa', desc: 'Descrição sintética dos conteúdos' },
-  { id: 6, title: 'Conteúdo Programático', desc: 'Organizado por módulos' },
-  { id: 7, title: 'Recursos', desc: 'Recursos educacionais utilizados' },
-  { id: 8, title: 'Avaliação', desc: 'Critérios e instrumentos' },
-  { id: 9, title: 'Referências', desc: 'Bibliografia' },
+  { id: 6, title: 'Recursos', desc: 'Recursos educacionais utilizados' },
+  { id: 7, title: 'Avaliação', desc: 'Critérios e instrumentos' },
+  { id: 8, title: 'Referências', desc: 'Bibliografia' },
 ]
 
 const RESOURCE_OPTIONS = [
@@ -45,7 +44,6 @@ const EMPTY_FORM = {
   pedagogicalCompetencies: '',
   socioemotionalCompetencies: '',
   syllabusDescription: '',
-  programmaticContent: [{ module: 'Módulo 1', content: '' }],
   educationalResources: [],
   evaluationCriteria: '',
   evaluationInstruments: '',
@@ -70,12 +68,10 @@ const STATUS_COLORS = {
 
 /* ─── helpers ─── */
 
-function Field({ label, children, required }) {
+function Field({ label, children }) {
   return (
     <div>
-      <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
-      </label>
+      <label className="block text-xs font-semibold text-gray-600 mb-1.5">{label}</label>
       {children}
     </div>
   )
@@ -94,13 +90,26 @@ function Textarea({ value, onChange, placeholder, rows = 4, disabled }) {
   )
 }
 
-function StatusPill({ label, status }) {
+function StatusControl({ label, value, options, canEdit, onChange }) {
   return (
     <div className="text-center">
-      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">{label}</div>
-      <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border ${STATUS_COLORS[status] || STATUS_COLORS.pendente}`}>
-        {STATUS_LABELS[status] || status}
-      </span>
+      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">{label}</div>
+      {canEdit ? (
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={`text-xs font-semibold px-2.5 py-1 rounded-lg border cursor-pointer appearance-none
+            ${STATUS_COLORS[value] || STATUS_COLORS.pendente}`}
+        >
+          {options.map((o) => (
+            <option key={o} value={o}>{STATUS_LABELS[o] || o}</option>
+          ))}
+        </select>
+      ) : (
+        <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border ${STATUS_COLORS[value] || STATUS_COLORS.pendente}`}>
+          {STATUS_LABELS[value] || value}
+        </span>
+      )}
     </div>
   )
 }
@@ -234,45 +243,6 @@ function StepEmenta({ form, setForm, disabled }) {
   )
 }
 
-function StepConteudo({ form, setForm, disabled }) {
-  const updateModule = (i, field, val) => setForm((f) => {
-    const list = [...f.programmaticContent]; list[i] = { ...list[i], [field]: val }
-    return { ...f, programmaticContent: list }
-  })
-  const addModule = () => setForm((f) => ({
-    ...f,
-    programmaticContent: [...f.programmaticContent, { module: `Módulo ${f.programmaticContent.length + 1}`, content: '' }],
-  }))
-  const removeModule = (i) => setForm((f) => ({ ...f, programmaticContent: f.programmaticContent.filter((_, j) => j !== i) }))
-
-  return (
-    <div className="space-y-4">
-      {form.programmaticContent.map((mod, i) => (
-        <div key={i} className="border border-gray-100 rounded-xl p-4 space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-full bg-brand-100 text-brand-700 text-xs font-bold flex items-center justify-center flex-shrink-0">{i + 1}</div>
-            <input value={mod.module} onChange={(e) => updateModule(i, 'module', e.target.value)}
-              placeholder={`Nome do módulo ${i + 1}`} disabled={disabled}
-              className={`input-field flex-1 font-semibold ${disabled ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''}`} />
-            {!disabled && form.programmaticContent.length > 1 && (
-              <button onClick={() => removeModule(i)} className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0">
-                <X size={14} />
-              </button>
-            )}
-          </div>
-          <Textarea value={mod.content} onChange={(e) => updateModule(i, 'content', e.target.value)}
-            placeholder="Conteúdos e temas abordados neste módulo..." rows={2} disabled={disabled} />
-        </div>
-      ))}
-      {!disabled && (
-        <button onClick={addModule} className="flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-800 font-medium">
-          <Plus size={13} /> Adicionar módulo
-        </button>
-      )}
-    </div>
-  )
-}
-
 function StepRecursos({ form, setForm, disabled }) {
   const toggle = (value) => {
     if (disabled) return
@@ -374,7 +344,7 @@ function EmentaViewModal({ course, ementa, form, materials, onClose, onPrint }) 
   const totalModules = new Set(courseMaterials.map((m) => m.module || 1)).size
   const producers = course.producers?.map((p) => p.name).join(', ') || '—'
   const specificObjs = (form.specificObjectives || []).filter(Boolean)
-  const modules = (form.programmaticContent || []).filter((m) => m.content)
+  const resources = (form.educationalResources || []).map((v) => RESOURCE_OPTIONS.find((o) => o.value === v)?.label || v)
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -393,7 +363,6 @@ function EmentaViewModal({ course, ementa, form, materials, onClose, onPrint }) 
         </div>
 
         <div className="overflow-y-auto flex-1">
-          {/* Institutional header */}
           <div className="bg-gradient-to-r from-brand-900 to-brand-700 text-white px-8 py-8">
             <div className="text-[10px] font-bold tracking-[3px] text-white/60 uppercase mb-2">
               Secretaria de Educação · Transforma Educação PB
@@ -412,7 +381,6 @@ function EmentaViewModal({ course, ementa, form, materials, onClose, onPrint }) 
             </div>
           </div>
 
-          {/* Status bar */}
           <div className="flex items-center gap-6 px-8 py-3 bg-gray-50 border-b border-gray-100 flex-wrap">
             {[
               { label: 'Professor', val: ementa?.professorStatus || 'rascunho' },
@@ -428,7 +396,6 @@ function EmentaViewModal({ course, ementa, form, materials, onClose, onPrint }) 
             ))}
           </div>
 
-          {/* Content */}
           <div className="px-8 py-6 space-y-8">
             <SectionBlock num={1} title="Identificação do Curso">
               <div className="grid grid-cols-2 gap-3">
@@ -480,25 +447,12 @@ function EmentaViewModal({ course, ementa, form, materials, onClose, onPrint }) 
               </SectionBlock>
             )}
 
-            {modules.length > 0 && (
-              <SectionBlock num={6} title="Conteúdo Programático">
-                <div className="space-y-3">
-                  {modules.map((mod, i) => (
-                    <div key={i} className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                      <div className="font-semibold text-brand-800 text-sm mb-1">{mod.module}</div>
-                      <p className="text-sm text-gray-600">{mod.content}</p>
-                    </div>
-                  ))}
-                </div>
-              </SectionBlock>
-            )}
-
-            {(form.educationalResources || []).length > 0 && (
-              <SectionBlock num={7} title="Recursos Educacionais">
+            {resources.length > 0 && (
+              <SectionBlock num={6} title="Recursos Educacionais">
                 <div className="flex flex-wrap gap-2">
-                  {form.educationalResources.map((v) => (
-                    <span key={v} className="bg-brand-50 text-brand-700 border border-brand-100 text-xs font-semibold px-3 py-1 rounded-full">
-                      {RESOURCE_OPTIONS.find((o) => o.value === v)?.label || v}
+                  {resources.map((r) => (
+                    <span key={r} className="bg-brand-50 text-brand-700 border border-brand-100 text-xs font-semibold px-3 py-1 rounded-full">
+                      {r}
                     </span>
                   ))}
                 </div>
@@ -506,14 +460,14 @@ function EmentaViewModal({ course, ementa, form, materials, onClose, onPrint }) 
             )}
 
             {(form.evaluationCriteria || form.evaluationInstruments) && (
-              <SectionBlock num={8} title="Avaliação da Aprendizagem">
+              <SectionBlock num={7} title="Avaliação da Aprendizagem">
                 {form.evaluationCriteria && <TextField label="Critérios de avaliação" value={form.evaluationCriteria} />}
                 {form.evaluationInstruments && <TextField label="Instrumentos utilizados" value={form.evaluationInstruments} />}
               </SectionBlock>
             )}
 
             {form.referencesList && (
-              <SectionBlock num={9} title="Referências">
+              <SectionBlock num={8} title="Referências">
                 <div className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">{form.referencesList}</div>
               </SectionBlock>
             )}
@@ -555,6 +509,8 @@ export default function Ementa() {
     || (isCoord && (course?.coordinatorId === user?.id || course?.coordinatorName === user?.name))
   )
 
+  const isProfessor = !!(course?.producers?.some((p) => p.id === user?.id)) || user?.role === 'administrador'
+
   const canEditSupStatus = user?.role === 'administrador'
     || (user?.role === 'supervisor' && (course?.supervisorId === user?.id || course?.supervisorName === user?.name))
 
@@ -563,7 +519,7 @@ export default function Ementa() {
 
   const isFinalizado = ementa?.professorStatus === 'concluido'
   const isApproved = isFinalizado && ementa?.supervisorStatus === 'valido' && ementa?.coordinatorStatus === 'valido'
-  const formDisabled = isFinalizado && !canEdit
+  const formDisabled = isFinalizado || !canEdit
 
   useEffect(() => {
     const load = async () => {
@@ -582,7 +538,6 @@ export default function Ementa() {
             pedagogicalCompetencies: data.pedagogicalCompetencies || '',
             socioemotionalCompetencies: data.socioemotionalCompetencies || '',
             syllabusDescription: data.syllabusDescription || '',
-            programmaticContent: data.programmaticContent?.length ? data.programmaticContent : [{ module: 'Módulo 1', content: '' }],
             educationalResources: data.educationalResources || [],
             evaluationCriteria: data.evaluationCriteria || '',
             evaluationInstruments: data.evaluationInstruments || '',
@@ -590,7 +545,7 @@ export default function Ementa() {
           })
         }
       } catch {
-        /* ementa ainda não existe — ok */
+        /* ementa ainda não existe */
       } finally {
         setLoading(false)
       }
@@ -618,7 +573,7 @@ export default function Ementa() {
 
   const handleNext = async () => {
     if (canEdit && !isFinalizado) await saveDraft()
-    setStep((s) => Math.min(9, s + 1))
+    setStep((s) => Math.min(8, s + 1))
   }
 
   const handleSubmit = async () => {
@@ -652,7 +607,6 @@ export default function Ementa() {
     const totalModules = new Set(courseMaterials.map((m) => m.module || 1)).size
     const producers = course.producers?.map((p) => p.name).join(', ') || '—'
     const specificObjs = (form.specificObjectives || []).filter(Boolean)
-    const modules = (form.programmaticContent || []).filter((m) => m.content)
     const resources = (form.educationalResources || []).map((v) => RESOURCE_OPTIONS.find((o) => o.value === v)?.label || v)
 
     const sec = (num, title, content) => `
@@ -691,8 +645,6 @@ export default function Ementa() {
         .info-label{font-size:9pt;text-transform:uppercase;letter-spacing:1px;color:#7a9cbf;font-weight:700;margin-bottom:3px}
         .info-val{font-size:11pt;font-weight:700;color:#1e3a5f}
         ul{padding-left:20px}li{margin-bottom:5px}
-        .mod{background:#f8faff;border-radius:8px;padding:10px 14px;margin-bottom:10px;border:1px solid #dce8f5}
-        .mod-name{font-weight:700;color:#1e3a5f;margin-bottom:4px}
         .chips{display:flex;flex-wrap:wrap;gap:8px}
         .tag{background:#e8f0fb;color:#1e3a5f;padding:3px 12px;border-radius:20px;font-size:10pt}
         .footer{margin-top:32px;padding:14px 48px;border-top:1px solid #dce8f5;display:flex;justify-content:space-between;font-size:9pt;color:#888}
@@ -735,12 +687,11 @@ export default function Ementa() {
           field('Competências pedagógicas', form.pedagogicalCompetencies) +
           field('Competências socioemocionais', form.socioemotionalCompetencies)) : ''}
         ${form.syllabusDescription ? sec(5, 'Ementa', `<div class="field-value">${form.syllabusDescription}</div>`) : ''}
-        ${modules.length ? sec(6, 'Conteúdo Programático', modules.map((m) => `<div class="mod"><div class="mod-name">${m.module}</div><div>${m.content}</div></div>`).join('')) : ''}
-        ${resources.length ? sec(7, 'Recursos Educacionais', `<div class="chips">${resources.map((r) => `<span class="tag">${r}</span>`).join('')}</div>`) : ''}
-        ${(form.evaluationCriteria || form.evaluationInstruments) ? sec(8, 'Avaliação da Aprendizagem',
+        ${resources.length ? sec(6, 'Recursos Educacionais', `<div class="chips">${resources.map((r) => `<span class="tag">${r}</span>`).join('')}</div>`) : ''}
+        ${(form.evaluationCriteria || form.evaluationInstruments) ? sec(7, 'Avaliação da Aprendizagem',
           field('Critérios de avaliação', form.evaluationCriteria) +
           field('Instrumentos utilizados', form.evaluationInstruments)) : ''}
-        ${form.referencesList ? sec(9, 'Referências', `<div class="field-value">${form.referencesList.replace(/\n/g, '<br>')}</div>`) : ''}
+        ${form.referencesList ? sec(8, 'Referências', `<div class="field-value">${form.referencesList.replace(/\n/g, '<br>')}</div>`) : ''}
       </div>
       <div class="footer"><span>Transforma Educação PB · ${new Date().getFullYear()}</span><span>Gerado em ${new Date().toLocaleDateString('pt-BR')}</span></div>
     </body></html>`
@@ -800,44 +751,36 @@ export default function Ementa() {
       <div className="card p-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-6">
-            <StatusPill label="St. Prof." status={ementa?.professorStatus || 'rascunho'} />
+            <StatusControl
+              label="Professor"
+              value={ementa?.professorStatus || 'rascunho'}
+              options={['rascunho', 'concluido']}
+              canEdit={isProfessor}
+              onChange={(val) => handleStatusUpdate({ professorStatus: val })}
+            />
             <ChevronRight size={14} className="text-gray-300" />
-            <StatusPill label="St. Sup." status={ementa?.supervisorStatus || 'pendente'} />
+            <StatusControl
+              label="Supervisor"
+              value={ementa?.supervisorStatus || 'pendente'}
+              options={['pendente', 'valido', 'nao_valido']}
+              canEdit={canEditSupStatus}
+              onChange={(val) => handleStatusUpdate({ supervisorStatus: val })}
+            />
             <ChevronRight size={14} className="text-gray-300" />
-            <StatusPill label="St. Coord." status={ementa?.coordinatorStatus || 'pendente'} />
+            <StatusControl
+              label="Coordenador"
+              value={ementa?.coordinatorStatus || 'pendente'}
+              options={['pendente', 'valido', 'nao_valido']}
+              canEdit={canEditCoordStatus}
+              onChange={(val) => handleStatusUpdate({ coordinatorStatus: val })}
+            />
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            {canEditSupStatus && isFinalizado && ementa?.supervisorStatus === 'pendente' && (
-              <>
-                <button onClick={() => handleStatusUpdate({ supervisorStatus: 'valido' })}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg transition-colors">
-                  <CheckCircle size={12} /> Validar (Supervisor)
-                </button>
-                <button onClick={() => handleStatusUpdate({ supervisorStatus: 'nao_valido' })}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-semibold rounded-lg transition-colors">
-                  <X size={12} /> Não validar
-                </button>
-              </>
-            )}
-            {canEditCoordStatus && ementa?.supervisorStatus === 'valido' && ementa?.coordinatorStatus === 'pendente' && (
-              <>
-                <button onClick={() => handleStatusUpdate({ coordinatorStatus: 'valido' })}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg transition-colors">
-                  <CheckCircle size={12} /> Aprovar (Coordenador)
-                </button>
-                <button onClick={() => handleStatusUpdate({ coordinatorStatus: 'nao_valido' })}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-semibold rounded-lg transition-colors">
-                  <X size={12} /> Reprovar
-                </button>
-              </>
-            )}
-            {isApproved && (
-              <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 text-xs font-semibold rounded-lg border border-green-200">
-                <CheckCircle size={12} /> Ementa aprovada
-              </span>
-            )}
-          </div>
+          {isApproved && (
+            <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 text-xs font-semibold rounded-lg border border-green-200">
+              <CheckCircle size={12} /> Ementa aprovada
+            </span>
+          )}
         </div>
       </div>
 
@@ -872,10 +815,9 @@ export default function Ementa() {
           {step === 3 && <StepObjetivos form={form} setForm={setForm} disabled={formDisabled} />}
           {step === 4 && <StepCompetencias form={form} setForm={setForm} disabled={formDisabled} />}
           {step === 5 && <StepEmenta form={form} setForm={setForm} disabled={formDisabled} />}
-          {step === 6 && <StepConteudo form={form} setForm={setForm} disabled={formDisabled} />}
-          {step === 7 && <StepRecursos form={form} setForm={setForm} disabled={formDisabled} />}
-          {step === 8 && <StepAvaliacao form={form} setForm={setForm} disabled={formDisabled} />}
-          {step === 9 && <StepReferencias form={form} setForm={setForm} disabled={formDisabled} />}
+          {step === 6 && <StepRecursos form={form} setForm={setForm} disabled={formDisabled} />}
+          {step === 7 && <StepAvaliacao form={form} setForm={setForm} disabled={formDisabled} />}
+          {step === 8 && <StepReferencias form={form} setForm={setForm} disabled={formDisabled} />}
         </div>
 
         {/* Navigation */}
@@ -892,7 +834,7 @@ export default function Ementa() {
               </button>
             )}
 
-            {step < 9 ? (
+            {step < 8 ? (
               <button onClick={handleNext} disabled={saving} className="btn-primary">
                 Próximo <ChevronRight size={14} />
               </button>
@@ -909,7 +851,6 @@ export default function Ementa() {
         </div>
       </div>
 
-      {/* View modal */}
       {viewOpen && (
         <EmentaViewModal
           course={course}
@@ -921,7 +862,6 @@ export default function Ementa() {
         />
       )}
 
-      {/* Toast */}
       {toast && (
         <div className={`fixed bottom-6 right-6 z-[200] flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium animate-fade-in
           ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-gray-900 text-white'}`}>

@@ -645,6 +645,14 @@ app.patch('/api/notifications/:id/read', auth, async (req, res) => {
   res.json(notification)
 })
 
+app.get('/api/ementas', auth, async (req, res) => {
+  try {
+    res.json(await store.getAllEmentas())
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 app.get('/api/ementas/:courseId', auth, async (req, res) => {
   try {
     const ementa = await store.getEmentaByCourseId(req.params.courseId)
