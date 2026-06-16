@@ -124,7 +124,7 @@ function MiniAvatar({ name, roleLabel }) {
   const initials = name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
   return (
     <div className="relative group inline-flex flex-shrink-0">
-      <div className="w-5 h-5 rounded-full bg-slate-500 text-white text-[9px] font-bold flex items-center justify-center cursor-default select-none">
+      <div className="w-7 h-7 rounded-full bg-slate-500 text-white text-xs font-semibold flex items-center justify-center cursor-default select-none">
         {initials}
       </div>
       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none">
@@ -362,18 +362,14 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
           </select>
         </div>
 
-        {/* Módulo + Sessão */}
-        <div>
+        {/* Módulo */}
+        <div className="col-span-2">
           <label className="block text-xs font-medium text-gray-600 mb-1.5">Módulo *</label>
           <select name="module" value={form.module} onChange={handleChange} className="select-field">
             {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
               <option key={n} value={n}>Módulo {n}</option>
             ))}
           </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">Sessão (nº conteúdo) *</label>
-          <input name="session" value={form.session} onChange={handleChange} type="number" min={1} className="input-field" placeholder="Ex: 1" required />
         </div>
 
         {/* Tipo */}
@@ -519,11 +515,12 @@ export default function Producao() {
   const [editMaterial, setEditMaterial] = useState(null)
   const [editOpen, setEditOpen] = useState(false)
   const [savingMaterial, setSavingMaterial] = useState(false)
+  const [toast, setToast] = useState(null)
   const [page, setPage] = useState(1)
   const perPage = 5
   const [visibleCols, setVisibleCols] = useState({
     tema: true,
-    objetivo: true,
+    objetivo: false,
     tempo: true,
     dataEntrega: true,
     linkOriginal: true,
@@ -601,12 +598,24 @@ export default function Producao() {
     emRevisao: statsMaterials.filter(m => m.status === 'concluido' && (m.supervisorStatus !== 'valido' || m.coordinatorStatus !== 'valido')).length,
   }
 
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 3500)
+  }
+
   const handleSave = async (form) => {
     try {
       setSavingMaterial(true)
+      const isNew = !form.id
+      if (isNew) {
+        const courseMaterials = materials.filter(m => m.course === form.course)
+        form.session = courseMaterials.length + 1
+      }
       await saveMaterial(form)
+      showToast(form.id ? 'Conteúdo atualizado com sucesso!' : 'Conteúdo inserido com sucesso!')
       return true
     } catch {
+      showToast('Erro ao salvar conteúdo. Tente novamente.', 'error')
       return false
     } finally {
       setSavingMaterial(false)
@@ -770,7 +779,7 @@ export default function Producao() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-100">
-                <th className="table-header w-12">Sess.</th>
+                <th className="table-header w-12">N</th>
                 <th className="table-header w-16">Módulo</th>
                 {visibleCols.tema && <th className="table-header">Tema</th>}
                 {visibleCols.objetivo && <th className="table-header">Objetivo</th>}
@@ -953,6 +962,15 @@ export default function Producao() {
         assignees={materialAssignees}
         saving={savingMaterial}
       />
+
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-[200] flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium animate-fade-in
+          ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-gray-900 text-white'}`}>
+          <CheckCircle size={16} className={toast.type === 'error' ? 'text-red-200' : 'text-green-400'} />
+          {toast.message}
+        </div>
+      )}
     </div>
   )
 }
