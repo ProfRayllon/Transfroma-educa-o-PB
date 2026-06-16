@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Plus, Upload, CheckCircle, FileText, Clock, Eye, Search, Filter, X, ExternalLink, CheckSquare, ArrowLeft, Link2, ChevronUp, ChevronDown, Pencil, SlidersHorizontal } from 'lucide-react'
+import { Plus, Upload, CheckCircle, FileText, Clock, Eye, Search, Filter, X, ExternalLink, CheckSquare, ArrowLeft, Link2, Pencil, SlidersHorizontal, GripVertical, Trash2 } from 'lucide-react'
 import Badge from '../components/ui/Badge'
 import StatCard from '../components/ui/StatCard'
 import Modal from '../components/ui/Modal'
@@ -169,7 +169,7 @@ function InlineStatusSelect({ value, options, onChange }) {
   )
 }
 
-function ActionButtons({ material, onView, onEdit, canEdit }) {
+function ActionButtons({ material, onView, onEdit, onDelete, canEdit }) {
   return (
     <div className="flex items-center gap-0.5">
       <button onClick={() => onView(material)} title="Visualizar" className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
@@ -184,6 +184,11 @@ function ActionButtons({ material, onView, onEdit, canEdit }) {
         <a href={material.originalLink} target="_blank" rel="noopener noreferrer" title="Abrir link original" className="p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-lg transition-colors">
           <ExternalLink size={14} />
         </a>
+      )}
+      {canEdit && (
+        <button onClick={() => onDelete(material)} title="Excluir" className="p-1.5 text-gray-300 hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors">
+          <Trash2 size={14} />
+        </button>
       )}
     </div>
   )
@@ -505,7 +510,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
 
 export default function Producao() {
   const { user, can } = useAuth()
-  const { materials, setMaterials, courses, materialAssignees, saveMaterial, approveMaterial, updateMaterialStatus, updateMaterialSession } = useData()
+  const { materials, setMaterials, courses, materialAssignees, saveMaterial, approveMaterial, updateMaterialStatus, updateMaterialSession, deleteMaterial } = useData()
   const location = useLocation()
   const navigate = useNavigate()
   const initialCourse = location.state?.course || 'Todos'
@@ -516,6 +521,9 @@ export default function Producao() {
   const [editOpen, setEditOpen] = useState(false)
   const [savingMaterial, setSavingMaterial] = useState(false)
   const [toast, setToast] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
+  const [dragId, setDragId] = useState(null)
+  const [dragOverId, setDragOverId] = useState(null)
   const [page, setPage] = useState(1)
   const perPage = 5
   const [visibleCols, setVisibleCols] = useState({
@@ -637,6 +645,55 @@ export default function Producao() {
       await updateMaterialSession(mat.id, newSession)
     } catch {
       setMaterials(prev => prev.map(m => m.id === mat.id ? { ...m, session: newSession } : m))
+    }
+  }
+
+  const handleDragStart = (e, mat) => {
+    setDragId(mat.id)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragOver = (e, mat) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (mat.id !== dragId) setDragOverId(mat.id)
+  }
+
+  const handleDrop = async (e, targetMat) => {
+    e.preventDefault()
+    setDragOverId(null)
+    if (!dragId || dragId === targetMat.id) { setDragId(null); return }
+    const srcMat = materials.find(m => m.id === dragId)
+    if (!srcMat) { setDragId(null); return }
+    const srcSession = Number(srcMat.session)
+    const tgtSession = Number(targetMat.session)
+    setMaterials(prev => prev.map(m => {
+      if (m.id === srcMat.id) return { ...m, session: tgtSession }
+      if (m.id === targetMat.id) return { ...m, session: srcSession }
+      return m
+    }))
+    try {
+      await Promise.all([
+        updateMaterialSession(srcMat.id, tgtSession),
+        updateMaterialSession(targetMat.id, srcSession),
+      ])
+    } catch { /* optimistic já aplicado */ }
+    setDragId(null)
+  }
+
+  const handleDragEnd = () => { setDragId(null); setDragOverId(null) }
+
+  const handleDelete = (mat) => setConfirmDelete(mat)
+
+  const confirmDeleteAction = async () => {
+    if (!confirmDelete) return
+    try {
+      await deleteMaterial(confirmDelete.id)
+      showToast('Conteúdo excluído com sucesso!')
+    } catch {
+      showToast('Erro ao excluir conteúdo.', 'error')
+    } finally {
+      setConfirmDelete(null)
     }
   }
 
@@ -803,29 +860,26 @@ export default function Producao() {
                 const matCourse = courses.find(c => c.name === mat.course)
                 const supName = matCourse?.supervisorName || null
                 const coordName = matCourse?.coordinatorName || null
+                const isDragging = dragId === mat.id
+                const isDragOver = dragOverId === mat.id
                 return (
-                <tr key={mat.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                <tr
+                  key={mat.id}
+                  draggable={canMoveSessions && canEditThis}
+                  onDragStart={canMoveSessions && canEditThis ? e => handleDragStart(e, mat) : undefined}
+                  onDragOver={canMoveSessions ? e => handleDragOver(e, mat) : undefined}
+                  onDrop={canMoveSessions ? e => handleDrop(e, mat) : undefined}
+                  onDragEnd={handleDragEnd}
+                  className={`border-b border-gray-50 transition-colors
+                    ${isDragging ? 'opacity-40' : ''}
+                    ${isDragOver ? 'bg-brand-50/30 border-t-2 border-t-brand-400' : 'hover:bg-gray-50/50'}
+                  `}
+                >
                   <td className="table-cell text-center">
-                    <div className="flex items-center justify-center gap-0.5">
-                      {canMoveSessions && canEditThis ? (
-                        <div className="flex flex-col">
-                          <button
-                            onClick={() => handleMoveSession(mat, -1)}
-                            disabled={Number(mat.session) <= 1}
-                            className="p-0.5 text-gray-300 hover:text-brand-600 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
-                            title="Mover para sessão anterior"
-                          >
-                            <ChevronUp size={12} />
-                          </button>
-                          <button
-                            onClick={() => handleMoveSession(mat, 1)}
-                            className="p-0.5 text-gray-300 hover:text-brand-600 transition-colors"
-                            title="Mover para próxima sessão"
-                          >
-                            <ChevronDown size={12} />
-                          </button>
-                        </div>
-                      ) : null}
+                    <div className="flex items-center justify-center gap-1">
+                      {canMoveSessions && canEditThis && (
+                        <GripVertical size={13} className="text-gray-300 cursor-grab active:cursor-grabbing flex-shrink-0" />
+                      )}
                       <span className="font-semibold text-gray-600">{mat.session}</span>
                     </div>
                   </td>
@@ -900,6 +954,7 @@ export default function Producao() {
                       material={mat}
                       onView={m => setViewMaterial(m)}
                       onEdit={m => { setEditMaterial(m); setEditOpen(true) }}
+                      onDelete={handleDelete}
                       canEdit={canEditThis}
                     />
                   </td>
@@ -962,6 +1017,33 @@ export default function Producao() {
         assignees={materialAssignees}
         saving={savingMaterial}
       />
+
+      {/* Confirm delete */}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <Trash2 size={18} className="text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 text-sm">Excluir conteúdo</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Esta ação não pode ser desfeita.</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600">
+              Tem certeza que deseja excluir <span className="font-medium text-gray-800">{confirmDelete.theme}</span>?
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setConfirmDelete(null)} className="btn-secondary text-sm">Cancelar</button>
+              <button onClick={confirmDeleteAction} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-xl text-sm transition-colors">
+                <Trash2 size={14} />
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {toast && (

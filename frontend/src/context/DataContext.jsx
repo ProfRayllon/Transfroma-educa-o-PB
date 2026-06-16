@@ -128,6 +128,15 @@ export function DataProvider({ children }) {
     }
   }
 
+  const deleteMaterial = async (materialId) => {
+    try {
+      await api.delete(`/materials/${materialId}`)
+      setMaterials((current) => current.filter((item) => item.id !== materialId))
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error, 'Erro ao excluir conteudo.'))
+    }
+  }
+
   return (
     <DataContext.Provider value={{
       materials,
@@ -145,6 +154,7 @@ export function DataProvider({ children }) {
       approveMaterial,
       updateMaterialStatus,
       updateMaterialSession,
+      deleteMaterial,
     }}>
       {children}
     </DataContext.Provider>

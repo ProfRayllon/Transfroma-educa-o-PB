@@ -1012,6 +1012,17 @@ async function approveMaterial(id) {
   return getMaterialById(id)
 }
 
+async function deleteMaterial(id) {
+  if (!isMysqlMode()) {
+    const idx = materials.findIndex((m) => m.id === Number(id))
+    if (idx === -1) return false
+    materials.splice(idx, 1)
+    return true
+  }
+  const [result] = await pool.execute('DELETE FROM materials WHERE id = ?', [id])
+  return result.affectedRows > 0
+}
+
 async function listPeople(user) {
   if (!isMysqlMode()) {
     if (['administrador', 'supervisor', 'gestao'].includes(user.role)) return people.slice()
@@ -1244,6 +1255,7 @@ module.exports = {
   createMaterial,
   updateMaterial,
   approveMaterial,
+  deleteMaterial,
   listPeople,
   updateAttendance,
   listOccurrences,

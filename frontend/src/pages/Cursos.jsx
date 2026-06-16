@@ -184,8 +184,10 @@ function CourseCard({ course, materials, onEdit }) {
   const alert = deadlineBadge(course.deadline)
 
   const courseMaterials = materials.filter((material) => material.course === course.name)
-  const completedSessions = courseMaterials.filter((material) => ['concluido', 'aprovado'].includes(material.status)).length
-  const progress = course.totalSessions > 0 ? Math.round((completedSessions / course.totalSessions) * 100) : 0
+  const totalContents = courseMaterials.length
+  const completedSessions = courseMaterials.filter((material) => material.status === 'concluido' && material.supervisorStatus === 'valido' && material.coordinatorStatus === 'valido').length
+  const totalModules = new Set(courseMaterials.map(m => m.module || 1)).size
+  const progress = totalContents > 0 ? Math.round((completedSessions / totalContents) * 100) : 0
 
   return (
     <div className="card overflow-hidden hover:shadow-lg transition-shadow duration-200 flex flex-col">
@@ -235,8 +237,8 @@ function CourseCard({ course, materials, onEdit }) {
             </div>
           </div>
           <div className="rounded-xl bg-gray-50 px-3 py-2 border border-gray-100 col-span-2">
-            <div className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Carga horaria</div>
-            <div className="font-medium text-gray-700">{course.totalSessions} sessoes</div>
+            <div className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Conteúdos / Módulos</div>
+            <div className="font-medium text-gray-700">{totalContents} conteúdos · {totalModules} módulo{totalModules !== 1 ? 's' : ''}</div>
           </div>
         </div>
 
@@ -252,7 +254,7 @@ function CourseCard({ course, materials, onEdit }) {
             />
           </div>
           <div className="text-[10px] text-gray-400 mt-1.5">
-            {completedSessions} de {course.totalSessions} sessoes concluidas
+            {completedSessions} de {totalContents} conteúdos concluídos
           </div>
         </div>
 
@@ -486,20 +488,6 @@ function CourseModal({ course, open, onClose, onSave, participants = { superviso
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">Carga horaria total *</label>
-            <input
-              name="totalSessions"
-              type="number"
-              min={1}
-              value={form.totalSessions || ''}
-              onChange={handleChange}
-              required
-              className="input-field"
-              placeholder="Ex: 12"
-            />
-          </div>
-
-          <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">Supervisor responsavel *</label>
             <select
               name="supervisorId"
@@ -685,12 +673,8 @@ export default function Cursos() {
     setModalOpen(true)
   }
 
-  const totalCompleted = courses.reduce((total, course) => {
-    const courseMaterials = materials.filter((material) => material.course === course.name)
-    return total + courseMaterials.filter((material) => ['concluido', 'aprovado'].includes(material.status)).length
-  }, 0)
-
-  const totalSessions = courses.reduce((total, course) => total + Number(course.totalSessions || 0), 0)
+  const totalCompleted = materials.filter(m => m.status === 'concluido' && m.supervisorStatus === 'valido' && m.coordinatorStatus === 'valido').length
+  const totalSessions = materials.length
   const overallProgress = totalSessions > 0 ? Math.round((totalCompleted / totalSessions) * 100) : 0
 
   return (

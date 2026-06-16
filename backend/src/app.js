@@ -563,6 +563,18 @@ app.patch('/api/materials/:id/status', auth, async (req, res) => {
   res.json(material)
 })
 
+app.delete('/api/materials/:id', auth, async (req, res) => {
+  const actor = await store.getUserById(req.user.id)
+  const current = await store.getMaterialById(req.params.id)
+  if (!current) return res.status(404).json({ message: 'Material nao encontrado.' })
+  if (!(await canEditMaterial(actor, current))) {
+    return res.status(403).json({ message: 'Voce nao tem permissao para excluir este material.' })
+  }
+  const deleted = await store.deleteMaterial(req.params.id)
+  if (!deleted) return res.status(404).json({ message: 'Material nao encontrado.' })
+  res.json({ id: Number(req.params.id) })
+})
+
 app.patch('/api/materials/:id/session', auth, async (req, res) => {
   const actor = await store.getUserById(req.user.id)
   if (!canAssignMaterial(actor)) return res.status(403).json({ message: 'Sem permissao para mover sessoes.' })
