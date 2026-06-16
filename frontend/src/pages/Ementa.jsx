@@ -632,40 +632,43 @@ export default function Ementa() {
       <title>Ementa — ${course.name}</title>
       <style>
         *{margin:0;padding:0;box-sizing:border-box}
-        body{font-family:Georgia,serif;color:#1a1a2e;font-size:12pt;line-height:1.6}
-        .header{background:linear-gradient(135deg,#1e3a5f,#2d6a9f);color:#fff;padding:32px 48px}
-        .header-sys{font-size:9pt;letter-spacing:3px;text-transform:uppercase;opacity:.7;margin-bottom:8px}
-        .header-title{font-size:22pt;font-weight:700;line-height:1.2}
-        .header-sub{font-size:11pt;opacity:.8;margin-top:6px}
-        .header-chips{display:flex;gap:10px;margin-top:14px}
-        .chip{background:rgba(255,255,255,.15);border-radius:20px;padding:4px 12px;font-size:9pt}
-        .status-bar{display:flex;gap:24px;padding:10px 48px;background:#f8faff;border-bottom:1px solid #dce8f5}
-        .s-item{display:flex;align-items:center;gap:8px;font-size:10pt}
-        .dot{width:9px;height:9px;border-radius:50%}
-        .dot-green{background:#22c55e}.dot-amber{background:#f59e0b}.dot-gray{background:#9ca3af}.dot-red{background:#ef4444}
-        .content{padding:32px 48px}
-        .section{margin-bottom:28px;page-break-inside:avoid}
-        .section-title{font-size:13pt;font-weight:700;color:#1e3a5f;border-left:4px solid #2d6a9f;padding-left:12px;margin-bottom:14px;display:flex;align-items:center;gap:10px}
-        .num{background:#1e3a5f;color:#fff;font-size:9pt;font-weight:700;padding:2px 7px;border-radius:4px}
+        body{font-family:Inter,'Segoe UI',system-ui,sans-serif;color:#1c1033;font-size:11.5pt;line-height:1.65;background:#fff}
+        .header{background:linear-gradient(135deg,#581c87,#7e22ce);color:#fff;padding:36px 48px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+        .header-sys{font-size:8pt;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,.55);margin-bottom:10px;font-weight:600}
+        .header-title{font-size:22pt;font-weight:800;line-height:1.15;color:#fff}
+        .header-sub{font-size:10.5pt;color:rgba(255,255,255,.7);margin-top:7px}
+        .header-chips{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+        .chip{background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.25);border-radius:20px;padding:4px 13px;font-size:8.5pt;color:#fff;font-weight:600}
+        .status-bar{display:flex;gap:28px;padding:12px 48px;background:#faf5ff;border-bottom:2px solid #e9d5ff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+        .s-item{display:flex;align-items:center;gap:8px;font-size:9.5pt;font-weight:500;color:#4b1d82}
+        .s-label{font-weight:700;color:#7e22ce;text-transform:uppercase;font-size:8pt;letter-spacing:1px}
+        .badge{border-radius:8px;padding:2px 9px;font-size:8.5pt;font-weight:700;border:1px solid}
+        .badge-green{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
+        .badge-amber{background:#fffbeb;color:#92400e;border-color:#fde68a}
+        .badge-gray{background:#f9fafb;color:#4b5563;border-color:#e5e7eb}
+        .badge-red{background:#fef2f2;color:#991b1b;border-color:#fecaca}
+        .content{padding:36px 48px}
+        .section{margin-bottom:30px;page-break-inside:avoid}
+        .section-title{font-size:12pt;font-weight:800;color:#581c87;border-left:4px solid #7e22ce;padding-left:13px;margin-bottom:16px;display:flex;align-items:center;gap:10px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+        .num{background:#581c87;color:#fff;font-size:8.5pt;font-weight:800;padding:2px 7px;border-radius:5px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
         .section-body{padding-left:20px}
-        .field{margin-bottom:12px}
-        .field-label{font-size:10pt;font-weight:700;color:#555;margin-bottom:3px}
-        .field-value{color:#333}
-        .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
-        .info-box{background:#f8faff;border:1px solid #dce8f5;border-radius:8px;padding:10px 14px}
-        .info-label{font-size:9pt;text-transform:uppercase;letter-spacing:1px;color:#7a9cbf;font-weight:700;margin-bottom:3px}
-        .info-val{font-size:11pt;font-weight:700;color:#1e3a5f}
-        ul{padding-left:20px}li{margin-bottom:5px}
+        .field{margin-bottom:13px}
+        .field-label{font-size:8.5pt;font-weight:700;color:#7e22ce;text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px}
+        .field-value{color:#2d1b4e;font-size:11pt;line-height:1.65}
+        .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+        .info-box{background:#faf5ff;border:1px solid #e9d5ff;border-radius:10px;padding:10px 14px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+        .info-label{font-size:7.5pt;text-transform:uppercase;letter-spacing:1.5px;color:#9333ea;font-weight:700;margin-bottom:4px}
+        .info-val{font-size:11pt;font-weight:700;color:#3b0764}
+        ul{padding-left:20px}li{margin-bottom:6px;color:#2d1b4e}
         .chips{display:flex;flex-wrap:wrap;gap:8px}
-        .tag{background:#e8f0fb;color:#1e3a5f;padding:3px 12px;border-radius:20px;font-size:10pt}
-        .footer{margin-top:32px;padding:14px 48px;border-top:1px solid #dce8f5;display:flex;justify-content:space-between;font-size:9pt;color:#888}
-        @page{margin:0}
-        @media print{.header{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+        .tag{background:#f3e8ff;color:#6b21a8;padding:3px 13px;border-radius:20px;font-size:9.5pt;font-weight:600;border:1px solid #e9d5ff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+        .footer{margin-top:36px;padding:14px 48px;border-top:2px solid #e9d5ff;display:flex;justify-content:space-between;font-size:8.5pt;color:#9333ea;font-weight:500}
+        @page{size:A4;margin:0}
       </style></head><body>
       <div class="header">
         <div class="header-sys">Secretaria de Educação · Transforma Educação PB</div>
         <div class="header-title">${course.name}</div>
-        ${course.trail ? `<div class="header-sub">${course.trail} · ${course.primaryTrail || ''}</div>` : ''}
+        ${course.trail || course.primaryTrail ? `<div class="header-sub">${[course.trail, course.primaryTrail].filter(Boolean).join(' · ')}</div>` : ''}
         <div class="header-chips">
           <span class="chip">${totalContents} conteúdo${totalContents !== 1 ? 's' : ''}</span>
           <span class="chip">${totalModules} módulo${totalModules !== 1 ? 's' : ''}</span>
@@ -673,9 +676,9 @@ export default function Ementa() {
         </div>
       </div>
       <div class="status-bar">
-        <div class="s-item"><div class="dot ${ementa?.professorStatus === 'concluido' ? 'dot-green' : 'dot-amber'}"></div>Professor: ${STATUS_LABELS[ementa?.professorStatus] || 'Rascunho'}</div>
-        <div class="s-item"><div class="dot ${ementa?.supervisorStatus === 'valido' ? 'dot-green' : ementa?.supervisorStatus === 'nao_valido' ? 'dot-red' : 'dot-gray'}"></div>Supervisor: ${STATUS_LABELS[ementa?.supervisorStatus] || 'Pendente'}</div>
-        <div class="s-item"><div class="dot ${ementa?.coordinatorStatus === 'valido' ? 'dot-green' : ementa?.coordinatorStatus === 'nao_valido' ? 'dot-red' : 'dot-gray'}"></div>Coordenador: ${STATUS_LABELS[ementa?.coordinatorStatus] || 'Pendente'}</div>
+        <div class="s-item"><span class="s-label">Professor</span><span class="badge ${ementa?.professorStatus === 'concluido' ? 'badge-green' : 'badge-amber'}">${STATUS_LABELS[ementa?.professorStatus] || 'Rascunho'}</span></div>
+        <div class="s-item"><span class="s-label">Supervisor</span><span class="badge ${ementa?.supervisorStatus === 'valido' ? 'badge-green' : ementa?.supervisorStatus === 'nao_valido' ? 'badge-red' : 'badge-gray'}">${STATUS_LABELS[ementa?.supervisorStatus] || 'Pendente'}</span></div>
+        <div class="s-item"><span class="s-label">Coordenador</span><span class="badge ${ementa?.coordinatorStatus === 'valido' ? 'badge-green' : ementa?.coordinatorStatus === 'nao_valido' ? 'badge-red' : 'badge-gray'}">${STATUS_LABELS[ementa?.coordinatorStatus] || 'Pendente'}</span></div>
       </div>
       <div class="content">
         ${sec(1, 'Identificação do Curso', `
