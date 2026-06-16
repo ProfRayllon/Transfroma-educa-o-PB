@@ -34,6 +34,7 @@ function mapMaterialRow(row) {
     id: row.id,
     course: row.course,
     session: row.session,
+    module: row.module || 1,
     theme: row.theme,
     objective: row.objective,
     type: row.type,
@@ -46,6 +47,8 @@ function mapMaterialRow(row) {
     originalLink: row.original_link,
     adjustedLink: row.adjusted_link,
     reviewStatus: row.review_status,
+    supervisorStatus: row.supervisor_status || 'em_revisao',
+    coordinatorStatus: row.coordinator_status || 'em_revisao',
     reviewNotes: row.review_notes,
     createdAt: formatDate(row.created_at),
   }
@@ -271,8 +274,9 @@ async function ensureMysqlSchema() {
       'validado',
       'em_ajustes',
       'revisao_linguistica',
-      'edicao'
-    ) NOT NULL DEFAULT 'em_execucao'
+      'edicao',
+      'nao_iniciado'
+    ) NOT NULL DEFAULT 'nao_iniciado'
   `)
 
   await pool.execute(`
@@ -292,6 +296,29 @@ async function ensureMysqlSchema() {
       'esperando_material'
     ) NOT NULL DEFAULT 'em_execucao'
   `)
+
+  const [newMatColumns] = await pool.execute(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'materials'
+       AND COLUMN_NAME IN ('module', 'supervisor_status', 'coordinator_status')`
+  )
+  const existingNewCols = new Set(newMatColumns.map((c) => c.COLUMN_NAME))
+
+  if (!existingNewCols.has('module')) {
+    await pool.execute('ALTER TABLE materials ADD COLUMN module INT NOT NULL DEFAULT 1 AFTER session')
+  }
+
+  if (!existingNewCols.has('supervisor_status')) {
+    await pool.execute(
+      "ALTER TABLE materials ADD COLUMN supervisor_status ENUM('em_revisao','nao_validado','validado_com_ajustes','valido') NOT NULL DEFAULT 'em_revisao' AFTER review_status"
+    )
+  }
+
+  if (!existingNewCols.has('coordinator_status')) {
+    await pool.execute(
+      "ALTER TABLE materials ADD COLUMN coordinator_status ENUM('em_revisao','nao_validado','validado_com_ajustes','valido') NOT NULL DEFAULT 'em_revisao' AFTER supervisor_status"
+    )
+  }
 }
 
 async function seedMysqlIfNeeded() {
@@ -901,11 +928,12 @@ async function createMaterial(payload) {
 
   const [result] = await pool.execute(
     `INSERT INTO materials
-     (course, session, theme, objective, type, duration, responsible_id, responsible_name, responsible_role, status, delivery_date, original_link, adjusted_link, review_status, review_notes, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (course, session, module, theme, objective, type, duration, responsible_id, responsible_name, responsible_role, status, delivery_date, original_link, adjusted_link, review_status, supervisor_status, coordinator_status, review_notes, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       payload.course,
       payload.session,
+      payload.module || 1,
       payload.theme,
       payload.objective || null,
       payload.type,
@@ -917,7 +945,9 @@ async function createMaterial(payload) {
       payload.deliveryDate || null,
       payload.originalLink || null,
       payload.adjustedLink || null,
-      payload.reviewStatus,
+      payload.reviewStatus || 'em_execucao',
+      payload.supervisorStatus || 'em_revisao',
+      payload.coordinatorStatus || 'em_revisao',
       payload.reviewNotes || null,
       new Date().toISOString().slice(0, 10),
     ]
@@ -936,11 +966,15 @@ async function updateMaterial(id, payload) {
 
   await pool.execute(
     `UPDATE materials
-     SET course = ?, session = ?, theme = ?, objective = ?, type = ?, duration = ?, responsible_id = ?, responsible_name = ?, responsible_role = ?, status = ?, delivery_date = ?, original_link = ?, adjusted_link = ?, review_status = ?, review_notes = ?
+     SET course = ?, session = ?, module = ?, theme = ?, objective = ?, type = ?, duration = ?,
+         responsible_id = ?, responsible_name = ?, responsible_role = ?, status = ?,
+         delivery_date = ?, original_link = ?, adjusted_link = ?, review_status = ?,
+         supervisor_status = ?, coordinator_status = ?, review_notes = ?
      WHERE id = ?`,
     [
       payload.course,
       payload.session,
+      payload.module || 1,
       payload.theme,
       payload.objective || null,
       payload.type,
@@ -952,7 +986,9 @@ async function updateMaterial(id, payload) {
       payload.deliveryDate || null,
       payload.originalLink || null,
       payload.adjustedLink || null,
-      payload.reviewStatus,
+      payload.reviewStatus || 'em_execucao',
+      payload.supervisorStatus || 'em_revisao',
+      payload.coordinatorStatus || 'em_revisao',
       payload.reviewNotes || null,
       id,
     ]
@@ -965,13 +1001,13 @@ async function approveMaterial(id) {
   if (!isMysqlMode()) {
     const idx = materials.findIndex((material) => material.id === Number(id))
     if (idx === -1) return null
-    materials[idx] = { ...materials[idx], status: 'aprovado', reviewStatus: 'aprovado' }
+    materials[idx] = { ...materials[idx], status: 'concluido', supervisorStatus: 'valido', coordinatorStatus: 'valido' }
     return materials[idx]
   }
 
   await pool.execute(
-    'UPDATE materials SET status = ?, review_status = ? WHERE id = ?',
-    ['aprovado', 'aprovado', id]
+    'UPDATE materials SET status = ?, supervisor_status = ?, coordinator_status = ? WHERE id = ?',
+    ['concluido', 'valido', 'valido', id]
   )
   return getMaterialById(id)
 }

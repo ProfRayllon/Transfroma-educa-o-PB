@@ -1,30 +1,36 @@
 import { useState, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Plus, Upload, CheckCircle, FileText, Clock, Eye, Search, Filter, X, ExternalLink, CheckSquare, ArrowLeft, Link2, ChevronUp, ChevronDown, Pencil, Check, RotateCcw, SlidersHorizontal } from 'lucide-react'
+import { Plus, Upload, CheckCircle, FileText, Clock, Eye, Search, Filter, X, ExternalLink, CheckSquare, ArrowLeft, Link2, ChevronUp, ChevronDown, Pencil, SlidersHorizontal } from 'lucide-react'
 import Badge from '../components/ui/Badge'
 import StatCard from '../components/ui/StatCard'
 import Modal from '../components/ui/Modal'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 
-const STATUS_OPTIONS = [
-  { value: '', label: 'Todos' },
+const PROFESSOR_STATUS_OPTIONS = [
+  { value: 'nao_iniciado', label: 'Não iniciado' },
   { value: 'em_execucao', label: 'Em execução' },
-  { value: 'validado', label: 'Validado' },
   { value: 'em_ajustes', label: 'Em ajustes' },
-  { value: 'revisao_linguistica', label: 'Revisão linguística' },
-  { value: 'edicao', label: 'Edição' },
   { value: 'concluido', label: 'Concluído' },
 ]
 
-const REVIEW_STATUS_OPTIONS = [
-  { value: 'em_execucao', label: 'Em execução' },
-  { value: 'validado', label: 'Validado' },
-  { value: 'em_ajustes', label: 'Em ajustes' },
-  { value: 'revisao_linguistica', label: 'Revisão linguística' },
-  { value: 'edicao', label: 'Edição' },
-  { value: 'concluido', label: 'Concluído' },
-  { value: 'esperando_material', label: 'Esperando material' },
+const SUPERVISOR_STATUS_OPTIONS = [
+  { value: 'em_revisao', label: 'Em revisão' },
+  { value: 'nao_validado', label: 'Não validado' },
+  { value: 'validado_com_ajustes', label: 'Validado c/ ajustes' },
+  { value: 'valido', label: 'Válido' },
+]
+
+const COORDINATOR_STATUS_OPTIONS = [
+  { value: 'em_revisao', label: 'Em revisão' },
+  { value: 'nao_validado', label: 'Não validado' },
+  { value: 'validado_com_ajustes', label: 'Validado c/ ajustes' },
+  { value: 'valido', label: 'Válido' },
+]
+
+const STATUS_OPTIONS = [
+  { value: '', label: 'Todos' },
+  ...PROFESSOR_STATUS_OPTIONS,
 ]
 
 const MATERIAL_TYPE_OPTIONS = [
@@ -115,17 +121,19 @@ function AvatarTooltip({ name, role }) {
 
 function InlineStatusSelect({ value, options, onChange }) {
   const STATUS_COLORS = {
+    nao_iniciado: 'text-gray-600 bg-gray-50 border-gray-200',
     em_execucao: 'text-blue-700 bg-blue-50 border-blue-200',
-    validado: 'text-green-700 bg-green-50 border-green-200',
     em_ajustes: 'text-orange-700 bg-orange-50 border-orange-200',
+    concluido: 'text-teal-700 bg-teal-50 border-teal-200',
+    em_revisao: 'text-purple-700 bg-purple-50 border-purple-200',
+    nao_validado: 'text-red-700 bg-red-50 border-red-200',
+    validado_com_ajustes: 'text-amber-700 bg-amber-50 border-amber-200',
+    valido: 'text-green-700 bg-green-50 border-green-200',
+    validado: 'text-green-700 bg-green-50 border-green-200',
+    aprovado: 'text-green-700 bg-green-50 border-green-200',
     revisao_linguistica: 'text-purple-700 bg-purple-50 border-purple-200',
     edicao: 'text-amber-700 bg-amber-50 border-amber-200',
-    concluido: 'text-teal-700 bg-teal-50 border-teal-200',
     esperando_material: 'text-gray-600 bg-gray-50 border-gray-200',
-    aprovado: 'text-green-700 bg-green-50 border-green-200',
-    ajuste_solicitado: 'text-red-700 bg-red-50 border-red-200',
-    em_producao: 'text-blue-700 bg-blue-50 border-blue-200',
-    em_revisao: 'text-orange-700 bg-orange-50 border-orange-200',
   }
   const colorCls = STATUS_COLORS[value] || 'text-gray-600 bg-gray-50 border-gray-200'
   return (
@@ -142,7 +150,7 @@ function InlineStatusSelect({ value, options, onChange }) {
   )
 }
 
-function ActionButtons({ material, onView, onEdit, onApprove, onRequestAdjust, canApprove, canEdit }) {
+function ActionButtons({ material, onView, onEdit, canEdit }) {
   return (
     <div className="flex items-center gap-0.5">
       <button onClick={() => onView(material)} title="Visualizar" className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
@@ -151,16 +159,6 @@ function ActionButtons({ material, onView, onEdit, onApprove, onRequestAdjust, c
       {canEdit && (
         <button onClick={() => onEdit(material)} title="Editar" className="p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors">
           <Pencil size={14} />
-        </button>
-      )}
-      {canApprove && (
-        <button onClick={() => onApprove(material)} title="Aprovar" className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors">
-          <Check size={14} />
-        </button>
-      )}
-      {canApprove && (
-        <button onClick={() => onRequestAdjust(material)} title="Solicitar ajuste" className="p-1.5 text-orange-500 hover:bg-orange-50 rounded-lg transition-colors">
-          <RotateCcw size={14} />
         </button>
       )}
       {material.originalLink && (
@@ -277,13 +275,15 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
   const [form, setForm] = useState(() => ({
     course: defaultCourse && defaultCourse !== 'Todos' ? defaultCourse : '',
     session: '',
+    module: 1,
     type: 'videoaula',
     theme: '',
     objective: '',
     duration: '',
     deliveryDate: '',
-    status: 'em_execucao',
-    reviewStatus: 'em_execucao',
+    status: 'nao_iniciado',
+    supervisorStatus: 'em_revisao',
+    coordinatorStatus: 'em_revisao',
     reviewNotes: '',
     responsibleId: '',
     responsibleName: '',
@@ -321,14 +321,14 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
     <Modal
       open={open}
       onClose={onClose}
-      title={isNew ? 'Novo material' : 'Editar material'}
+      title={isNew ? 'Novo conteúdo' : 'Editar conteúdo'}
       size="lg"
       footer={
         <>
           <button onClick={onClose} className="btn-secondary" disabled={saving}>Cancelar</button>
           <button onClick={handleSubmit} className="btn-primary" disabled={saving}>
             <CheckCircle size={15} />
-            {isNew ? 'Adicionar material' : 'Salvar alterações'}
+            {isNew ? 'Adicionar conteúdo' : 'Salvar alterações'}
           </button>
         </>
       }
@@ -343,12 +343,22 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
           </select>
         </div>
 
-        {/* Sessão + Tipo */}
+        {/* Módulo + Sessão */}
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">Sessão *</label>
-          <input name="session" value={form.session} onChange={handleChange} type="number" min={1} className="input-field" placeholder="Ex: 1" required />
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Módulo *</label>
+          <select name="module" value={form.module} onChange={handleChange} className="select-field">
+            {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
+              <option key={n} value={n}>Módulo {n}</option>
+            ))}
+          </select>
         </div>
         <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Sessão (nº conteúdo) *</label>
+          <input name="session" value={form.session} onChange={handleChange} type="number" min={1} className="input-field" placeholder="Ex: 1" required />
+        </div>
+
+        {/* Tipo */}
+        <div className="col-span-2">
           <label className="block text-xs font-medium text-gray-600 mb-1.5">Tipo de material</label>
           <select name="type" value={form.type} onChange={handleChange} className="select-field">
             {MATERIAL_TYPE_OPTIONS.map((option) => (
@@ -435,31 +445,44 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
           </div>
         </div>
 
-        {/* Status — só aparece ao editar ou para quem pode aprovar */}
-        {(!isNew || canApprove) && (
-          <>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Status do professor</label>
-              <select name="status" value={form.status} onChange={handleChange} className="select-field">
-                {STATUS_OPTIONS.filter(s => s.value).map(s => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Status do supervisor</label>
-              <select name="reviewStatus" value={form.reviewStatus} onChange={handleChange} className="select-field">
-                {REVIEW_STATUS_OPTIONS.map(s => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Observações da revisão</label>
-              <textarea name="reviewNotes" value={form.reviewNotes} onChange={handleChange} className="input-field resize-none" rows={2} placeholder="Observações para o produtor..." />
-            </div>
-          </>
+        {/* Status do professor (sempre visível no modal) */}
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Status do professor</label>
+          <select name="status" value={form.status} onChange={handleChange} className="select-field">
+            {PROFESSOR_STATUS_OPTIONS.map(s => (
+              <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Status do supervisor — apenas para supervisor/admin/coordenador */}
+        {canApprove && (
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Status do supervisor</label>
+            <select name="supervisorStatus" value={form.supervisorStatus} onChange={handleChange} className="select-field">
+              {SUPERVISOR_STATUS_OPTIONS.map(s => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </div>
         )}
+
+        {/* Status do coordenador */}
+        {canApprove && (
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Status do coordenador</label>
+            <select name="coordinatorStatus" value={form.coordinatorStatus} onChange={handleChange} className="select-field">
+              {COORDINATOR_STATUS_OPTIONS.map(s => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="col-span-2">
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Observações da revisão</label>
+          <textarea name="reviewNotes" value={form.reviewNotes} onChange={handleChange} className="input-field resize-none" rows={2} placeholder="Observações para o produtor..." />
+        </div>
       </div>
     </Modal>
   )
@@ -506,8 +529,26 @@ export default function Producao() {
       const course = courses.find(c => c.name === material.course)
       return course?.supervisorId === user.id || course?.supervisorName === user.name
     }
-    if (user.role === 'professor') {
-      return material.responsibleId === user.id
+    if (user.role === 'professor') return material.responsibleId === user.id
+    return false
+  }
+
+  const getCanEditSupervisorStatus = (material) => {
+    if (!user) return false
+    if (user.role === 'administrador') return true
+    if (user.role === 'supervisor') {
+      const course = courses.find(c => c.name === material.course)
+      return course?.supervisorId === user.id || course?.supervisorName === user.name
+    }
+    return false
+  }
+
+  const getCanEditCoordinatorStatus = (material) => {
+    if (!user) return false
+    if (user.role === 'administrador') return true
+    if (isCoordinator) {
+      const course = courses.find(c => c.name === material.course)
+      return course?.coordinatorId === user.id || course?.coordinatorName === user.name
     }
     return false
   }
@@ -536,29 +577,9 @@ export default function Producao() {
     : materials
   const stats = {
     total: statsMaterials.length,
-    emProducao: statsMaterials.filter(m => ['em_producao', 'em_execucao', 'edicao'].includes(m.status)).length,
-    concluidos: statsMaterials.filter(m => ['concluido', 'aprovado', 'validado'].includes(m.status)).length,
-    emRevisao: statsMaterials.filter(m => ['em_revisao', 'revisao_linguistica', 'em_ajustes', 'ajuste_solicitado'].includes(m.status)).length,
-  }
-
-  const handleApprove = async (mat) => {
-    try {
-      await approveMaterial(mat.id)
-    } catch {
-      setMaterials(prev => prev.map(m => m.id === mat.id ? { ...m, status: 'aprovado', reviewStatus: 'aprovado' } : m))
-    }
-  }
-
-  const handleApproveAll = () => {
-    setMaterials(prev => prev.map(m =>
-      ['concluido', 'em_revisao'].includes(m.status)
-        ? { ...m, status: 'aprovado', reviewStatus: 'aprovado' }
-        : m
-    ))
-  }
-
-  const handleRequestAdjust = (mat) => {
-    setMaterials(prev => prev.map(m => m.id === mat.id ? { ...m, status: 'em_revisao', reviewStatus: 'ajuste_solicitado' } : m))
+    emProducao: statsMaterials.filter(m => ['nao_iniciado', 'em_execucao', 'em_ajustes'].includes(m.status)).length,
+    concluidos: statsMaterials.filter(m => m.status === 'concluido' && m.supervisorStatus === 'valido' && m.coordinatorStatus === 'valido').length,
+    emRevisao: statsMaterials.filter(m => m.status === 'concluido' && (m.supervisorStatus !== 'valido' || m.coordinatorStatus !== 'valido')).length,
   }
 
   const handleSave = async (form) => {
@@ -631,7 +652,7 @@ export default function Producao() {
               className="btn-primary"
             >
               <Plus size={14} />
-              Novo material
+              Novo conteúdo
             </button>
           )}
         </div>
@@ -730,29 +751,31 @@ export default function Producao() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-100">
-                <th className="table-header w-14">Sessão</th>
+                <th className="table-header w-12">Sess.</th>
+                <th className="table-header w-16">Módulo</th>
                 {visibleCols.tema && <th className="table-header">Tema</th>}
                 {visibleCols.objetivo && <th className="table-header">Objetivo</th>}
                 <th className="table-header w-24">Tipo</th>
                 {visibleCols.tempo && <th className="table-header w-16">Tempo</th>}
                 <th className="table-header w-10">Resp.</th>
-                <th className="table-header w-32">Status</th>
+                <th className="table-header">St. Prof.</th>
+                <th className="table-header">St. Sup.</th>
+                <th className="table-header">St. Coord.</th>
                 {visibleCols.dataEntrega && <th className="table-header w-24">Data entrega</th>}
                 {visibleCols.linkOriginal && <th className="table-header w-28">Link original</th>}
                 {visibleCols.linkAjustado && <th className="table-header w-28">Link ajustado</th>}
-                <th className="table-header w-32">Status revisão</th>
-                <th className="table-header w-28">Ações</th>
+                <th className="table-header w-24">Ações</th>
               </tr>
             </thead>
             <tbody>
               {paged.map(mat => {
                 const canEditThis = getCanEditMaterial(mat)
-                const canApproveThis = canApprove && (user?.role === 'administrador' || isCoordinator ||
-                  (user?.role === 'supervisor' && courses.find(c => c.name === mat.course)?.supervisorId === user.id))
+                const canEditSupStatus = getCanEditSupervisorStatus(mat)
+                const canEditCoordStatus = getCanEditCoordinatorStatus(mat)
                 return (
                 <tr key={mat.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                   <td className="table-cell text-center">
-                    <div className="flex items-center justify-center gap-1">
+                    <div className="flex items-center justify-center gap-0.5">
                       {canMoveSessions && canEditThis ? (
                         <div className="flex flex-col">
                           <button
@@ -761,19 +784,22 @@ export default function Producao() {
                             className="p-0.5 text-gray-300 hover:text-brand-600 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
                             title="Mover para sessão anterior"
                           >
-                            <ChevronUp size={13} />
+                            <ChevronUp size={12} />
                           </button>
                           <button
                             onClick={() => handleMoveSession(mat, 1)}
                             className="p-0.5 text-gray-300 hover:text-brand-600 transition-colors"
                             title="Mover para próxima sessão"
                           >
-                            <ChevronDown size={13} />
+                            <ChevronDown size={12} />
                           </button>
                         </div>
                       ) : null}
                       <span className="font-semibold text-gray-600">{mat.session}</span>
                     </div>
+                  </td>
+                  <td className="table-cell text-center">
+                    <span className="text-xs font-medium text-gray-500">M{mat.module || 1}</span>
                   </td>
                   {visibleCols.tema && (
                     <td className="table-cell">
@@ -789,14 +815,36 @@ export default function Producao() {
                   {visibleCols.tempo && <td className="table-cell text-gray-500">{mat.duration}</td>}
                   <td className="table-cell"><AvatarTooltip name={mat.responsibleName} role={mat.responsibleRole} /></td>
                   <td className="table-cell">
-                    {canEditThis && user?.role !== 'supervisor' ? (
+                    {canEditThis ? (
                       <InlineStatusSelect
-                        value={mat.status}
-                        options={STATUS_OPTIONS.filter(s => s.value)}
+                        value={mat.status || 'nao_iniciado'}
+                        options={PROFESSOR_STATUS_OPTIONS}
                         onChange={val => handleStatusChange(mat, 'status', val)}
                       />
                     ) : (
-                      <Badge status={mat.status} />
+                      <Badge status={mat.status || 'nao_iniciado'} />
+                    )}
+                  </td>
+                  <td className="table-cell">
+                    {canEditSupStatus ? (
+                      <InlineStatusSelect
+                        value={mat.supervisorStatus || 'em_revisao'}
+                        options={SUPERVISOR_STATUS_OPTIONS}
+                        onChange={val => handleStatusChange(mat, 'supervisorStatus', val)}
+                      />
+                    ) : (
+                      <Badge status={mat.supervisorStatus || 'em_revisao'} />
+                    )}
+                  </td>
+                  <td className="table-cell">
+                    {canEditCoordStatus ? (
+                      <InlineStatusSelect
+                        value={mat.coordinatorStatus || 'em_revisao'}
+                        options={COORDINATOR_STATUS_OPTIONS}
+                        onChange={val => handleStatusChange(mat, 'coordinatorStatus', val)}
+                      />
+                    ) : (
+                      <Badge status={mat.coordinatorStatus || 'em_revisao'} />
                     )}
                   </td>
                   {visibleCols.dataEntrega && (
@@ -811,24 +859,10 @@ export default function Producao() {
                     <td className="table-cell"><LinkChip url={mat.adjustedLink} /></td>
                   )}
                   <td className="table-cell">
-                    {canApproveThis ? (
-                      <InlineStatusSelect
-                        value={mat.reviewStatus}
-                        options={REVIEW_STATUS_OPTIONS}
-                        onChange={val => handleStatusChange(mat, 'reviewStatus', val)}
-                      />
-                    ) : (
-                      <Badge status={mat.reviewStatus} />
-                    )}
-                  </td>
-                  <td className="table-cell">
                     <ActionButtons
                       material={mat}
                       onView={m => setViewMaterial(m)}
                       onEdit={m => { setEditMaterial(m); setEditOpen(true) }}
-                      onApprove={handleApprove}
-                      onRequestAdjust={handleRequestAdjust}
-                      canApprove={canApproveThis}
                       canEdit={canEditThis}
                     />
                   </td>
@@ -850,7 +884,7 @@ export default function Producao() {
         {filtered.length > 0 && (
           <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
             <span className="text-xs text-gray-500">
-              Exibindo {Math.min((page - 1) * perPage + 1, filtered.length)} a {Math.min(page * perPage, filtered.length)} de {filtered.length} materiais
+              Exibindo {Math.min((page - 1) * perPage + 1, filtered.length)} a {Math.min(page * perPage, filtered.length)} de {filtered.length} conteúdos
             </span>
             <div className="flex items-center gap-1">
               <button

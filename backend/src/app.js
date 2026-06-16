@@ -233,6 +233,7 @@ async function materialPayload(body, actor, currentMaterial) {
   const payload = {
     course: body.course,
     session: body.session,
+    module: Number(body.module) || currentMaterial?.module || 1,
     theme: body.theme,
     objective: body.objective,
     type: body.type,
@@ -243,8 +244,10 @@ async function materialPayload(body, actor, currentMaterial) {
   }
 
   if (canAssignMaterial(actor)) {
-    payload.status = body.status || currentMaterial?.status || 'em_execucao'
+    payload.status = body.status || currentMaterial?.status || 'nao_iniciado'
     payload.reviewStatus = body.reviewStatus || currentMaterial?.reviewStatus || 'em_execucao'
+    payload.supervisorStatus = body.supervisorStatus || currentMaterial?.supervisorStatus || 'em_revisao'
+    payload.coordinatorStatus = body.coordinatorStatus || currentMaterial?.coordinatorStatus || 'em_revisao'
     payload.reviewNotes = body.reviewNotes ?? currentMaterial?.reviewNotes ?? ''
     payload.responsibleId = Number(body.responsibleId) || currentMaterial?.responsibleId
 
@@ -257,8 +260,10 @@ async function materialPayload(body, actor, currentMaterial) {
     return payload
   }
 
-  payload.status = currentMaterial?.status || 'em_producao'
+  payload.status = currentMaterial?.status || 'nao_iniciado'
   payload.reviewStatus = currentMaterial?.reviewStatus || 'em_execucao'
+  payload.supervisorStatus = currentMaterial?.supervisorStatus || 'em_revisao'
+  payload.coordinatorStatus = currentMaterial?.coordinatorStatus || 'em_revisao'
   payload.reviewNotes = currentMaterial?.reviewNotes || ''
   payload.responsibleId = actor.id
 
@@ -540,9 +545,17 @@ app.patch('/api/materials/:id/status', auth, async (req, res) => {
   const update = { ...current }
   if (actor.role === 'professor') {
     if (req.body.status) update.status = req.body.status
+  } else if (actor.role === 'supervisor') {
+    if (req.body.status) update.status = req.body.status
+    if (req.body.supervisorStatus) update.supervisorStatus = req.body.supervisorStatus
+  } else if (isCoordinator(actor)) {
+    if (req.body.status) update.status = req.body.status
+    if (req.body.coordinatorStatus) update.coordinatorStatus = req.body.coordinatorStatus
   } else {
     if (req.body.status) update.status = req.body.status
     if (req.body.reviewStatus) update.reviewStatus = req.body.reviewStatus
+    if (req.body.supervisorStatus) update.supervisorStatus = req.body.supervisorStatus
+    if (req.body.coordinatorStatus) update.coordinatorStatus = req.body.coordinatorStatus
   }
 
   const material = await store.updateMaterial(req.params.id, update)
