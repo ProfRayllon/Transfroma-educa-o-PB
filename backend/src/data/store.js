@@ -6,6 +6,7 @@ const DATA_MODE = process.env.DATA_MODE || 'mock'
 const MYSQL_AUTO_SEED = process.env.MYSQL_AUTO_SEED === 'true'
 
 let pool
+let ementas_data = []
 
 function isMysqlMode() {
   return DATA_MODE === 'mysql'
@@ -84,6 +85,33 @@ function mapCourseRow(row) {
     deadline: formatDate(row.deadline),
     image: row.image,
     createdAt: formatDate(row.created_at, true),
+  }
+}
+
+function mapEmentaRow(row) {
+  return {
+    id: row.id,
+    courseId: row.course_id,
+    contextualization: row.contextualization,
+    justification: row.justification,
+    relevance: row.relevance,
+    generalObjective: row.general_objective,
+    specificObjectives: parseJsonArray(row.specific_objectives),
+    technicalCompetencies: row.technical_competencies,
+    pedagogicalCompetencies: row.pedagogical_competencies,
+    socioemotionalCompetencies: row.socioemotional_competencies,
+    syllabusDescription: row.syllabus_description,
+    programmaticContent: parseJsonArray(row.programmatic_content),
+    educationalResources: parseJsonArray(row.educational_resources),
+    evaluationCriteria: row.evaluation_criteria,
+    evaluationInstruments: row.evaluation_instruments,
+    referencesList: row.references_list,
+    professorStatus: row.professor_status || 'rascunho',
+    supervisorStatus: row.supervisor_status || 'pendente',
+    coordinatorStatus: row.coordinator_status || 'pendente',
+    createdBy: row.created_by,
+    createdAt: formatDate(row.created_at),
+    updatedAt: row.updated_at ? formatDate(row.updated_at) : null,
   }
 }
 
@@ -324,6 +352,34 @@ async function ensureMysqlSchema() {
   if (!existingNewCols.has('responsibles')) {
     await pool.execute('ALTER TABLE materials ADD COLUMN responsibles TEXT DEFAULT NULL AFTER responsible_role')
   }
+
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS ementas (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      course_id INT NOT NULL UNIQUE,
+      contextualization TEXT DEFAULT NULL,
+      justification TEXT DEFAULT NULL,
+      relevance TEXT DEFAULT NULL,
+      general_objective TEXT DEFAULT NULL,
+      specific_objectives TEXT DEFAULT NULL,
+      technical_competencies TEXT DEFAULT NULL,
+      pedagogical_competencies TEXT DEFAULT NULL,
+      socioemotional_competencies TEXT DEFAULT NULL,
+      syllabus_description TEXT DEFAULT NULL,
+      programmatic_content TEXT DEFAULT NULL,
+      educational_resources TEXT DEFAULT NULL,
+      evaluation_criteria TEXT DEFAULT NULL,
+      evaluation_instruments TEXT DEFAULT NULL,
+      references_list TEXT DEFAULT NULL,
+      professor_status ENUM('rascunho','concluido') NOT NULL DEFAULT 'rascunho',
+      supervisor_status ENUM('pendente','valido','nao_valido') NOT NULL DEFAULT 'pendente',
+      coordinator_status ENUM('pendente','valido','nao_valido') NOT NULL DEFAULT 'pendente',
+      created_by INT DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT fk_ementa_course FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB
+  `)
 }
 
 async function seedMysqlIfNeeded() {
@@ -1030,6 +1086,106 @@ async function deleteMaterial(id) {
   return result.affectedRows > 0
 }
 
+async function getEmentaByCourseId(courseId) {
+  if (!isMysqlMode()) {
+    return ementas_data.find((e) => e.courseId === Number(courseId)) || null
+  }
+  const [rows] = await pool.execute('SELECT * FROM ementas WHERE course_id = ? LIMIT 1', [courseId])
+  return rows[0] ? mapEmentaRow(rows[0]) : null
+}
+
+async function saveEmenta(courseId, payload, userId) {
+  const jsonField = (val) => (Array.isArray(val) && val.length ? JSON.stringify(val) : null)
+
+  if (!isMysqlMode()) {
+    const idx = ementas_data.findIndex((e) => e.courseId === Number(courseId))
+    const next = {
+      id: idx >= 0 ? ementas_data[idx].id : Date.now(),
+      courseId: Number(courseId),
+      contextualization: payload.contextualization || null,
+      justification: payload.justification || null,
+      relevance: payload.relevance || null,
+      generalObjective: payload.generalObjective || null,
+      specificObjectives: payload.specificObjectives || [],
+      technicalCompetencies: payload.technicalCompetencies || null,
+      pedagogicalCompetencies: payload.pedagogicalCompetencies || null,
+      socioemotionalCompetencies: payload.socioemotionalCompetencies || null,
+      syllabusDescription: payload.syllabusDescription || null,
+      programmaticContent: payload.programmaticContent || [],
+      educationalResources: payload.educationalResources || [],
+      evaluationCriteria: payload.evaluationCriteria || null,
+      evaluationInstruments: payload.evaluationInstruments || null,
+      referencesList: payload.referencesList || null,
+      professorStatus: idx >= 0 ? ementas_data[idx].professorStatus : 'rascunho',
+      supervisorStatus: idx >= 0 ? ementas_data[idx].supervisorStatus : 'pendente',
+      coordinatorStatus: idx >= 0 ? ementas_data[idx].coordinatorStatus : 'pendente',
+      createdBy: idx >= 0 ? ementas_data[idx].createdBy : userId,
+      createdAt: idx >= 0 ? ementas_data[idx].createdAt : new Date().toISOString().slice(0, 10),
+    }
+    if (idx >= 0) { ementas_data[idx] = next } else { ementas_data.push(next) }
+    return next
+  }
+
+  const existing = await getEmentaByCourseId(courseId)
+  if (existing) {
+    await pool.execute(
+      `UPDATE ementas SET
+        contextualization=?, justification=?, relevance=?, general_objective=?, specific_objectives=?,
+        technical_competencies=?, pedagogical_competencies=?, socioemotional_competencies=?,
+        syllabus_description=?, programmatic_content=?, educational_resources=?,
+        evaluation_criteria=?, evaluation_instruments=?, references_list=?
+       WHERE course_id=?`,
+      [
+        payload.contextualization || null, payload.justification || null, payload.relevance || null,
+        payload.generalObjective || null, jsonField(payload.specificObjectives),
+        payload.technicalCompetencies || null, payload.pedagogicalCompetencies || null, payload.socioemotionalCompetencies || null,
+        payload.syllabusDescription || null, jsonField(payload.programmaticContent), jsonField(payload.educationalResources),
+        payload.evaluationCriteria || null, payload.evaluationInstruments || null, payload.referencesList || null,
+        courseId,
+      ]
+    )
+  } else {
+    await pool.execute(
+      `INSERT INTO ementas
+       (course_id, contextualization, justification, relevance, general_objective, specific_objectives,
+        technical_competencies, pedagogical_competencies, socioemotional_competencies,
+        syllabus_description, programmatic_content, educational_resources,
+        evaluation_criteria, evaluation_instruments, references_list, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        courseId,
+        payload.contextualization || null, payload.justification || null, payload.relevance || null,
+        payload.generalObjective || null, jsonField(payload.specificObjectives),
+        payload.technicalCompetencies || null, payload.pedagogicalCompetencies || null, payload.socioemotionalCompetencies || null,
+        payload.syllabusDescription || null, jsonField(payload.programmaticContent), jsonField(payload.educationalResources),
+        payload.evaluationCriteria || null, payload.evaluationInstruments || null, payload.referencesList || null,
+        userId,
+      ]
+    )
+  }
+  return getEmentaByCourseId(courseId)
+}
+
+async function updateEmentaStatus(courseId, updates) {
+  if (!isMysqlMode()) {
+    const idx = ementas_data.findIndex((e) => e.courseId === Number(courseId))
+    if (idx === -1) return null
+    ementas_data[idx] = { ...ementas_data[idx], ...updates }
+    return ementas_data[idx]
+  }
+
+  const fields = []
+  const values = []
+  if (updates.professorStatus !== undefined) { fields.push('professor_status = ?'); values.push(updates.professorStatus) }
+  if (updates.supervisorStatus !== undefined) { fields.push('supervisor_status = ?'); values.push(updates.supervisorStatus) }
+  if (updates.coordinatorStatus !== undefined) { fields.push('coordinator_status = ?'); values.push(updates.coordinatorStatus) }
+  if (!fields.length) return getEmentaByCourseId(courseId)
+
+  values.push(courseId)
+  await pool.execute(`UPDATE ementas SET ${fields.join(', ')} WHERE course_id = ?`, values)
+  return getEmentaByCourseId(courseId)
+}
+
 async function listPeople(user) {
   if (!isMysqlMode()) {
     if (['administrador', 'supervisor', 'gestao'].includes(user.role)) return people.slice()
@@ -1263,6 +1419,9 @@ module.exports = {
   updateMaterial,
   approveMaterial,
   deleteMaterial,
+  getEmentaByCourseId,
+  saveEmenta,
+  updateEmentaStatus,
   listPeople,
   updateAttendance,
   listOccurrences,

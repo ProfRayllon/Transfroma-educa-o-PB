@@ -9,6 +9,7 @@ import Login from './pages/Login'
 import Painel from './pages/Painel'
 import Cursos from './pages/Cursos'
 import Producao from './pages/Producao'
+import Ementa from './pages/Ementa'
 import GestaoPessoas from './pages/GestaoPessoas'
 import Acessos from './pages/Acessos'
 import Notificacoes from './pages/Notificacoes'
@@ -42,6 +43,7 @@ export default function App() {
             <Route index element={<Navigate to="/painel" replace />} />
             <Route path="painel" element={<Painel />} />
             <Route path="cursos" element={<Cursos />} />
+            <Route path="cursos/:courseId/ementa" element={<Ementa />} />
             <Route path="producao" element={<Producao />} />
             <Route path="gestao-pessoas" element={<GestaoPessoas />} />
             <Route path="acessos" element={<Acessos />} />

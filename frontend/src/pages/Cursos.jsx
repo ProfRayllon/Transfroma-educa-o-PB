@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  FileText,
   Plus,
   Search,
   SlidersHorizontal,
@@ -296,8 +297,16 @@ function CourseCard({ course, materials, onEdit }) {
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold text-white transition-opacity hover:opacity-90"
             style={{ backgroundColor: color.bar }}
           >
-            Ver producao
+            Produção
             <ChevronRight size={13} />
+          </button>
+          <button
+            onClick={() => navigate(`/cursos/${course.id}/ementa`)}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 transition-colors border border-brand-100"
+            title="Ementa do curso"
+          >
+            <FileText size={13} />
+            Ementa
           </button>
           <button
             onClick={() => onEdit(course)}

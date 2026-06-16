@@ -645,6 +645,78 @@ app.patch('/api/notifications/:id/read', auth, async (req, res) => {
   res.json(notification)
 })
 
+app.get('/api/ementas/:courseId', auth, async (req, res) => {
+  try {
+    const ementa = await store.getEmentaByCourseId(req.params.courseId)
+    if (!ementa) return res.status(404).json({ message: 'Ementa nao encontrada.' })
+    res.json(ementa)
+  } catch {
+    res.status(500).json({ message: 'Erro ao carregar ementa.' })
+  }
+})
+
+app.put('/api/ementas/:courseId', auth, async (req, res) => {
+  try {
+    const actor = await store.getUserById(req.user.id)
+    const course = await store.getCourseById(req.params.courseId)
+    if (!course) return res.status(404).json({ message: 'Curso nao encontrado.' })
+
+    const isCoord = isCoordinator(actor)
+    const isProducer = course.producers?.some((p) => p.id === actor.id)
+    const isSup = actor.role === 'supervisor' && (course.supervisorId === actor.id || course.supervisorName === actor.name)
+    const isCoord2 = isCoord && (course.coordinatorId === actor.id || course.coordinatorName === actor.name)
+
+    if (actor.role !== 'administrador' && !isProducer && !isSup && !isCoord2) {
+      return res.status(403).json({ message: 'Voce nao tem permissao para editar esta ementa.' })
+    }
+
+    const ementa = await store.saveEmenta(req.params.courseId, req.body, actor.id)
+    res.json(ementa)
+  } catch {
+    res.status(500).json({ message: 'Erro ao salvar ementa.' })
+  }
+})
+
+app.patch('/api/ementas/:courseId/status', auth, async (req, res) => {
+  try {
+    const actor = await store.getUserById(req.user.id)
+    const course = await store.getCourseById(req.params.courseId)
+    if (!course) return res.status(404).json({ message: 'Curso nao encontrado.' })
+
+    const ementa = await store.getEmentaByCourseId(req.params.courseId)
+    if (!ementa) return res.status(404).json({ message: 'Ementa nao encontrada.' })
+
+    const isCoord = isCoordinator(actor)
+    const update = {}
+
+    if (actor.role === 'administrador') {
+      if (req.body.professorStatus) update.professorStatus = req.body.professorStatus
+      if (req.body.supervisorStatus) update.supervisorStatus = req.body.supervisorStatus
+      if (req.body.coordinatorStatus) update.coordinatorStatus = req.body.coordinatorStatus
+    } else if (req.body.professorStatus) {
+      const isProducer = course.producers?.some((p) => p.id === actor.id)
+      if (!isProducer) return res.status(403).json({ message: 'Apenas produtores do curso podem submeter a ementa.' })
+      update.professorStatus = req.body.professorStatus
+    } else if (req.body.supervisorStatus) {
+      if (actor.role !== 'supervisor' || (course.supervisorId !== actor.id && course.supervisorName !== actor.name)) {
+        return res.status(403).json({ message: 'Apenas o supervisor do curso pode validar.' })
+      }
+      update.supervisorStatus = req.body.supervisorStatus
+    } else if (req.body.coordinatorStatus) {
+      if (!isCoord || (course.coordinatorId !== actor.id && course.coordinatorName !== actor.name)) {
+        return res.status(403).json({ message: 'Apenas o coordenador do curso pode aprovar.' })
+      }
+      update.coordinatorStatus = req.body.coordinatorStatus
+    }
+
+    const updated = await store.updateEmentaStatus(req.params.courseId, update)
+    if (!updated) return res.status(404).json({ message: 'Ementa nao encontrada.' })
+    res.json(updated)
+  } catch {
+    res.status(500).json({ message: 'Erro ao atualizar status da ementa.' })
+  }
+})
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', system: 'Transforma Educacao PB 2026', dataMode: store.DATA_MODE, timestamp: new Date().toISOString() })
 })
