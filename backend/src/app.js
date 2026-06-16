@@ -53,23 +53,48 @@ function isManager(role) {
   return ['administrador', 'supervisor'].includes(role)
 }
 
+function isCoordinator(user) {
+  return String(user?.function || '').toLowerCase().includes('coordenador')
+}
+
+function canManageCourses(user) {
+  return user?.role === 'administrador' || isCoordinator(user)
+}
+
+function canManageProduction(user) {
+  return ['administrador', 'supervisor', 'professor'].includes(user?.role) || isCoordinator(user)
+}
+
+function canAssignMaterial(user) {
+  return ['administrador', 'supervisor'].includes(user?.role) || isCoordinator(user)
+}
+
 function isAttendanceManager(role) {
   return ['administrador', 'supervisor', 'gestao'].includes(role)
 }
 
-function canEditMaterial(user, material) {
+async function canEditMaterial(user, material) {
   if (!material) return false
-  if (isManager(user.role)) return true
+  if (user.role === 'administrador') return true
+  const course = await store.getCourseByName(material.course)
+  if (user.role === 'supervisor') {
+    return course?.supervisorId === user.id || course?.supervisorName === user.name
+  }
+  if (isCoordinator(user)) {
+    return course?.coordinatorId === user.id || course?.coordinatorName === user.name
+  }
   return user.role === 'professor' && material.responsibleId === user.id
 }
 
-function coursePayload(body) {
+async function coursePayload(body) {
   const payload = {
     name: String(body.name || '').trim(),
     primaryTrail: String(body.primaryTrail || '').trim(),
     trail: String(body.trail || '').trim(),
     totalSessions: Number(body.totalSessions) || 0,
+    supervisorId: Number(body.supervisorId) || null,
     supervisorName: String(body.supervisorName || '').trim(),
+    coordinatorId: Number(body.coordinatorId) || null,
     coordinatorName: String(body.coordinatorName || '').trim(),
     startDate: body.startDate || null,
     deadline: body.deadline || null,
@@ -80,8 +105,8 @@ function coursePayload(body) {
   if (!payload.name) missing.push('nome')
   if (!payload.primaryTrail) missing.push('trilha principal')
   if (!payload.trail) missing.push('trilha secundaria')
-  if (!payload.supervisorName) missing.push('supervisor')
-  if (!payload.coordinatorName) missing.push('coordenador')
+  if (!payload.supervisorId) missing.push('supervisor')
+  if (!payload.coordinatorId) missing.push('coordenador')
   if (payload.totalSessions <= 0) missing.push('carga horaria total')
 
   if (missing.length > 0) {
@@ -95,6 +120,19 @@ function coursePayload(body) {
   if (!COURSE_TRAILS[payload.primaryTrail].includes(payload.trail)) {
     return { error: 'Trilha secundaria invalida para a trilha principal selecionada.' }
   }
+
+  const supervisor = await store.getUserById(payload.supervisorId)
+  if (!supervisor || !['supervisor', 'administrador'].includes(supervisor.role)) {
+    return { error: 'Supervisor invalido.' }
+  }
+
+  const coordinator = await store.getUserById(payload.coordinatorId)
+  if (!coordinator || !(coordinator.role === 'administrador' || isCoordinator(coordinator))) {
+    return { error: 'Coordenador invalido.' }
+  }
+
+  payload.supervisorName = supervisor.name
+  payload.coordinatorName = coordinator.name
 
   return { payload }
 }
@@ -192,7 +230,7 @@ async function materialPayload(body, actor, currentMaterial) {
     adjustedLink: body.adjustedLink,
   }
 
-  if (isManager(actor.role)) {
+  if (canAssignMaterial(actor)) {
     payload.status = body.status || currentMaterial?.status || 'pendente'
     payload.reviewStatus = body.reviewStatus || currentMaterial?.reviewStatus || 'pendente'
     payload.reviewNotes = body.reviewNotes ?? currentMaterial?.reviewNotes ?? ''
@@ -329,15 +367,37 @@ app.delete('/api/users/:id', auth, requireRole('administrador'), async (req, res
 
 app.get('/api/courses', auth, async (req, res) => {
   try {
-    const courses = await store.listCourses()
+    const actor = await store.getUserById(req.user.id)
+    const courses = await store.listCourses(actor)
     res.json(courses)
   } catch {
     res.status(500).json({ message: 'Erro ao carregar cursos.' })
   }
 })
 
-app.post('/api/courses', auth, requireRole('administrador', 'supervisor'), async (req, res) => {
-  const { payload, error } = coursePayload(req.body)
+app.get('/api/course-participants', auth, async (req, res) => {
+  try {
+    const participants = await store.listCourseParticipants()
+    res.json(participants)
+  } catch {
+    res.status(500).json({ message: 'Erro ao carregar supervisores e coordenadores.' })
+  }
+})
+
+app.get('/api/material-assignees', auth, async (req, res) => {
+  try {
+    const assignees = await store.listMaterialAssignees()
+    res.json(assignees)
+  } catch {
+    res.status(500).json({ message: 'Erro ao carregar responsaveis por atividades.' })
+  }
+})
+
+app.post('/api/courses', auth, async (req, res) => {
+  const actor = await store.getUserById(req.user.id)
+  if (!canManageCourses(actor)) return res.status(403).json({ message: 'Apenas coordenadores podem criar cursos.' })
+
+  const { payload, error } = await coursePayload(req.body)
   if (error) return res.status(400).json({ message: error })
 
   try {
@@ -351,11 +411,18 @@ app.post('/api/courses', auth, requireRole('administrador', 'supervisor'), async
   }
 })
 
-app.put('/api/courses/:id', auth, requireRole('administrador', 'supervisor'), async (req, res) => {
+app.put('/api/courses/:id', auth, async (req, res) => {
+  const actor = await store.getUserById(req.user.id)
+  if (!canManageCourses(actor)) return res.status(403).json({ message: 'Apenas coordenadores podem editar cursos.' })
+
   const current = await store.getCourseById(req.params.id)
   if (!current) return res.status(404).json({ message: 'Curso nao encontrado.' })
 
-  const { payload, error } = coursePayload(req.body)
+  if (actor.role !== 'administrador' && current.coordinatorId !== actor.id && current.coordinatorName !== actor.name) {
+    return res.status(403).json({ message: 'Voce so pode editar cursos cadastrados para voce.' })
+  }
+
+  const { payload, error } = await coursePayload(req.body)
   if (error) return res.status(400).json({ message: error })
 
   try {
@@ -369,8 +436,17 @@ app.put('/api/courses/:id', auth, requireRole('administrador', 'supervisor'), as
   }
 })
 
-app.delete('/api/courses/:id', auth, requireRole('administrador', 'supervisor'), async (req, res) => {
+app.delete('/api/courses/:id', auth, async (req, res) => {
+  const actor = await store.getUserById(req.user.id)
+  if (!canManageCourses(actor)) return res.status(403).json({ message: 'Apenas coordenadores podem excluir cursos.' })
+
   try {
+    const current = await store.getCourseById(req.params.id)
+    if (!current) return res.status(404).json({ message: 'Curso nao encontrado.' })
+    if (actor.role !== 'administrador' && current.coordinatorId !== actor.id && current.coordinatorName !== actor.name) {
+      return res.status(403).json({ message: 'Voce so pode excluir cursos cadastrados para voce.' })
+    }
+
     const deleted = await store.deleteCourse(req.params.id)
     if (!deleted) return res.status(404).json({ message: 'Curso nao encontrado.' })
     res.status(204).end()
@@ -380,12 +456,16 @@ app.delete('/api/courses/:id', auth, requireRole('administrador', 'supervisor'),
 })
 
 app.get('/api/materials', auth, async (req, res) => {
-  const materials = await store.listMaterials(req.user)
+  const actor = await store.getUserById(req.user.id)
+  const materials = await store.listMaterials(actor)
   res.json(materials)
 })
 
-app.post('/api/materials', auth, requireRole('administrador', 'supervisor', 'professor'), async (req, res) => {
-  const payload = await materialPayload(req.body, req.user)
+app.post('/api/materials', auth, async (req, res) => {
+  const actor = await store.getUserById(req.user.id)
+  if (!canManageProduction(actor)) return res.status(403).json({ message: 'Voce nao tem permissao para criar atividades.' })
+
+  const payload = await materialPayload(req.body, actor)
   const material = await store.createMaterial({
     ...payload,
     createdAt: new Date().toISOString().split('T')[0],
@@ -393,19 +473,31 @@ app.post('/api/materials', auth, requireRole('administrador', 'supervisor', 'pro
   res.status(201).json(material)
 })
 
-app.put('/api/materials/:id', auth, requireRole('administrador', 'supervisor', 'professor'), async (req, res) => {
+app.put('/api/materials/:id', auth, async (req, res) => {
+  const actor = await store.getUserById(req.user.id)
+  if (!canManageProduction(actor)) return res.status(403).json({ message: 'Voce nao tem permissao para editar atividades.' })
+
   const current = await store.getMaterialById(req.params.id)
   if (!current) return res.status(404).json({ message: 'Material nao encontrado.' })
-  if (!canEditMaterial(req.user, current)) {
+  if (!(await canEditMaterial(actor, current))) {
     return res.status(403).json({ message: 'Voce nao tem permissao para editar este material.' })
   }
 
-  const payload = await materialPayload(req.body, req.user, current)
+  const payload = await materialPayload(req.body, actor, current)
   const material = await store.updateMaterial(req.params.id, payload)
   res.json(material)
 })
 
-app.patch('/api/materials/:id/approve', auth, requireRole('administrador', 'supervisor'), async (req, res) => {
+app.patch('/api/materials/:id/approve', auth, async (req, res) => {
+  const actor = await store.getUserById(req.user.id)
+  if (!canAssignMaterial(actor)) return res.status(403).json({ message: 'Voce nao tem permissao para aprovar atividades.' })
+
+  const current = await store.getMaterialById(req.params.id)
+  if (!current) return res.status(404).json({ message: 'Material nao encontrado.' })
+  if (!(await canEditMaterial(actor, current))) {
+    return res.status(403).json({ message: 'Voce nao tem permissao para aprovar este material.' })
+  }
+
   const material = await store.approveMaterial(req.params.id)
   if (!material) return res.status(404).json({ message: 'Material nao encontrado.' })
   res.json(material)

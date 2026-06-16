@@ -58,13 +58,25 @@ function mapCourseRow(row) {
     primaryTrail: row.primary_trail,
     trail: row.secondary_trail,
     totalSessions: row.total_sessions,
+    supervisorId: row.supervisor_id,
     supervisorName: row.supervisor_name,
+    supervisorAvatar: row.supervisor_avatar || null,
+    coordinatorId: row.coordinator_id,
     coordinatorName: row.coordinator_name,
+    coordinatorAvatar: row.coordinator_avatar || null,
     startDate: formatDate(row.start_date),
     deadline: formatDate(row.deadline),
     image: row.image,
     createdAt: formatDate(row.created_at, true),
   }
+}
+
+function isCoordinatorUser(user) {
+  return String(user?.function || '').toLowerCase().includes('coordenador')
+}
+
+function canSeeAllCourses(user) {
+  return user?.role === 'administrador'
 }
 
 function mapPeopleRow(row) {
@@ -158,7 +170,9 @@ async function ensureMysqlSchema() {
       primary_trail ENUM('TRILHAS TRANSVERSAIS','TRILHAS DA FORMACAO GERAL BASICA') NOT NULL,
       secondary_trail VARCHAR(150) NOT NULL,
       total_sessions INT NOT NULL DEFAULT 0,
+      supervisor_id INT DEFAULT NULL,
       supervisor_name VARCHAR(150) NOT NULL,
+      coordinator_id INT DEFAULT NULL,
       coordinator_name VARCHAR(150) NOT NULL,
       start_date DATE DEFAULT NULL,
       deadline DATE DEFAULT NULL,
@@ -168,12 +182,31 @@ async function ensureMysqlSchema() {
       UNIQUE KEY unique_courses_name (name),
       INDEX idx_courses_primary_trail (primary_trail),
       INDEX idx_courses_secondary_trail (secondary_trail),
+      INDEX idx_courses_supervisor_id (supervisor_id),
+      INDEX idx_courses_coordinator_id (coordinator_id),
       INDEX idx_courses_supervisor (supervisor_name),
       INDEX idx_courses_coordinator (coordinator_name),
       CONSTRAINT chk_courses_total_sessions
         CHECK (total_sessions >= 0)
     ) ENGINE=InnoDB
   `)
+
+  const [courseColumns] = await pool.execute(
+    `SELECT COLUMN_NAME
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'courses'
+       AND COLUMN_NAME IN ('supervisor_id', 'coordinator_id')`
+  )
+  const existingCourseColumns = new Set(courseColumns.map((column) => column.COLUMN_NAME))
+
+  if (!existingCourseColumns.has('supervisor_id')) {
+    await pool.execute('ALTER TABLE courses ADD COLUMN supervisor_id INT DEFAULT NULL AFTER total_sessions')
+  }
+
+  if (!existingCourseColumns.has('coordinator_id')) {
+    await pool.execute('ALTER TABLE courses ADD COLUMN coordinator_id INT DEFAULT NULL AFTER supervisor_name')
+  }
 }
 
 async function seedMysqlIfNeeded() {
@@ -288,15 +321,17 @@ async function seedMysqlIfNeeded() {
   for (const course of courses) {
     await pool.execute(
       `INSERT INTO courses
-       (id, name, primary_trail, secondary_trail, total_sessions, supervisor_name, coordinator_name, start_date, deadline, image)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, name, primary_trail, secondary_trail, total_sessions, supervisor_id, supervisor_name, coordinator_id, coordinator_name, start_date, deadline, image)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         course.id,
         course.name,
         course.primaryTrail,
         course.trail,
         course.totalSessions || 0,
+        course.supervisorId || null,
         course.supervisorName,
+        course.coordinatorId || null,
         course.coordinatorName,
         course.startDate || null,
         course.deadline || null,
@@ -442,12 +477,48 @@ async function deleteUser(id) {
   return result.affectedRows > 0
 }
 
-async function listCourses() {
+async function listCourses(user) {
   if (!isMysqlMode()) {
-    return courses.slice().sort((a, b) => String(a.name).localeCompare(String(b.name)))
+    const visible = canSeeAllCourses(user)
+      ? courses
+      : courses.filter((course) => {
+        if (user?.role === 'supervisor') {
+          return course.supervisorId === user.id || course.supervisorName === user.name
+        }
+        if (isCoordinatorUser(user)) {
+          return course.coordinatorId === user.id || course.coordinatorName === user.name
+        }
+        return false
+      })
+    return visible.slice().sort((a, b) => String(a.name).localeCompare(String(b.name)))
   }
 
-  const [rows] = await pool.execute('SELECT * FROM courses ORDER BY name')
+  const params = []
+  let sql = `
+    SELECT c.*,
+      s.avatar AS supervisor_avatar,
+      COALESCE(s.name, c.supervisor_name) AS supervisor_name,
+      co.avatar AS coordinator_avatar,
+      COALESCE(co.name, c.coordinator_name) AS coordinator_name
+    FROM courses c
+    LEFT JOIN users s ON s.id = c.supervisor_id
+    LEFT JOIN users co ON co.id = c.coordinator_id
+  `
+
+  if (!canSeeAllCourses(user)) {
+    if (user?.role === 'supervisor') {
+      sql += ' WHERE c.supervisor_id = ? OR c.supervisor_name = ?'
+      params.push(user.id, user.name)
+    } else if (isCoordinatorUser(user)) {
+      sql += ' WHERE c.coordinator_id = ? OR c.coordinator_name = ?'
+      params.push(user.id, user.name)
+    } else {
+      sql += ' WHERE 1 = 0'
+    }
+  }
+
+  sql += ' ORDER BY c.name'
+  const [rows] = await pool.execute(sql, params)
   return rows.map(mapCourseRow)
 }
 
@@ -456,7 +527,40 @@ async function getCourseById(id) {
     return courses.find((course) => course.id === Number(id)) || null
   }
 
-  const [rows] = await pool.execute('SELECT * FROM courses WHERE id = ? LIMIT 1', [id])
+  const [rows] = await pool.execute(
+    `SELECT c.*,
+      s.avatar AS supervisor_avatar,
+      COALESCE(s.name, c.supervisor_name) AS supervisor_name,
+      co.avatar AS coordinator_avatar,
+      COALESCE(co.name, c.coordinator_name) AS coordinator_name
+     FROM courses c
+     LEFT JOIN users s ON s.id = c.supervisor_id
+     LEFT JOIN users co ON co.id = c.coordinator_id
+     WHERE c.id = ?
+     LIMIT 1`,
+    [id]
+  )
+  return rows[0] ? mapCourseRow(rows[0]) : null
+}
+
+async function getCourseByName(name) {
+  if (!isMysqlMode()) {
+    return courses.find((course) => course.name === name) || null
+  }
+
+  const [rows] = await pool.execute(
+    `SELECT c.*,
+      s.avatar AS supervisor_avatar,
+      COALESCE(s.name, c.supervisor_name) AS supervisor_name,
+      co.avatar AS coordinator_avatar,
+      COALESCE(co.name, c.coordinator_name) AS coordinator_name
+     FROM courses c
+     LEFT JOIN users s ON s.id = c.supervisor_id
+     LEFT JOIN users co ON co.id = c.coordinator_id
+     WHERE c.name = ?
+     LIMIT 1`,
+    [name]
+  )
   return rows[0] ? mapCourseRow(rows[0]) : null
 }
 
@@ -474,14 +578,16 @@ async function createCourse(payload) {
 
   const [result] = await pool.execute(
     `INSERT INTO courses
-     (name, primary_trail, secondary_trail, total_sessions, supervisor_name, coordinator_name, start_date, deadline, image)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (name, primary_trail, secondary_trail, total_sessions, supervisor_id, supervisor_name, coordinator_id, coordinator_name, start_date, deadline, image)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       payload.name,
       payload.primaryTrail,
       payload.trail,
       Number(payload.totalSessions) || 0,
+      payload.supervisorId || null,
       payload.supervisorName,
+      payload.coordinatorId || null,
       payload.coordinatorName,
       payload.startDate || null,
       payload.deadline || null,
@@ -507,14 +613,16 @@ async function updateCourse(id, payload) {
 
   await pool.execute(
     `UPDATE courses
-     SET name = ?, primary_trail = ?, secondary_trail = ?, total_sessions = ?, supervisor_name = ?, coordinator_name = ?, start_date = ?, deadline = ?, image = ?
+     SET name = ?, primary_trail = ?, secondary_trail = ?, total_sessions = ?, supervisor_id = ?, supervisor_name = ?, coordinator_id = ?, coordinator_name = ?, start_date = ?, deadline = ?, image = ?
      WHERE id = ?`,
     [
       payload.name,
       payload.primaryTrail,
       payload.trail,
       Number(payload.totalSessions) || 0,
+      payload.supervisorId || null,
       payload.supervisorName,
+      payload.coordinatorId || null,
       payload.coordinatorName,
       payload.startDate || null,
       payload.deadline || null,
@@ -538,6 +646,65 @@ async function deleteCourse(id) {
   return result.affectedRows > 0
 }
 
+async function listCourseParticipants() {
+  const safeUser = (user) => {
+    const { passwordHash: _, ...rest } = user
+    return rest
+  }
+
+  if (!isMysqlMode()) {
+    const activeUsers = users.filter((user) => user.status === 'ativo')
+    return {
+      supervisors: activeUsers.filter((user) => ['supervisor', 'administrador'].includes(user.role)).map(safeUser),
+      coordinators: activeUsers.filter((user) => user.role === 'administrador' || isCoordinatorUser(user)).map(safeUser),
+    }
+  }
+
+  const [rows] = await pool.execute(
+    `SELECT *
+     FROM users
+     WHERE status = 'ativo'
+       AND (
+        role IN ('administrador', 'supervisor')
+        OR LOWER(COALESCE(\`function\`, '')) LIKE '%coordenador%'
+       )
+     ORDER BY name`
+  )
+  const mapped = rows.map(mapUserRow).map(safeUser)
+
+  return {
+    supervisors: mapped.filter((user) => ['supervisor', 'administrador'].includes(user.role)),
+    coordinators: mapped.filter((user) => user.role === 'administrador' || isCoordinatorUser(user)),
+  }
+}
+
+async function listMaterialAssignees() {
+  const safeUser = (user) => {
+    const { passwordHash: _, ...rest } = user
+    return rest
+  }
+
+  if (!isMysqlMode()) {
+    return users
+      .filter((user) => user.status === 'ativo')
+      .filter((user) => ['administrador', 'supervisor', 'professor'].includes(user.role) || isCoordinatorUser(user))
+      .map(safeUser)
+  }
+
+  const [rows] = await pool.execute(
+    `SELECT *
+     FROM users
+     WHERE status = 'ativo'
+       AND (
+        role IN ('administrador', 'supervisor', 'professor')
+        OR LOWER(COALESCE(\`function\`, '')) LIKE '%coordenador%'
+       )
+     ORDER BY name`
+  )
+
+  return rows.map(mapUserRow).map(safeUser)
+}
+
 async function listMaterials(user) {
   if (!isMysqlMode()) {
     if (user.role === 'professor') {
@@ -547,12 +714,18 @@ async function listMaterials(user) {
   }
 
   const params = []
-  let sql = 'SELECT * FROM materials'
+  let sql = 'SELECT m.* FROM materials m'
   if (user.role === 'professor') {
-    sql += ' WHERE responsible_id = ?'
+    sql += ' WHERE m.responsible_id = ?'
     params.push(user.id)
+  } else if (user.role === 'supervisor') {
+    sql += ' LEFT JOIN courses c ON c.name = m.course WHERE c.supervisor_id = ? OR c.supervisor_name = ?'
+    params.push(user.id, user.name)
+  } else if (isCoordinatorUser(user) && user.role !== 'administrador') {
+    sql += ' LEFT JOIN courses c ON c.name = m.course WHERE c.coordinator_id = ? OR c.coordinator_name = ?'
+    params.push(user.id, user.name)
   }
-  sql += ' ORDER BY id'
+  sql += ' ORDER BY m.id'
   const [rows] = await pool.execute(sql, params)
   return rows.map(mapMaterialRow)
 }
@@ -871,9 +1044,12 @@ module.exports = {
   deleteUser,
   listCourses,
   getCourseById,
+  getCourseByName,
   createCourse,
   updateCourse,
   deleteCourse,
+  listCourseParticipants,
+  listMaterialAssignees,
   listMaterials,
   getMaterialById,
   createMaterial,

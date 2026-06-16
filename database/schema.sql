@@ -25,7 +25,9 @@ CREATE TABLE IF NOT EXISTS courses (
   primary_trail ENUM('TRILHAS TRANSVERSAIS','TRILHAS DA FORMACAO GERAL BASICA') NOT NULL,
   secondary_trail VARCHAR(150) NOT NULL,
   total_sessions INT NOT NULL DEFAULT 0,
+  supervisor_id INT DEFAULT NULL,
   supervisor_name VARCHAR(150) NOT NULL,
+  coordinator_id INT DEFAULT NULL,
   coordinator_name VARCHAR(150) NOT NULL,
   start_date DATE DEFAULT NULL,
   deadline DATE DEFAULT NULL,
@@ -35,10 +37,18 @@ CREATE TABLE IF NOT EXISTS courses (
   UNIQUE KEY unique_courses_name (name),
   INDEX idx_courses_primary_trail (primary_trail),
   INDEX idx_courses_secondary_trail (secondary_trail),
+  INDEX idx_courses_supervisor_id (supervisor_id),
+  INDEX idx_courses_coordinator_id (coordinator_id),
   INDEX idx_courses_supervisor (supervisor_name),
   INDEX idx_courses_coordinator (coordinator_name),
   CONSTRAINT chk_courses_total_sessions
-    CHECK (total_sessions >= 0)
+    CHECK (total_sessions >= 0),
+  CONSTRAINT fk_courses_supervisor
+    FOREIGN KEY (supervisor_id) REFERENCES users(id)
+    ON DELETE SET NULL,
+  CONSTRAINT fk_courses_coordinator
+    FOREIGN KEY (coordinator_id) REFERENCES users(id)
+    ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS materials (
