@@ -4,7 +4,6 @@ import { Plus, Upload, CheckCircle, FileText, Clock, Eye, Search, Filter, X, Mor
 import Badge from '../components/ui/Badge'
 import StatCard from '../components/ui/StatCard'
 import Modal from '../components/ui/Modal'
-import { mockUsers, mockPeople } from '../data/mockData'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 
@@ -26,8 +25,6 @@ const REVIEW_STATUS_OPTIONS = [
   { value: 'reprovado', label: 'Reprovado' },
   { value: 'ajuste_solicitado', label: 'Ajuste solicitado' },
 ]
-
-const producers = mockUsers.filter(u => ['professor', 'supervisor', 'administrador'].includes(u.role))
 
 function TypeBadge({ type }) {
   const cls = type === 'Aula'
@@ -208,15 +205,7 @@ function MaterialModal({ material, open, onClose }) {
   )
 }
 
-const onlyProducers = mockUsers.filter(u => u.role === 'professor')
-
-function getSupervisor(responsibleId) {
-  const person = mockPeople.find(p => p.userId === responsibleId)
-  if (!person || !person.supervisorName || person.supervisorName === '—') return null
-  return person.supervisorName
-}
-
-function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove, courses }) {
+function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove, courses, assignees = [], saving }) {
   const isNew = !material?.id
   const [form, setForm] = useState(() => ({
     course: defaultCourse && defaultCourse !== 'Todos' ? defaultCourse : '',
@@ -240,7 +229,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
   const handleChange = e => {
     const { name, value } = e.target
     if (name === 'responsibleId') {
-      const user = producers.find(u => u.id === Number(value))
+      const user = assignees.find(u => u.id === Number(value))
       setForm(f => ({
         ...f,
         responsibleId: Number(value),
@@ -252,12 +241,13 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
     }
   }
 
-  const supervisor = getSupervisor(form.responsibleId)
+  const selectedCourse = courses.find((course) => course.name === form.course)
+  const supervisor = selectedCourse?.supervisorName || null
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.course || !form.theme || !form.responsibleId) return
-    onSave(form)
-    onClose()
+    const saved = await onSave(form)
+    if (saved !== false) onClose()
   }
 
   return (
@@ -268,8 +258,8 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
       size="lg"
       footer={
         <>
-          <button onClick={onClose} className="btn-secondary">Cancelar</button>
-          <button onClick={handleSubmit} className="btn-primary">
+          <button onClick={onClose} className="btn-secondary" disabled={saving}>Cancelar</button>
+          <button onClick={handleSubmit} className="btn-primary" disabled={saving}>
             <CheckCircle size={15} />
             {isNew ? 'Adicionar material' : 'Salvar alterações'}
           </button>
@@ -326,7 +316,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
           <label className="block text-xs font-medium text-gray-600 mb-1.5">Produtor responsável *</label>
           <select name="responsibleId" value={form.responsibleId || ''} onChange={handleChange} className="select-field" required>
             <option value="">Selecionar produtor...</option>
-            {onlyProducers.map(u => (
+            {assignees.map(u => (
               <option key={u.id} value={u.id}>{u.name}</option>
             ))}
           </select>
@@ -409,7 +399,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
 
 export default function Producao() {
   const { user, can } = useAuth()
-  const { materials, setMaterials, courses } = useData()
+  const { materials, setMaterials, courses, materialAssignees, saveMaterial, approveMaterial } = useData()
   const location = useLocation()
   const navigate = useNavigate()
   const initialCourse = location.state?.course || 'Todos'
@@ -418,11 +408,13 @@ export default function Producao() {
   const [viewMaterial, setViewMaterial] = useState(null)
   const [editMaterial, setEditMaterial] = useState(null)
   const [editOpen, setEditOpen] = useState(false)
+  const [savingMaterial, setSavingMaterial] = useState(false)
   const [page, setPage] = useState(1)
   const perPage = 5
 
-  const canApprove = can('approve_material') || user?.role === 'administrador'
-  const canEdit = can('edit_producao') || ['administrador', 'supervisor', 'professor'].includes(user?.role)
+  const isCoordinator = (user?.function || '').toLowerCase().includes('coordenador')
+  const canApprove = can('approve_material') || user?.role === 'administrador' || isCoordinator
+  const canEdit = can('edit_producao') || ['administrador', 'supervisor', 'professor'].includes(user?.role) || isCoordinator
   const courseOptions = ['Todos', ...courses.map(c => c.name)]
 
   const filtered = useMemo(() => {
@@ -454,8 +446,12 @@ export default function Producao() {
     emRevisao: statsMaterials.filter(m => m.status === 'em_revisao').length,
   }
 
-  const handleApprove = (mat) => {
-    setMaterials(prev => prev.map(m => m.id === mat.id ? { ...m, status: 'aprovado', reviewStatus: 'aprovado' } : m))
+  const handleApprove = async (mat) => {
+    try {
+      await approveMaterial(mat.id)
+    } catch {
+      setMaterials(prev => prev.map(m => m.id === mat.id ? { ...m, status: 'aprovado', reviewStatus: 'aprovado' } : m))
+    }
   }
 
   const handleApproveAll = () => {
@@ -470,11 +466,15 @@ export default function Producao() {
     setMaterials(prev => prev.map(m => m.id === mat.id ? { ...m, status: 'em_revisao', reviewStatus: 'ajuste_solicitado' } : m))
   }
 
-  const handleSave = (form) => {
-    if (form.id) {
-      setMaterials(prev => prev.map(m => m.id === form.id ? { ...m, ...form } : m))
-    } else {
-      setMaterials(prev => [...prev, { ...form, id: Date.now(), createdAt: new Date().toISOString().split('T')[0] }])
+  const handleSave = async (form) => {
+    try {
+      setSavingMaterial(true)
+      await saveMaterial(form)
+      return true
+    } catch {
+      return false
+    } finally {
+      setSavingMaterial(false)
     }
   }
 
@@ -526,13 +526,15 @@ export default function Producao() {
           <Upload size={15} />
           Importar planilha
         </button>
-        <button
-          onClick={() => { setEditMaterial({}); setEditOpen(true) }}
-          className="btn-primary"
-        >
-          <Plus size={15} />
-          Novo material
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => { setEditMaterial({}); setEditOpen(true) }}
+            className="btn-primary"
+          >
+            <Plus size={15} />
+            Novo material
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -729,6 +731,8 @@ export default function Producao() {
         defaultCourse={filters.course}
         canApprove={canApprove}
         courses={courses}
+        assignees={materialAssignees}
+        saving={savingMaterial}
       />
     </div>
   )

@@ -66,6 +66,20 @@ function getInitials(name) {
     .join('')
 }
 
+function PersonAvatar({ name, avatar, size = 'md' }) {
+  const cls = size === 'sm' ? 'w-6 h-6 text-[10px]' : 'w-8 h-8 text-xs'
+
+  if (avatar) {
+    return <img src={avatar} alt={name || 'Pessoa'} className={`${cls} rounded-full object-cover ring-1 ring-white/20`} />
+  }
+
+  return (
+    <div className={`${cls} rounded-full bg-brand-700 text-white font-bold flex items-center justify-center flex-shrink-0 ring-1 ring-white/20`}>
+      {getInitials(name)}
+    </div>
+  )
+}
+
 function formatDate(iso) {
   if (!iso) return '--'
   const [year, month, day] = iso.split('-')
@@ -203,15 +217,24 @@ function CourseCard({ course, materials, onEdit }) {
         <div>
           <h3 className="font-semibold text-gray-900 text-sm leading-tight">{course.name}</h3>
           <p className="text-xs font-medium text-gray-600 mt-1">{course.trail || '--'}</p>
-          <p className="text-xs text-gray-500 mt-1">Supervisor: {course.supervisorName || '--'}</p>
         </div>
 
         <div className="grid grid-cols-2 gap-3 text-xs text-gray-500">
           <div className="rounded-xl bg-gray-50 px-3 py-2 border border-gray-100">
             <div className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Coordenador</div>
-            <div className="font-medium text-gray-700">{course.coordinatorName || '--'}</div>
+            <div className="flex items-center gap-2 font-medium text-gray-700">
+              <PersonAvatar name={course.coordinatorName} avatar={course.coordinatorAvatar} size="sm" />
+              <span className="truncate">{course.coordinatorName || '--'}</span>
+            </div>
           </div>
           <div className="rounded-xl bg-gray-50 px-3 py-2 border border-gray-100">
+            <div className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Supervisor</div>
+            <div className="flex items-center gap-2 font-medium text-gray-700">
+              <PersonAvatar name={course.supervisorName} avatar={course.supervisorAvatar} size="sm" />
+              <span className="truncate">{course.supervisorName || '--'}</span>
+            </div>
+          </div>
+          <div className="rounded-xl bg-gray-50 px-3 py-2 border border-gray-100 col-span-2">
             <div className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Carga horaria</div>
             <div className="font-medium text-gray-700">{course.totalSessions} sessoes</div>
           </div>
@@ -235,12 +258,7 @@ function CourseCard({ course, materials, onEdit }) {
 
         <div className="space-y-1.5 text-xs text-gray-500 pt-0.5">
           <div className="flex items-center gap-2">
-            <div
-              className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0"
-              style={{ backgroundColor: color.bar }}
-            >
-              {getInitials(course.coordinatorName || course.supervisorName || course.name)}
-            </div>
+            <PersonAvatar name={course.coordinatorName || course.supervisorName || course.name} avatar={course.coordinatorAvatar || course.supervisorAvatar} size="sm" />
             <span className="truncate">{course.coordinatorName || 'Coordenador nao informado'}</span>
           </div>
           <div className="flex items-center gap-3">
@@ -277,14 +295,16 @@ function CourseCard({ course, materials, onEdit }) {
   )
 }
 
-function CourseModal({ course, open, onClose, onSave, saving = false, error = null }) {
+function CourseModal({ course, open, onClose, onSave, participants = { supervisors: [], coordinators: [] }, saving = false, error = null }) {
   const fileRef = useRef(null)
   const [form, setForm] = useState(() => course || {
     name: '',
     primaryTrail: '',
     trail: '',
     totalSessions: 12,
+    supervisorId: '',
     supervisorName: '',
+    coordinatorId: '',
     coordinatorName: '',
     startDate: '',
     deadline: '',
@@ -298,6 +318,26 @@ function CourseModal({ course, open, onClose, onSave, saving = false, error = nu
         ...current,
         primaryTrail: value,
         trail: '',
+      }))
+      return
+    }
+
+    if (name === 'supervisorId') {
+      const supervisor = participants.supervisors.find((item) => item.id === Number(value))
+      setForm((current) => ({
+        ...current,
+        supervisorId: value,
+        supervisorName: supervisor?.name || '',
+      }))
+      return
+    }
+
+    if (name === 'coordinatorId') {
+      const coordinator = participants.coordinators.find((item) => item.id === Number(value))
+      setForm((current) => ({
+        ...current,
+        coordinatorId: value,
+        coordinatorName: coordinator?.name || '',
       }))
       return
     }
@@ -323,6 +363,8 @@ function CourseModal({ course, open, onClose, onSave, saving = false, error = nu
     event.preventDefault()
     await onSave({
       ...form,
+      supervisorId: Number(form.supervisorId) || null,
+      coordinatorId: Number(form.coordinatorId) || null,
       totalSessions: Number(form.totalSessions) || 0,
     })
   }
@@ -430,26 +472,34 @@ function CourseModal({ course, open, onClose, onSave, saving = false, error = nu
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">Supervisor responsavel *</label>
-            <input
-              name="supervisorName"
-              value={form.supervisorName || ''}
+            <select
+              name="supervisorId"
+              value={form.supervisorId || ''}
               onChange={handleChange}
               required
-              className="input-field"
-              placeholder="Nome do supervisor"
-            />
+              className="select-field"
+            >
+              <option value="">Selecionar supervisor...</option>
+              {participants.supervisors.map((supervisor) => (
+                <option key={supervisor.id} value={supervisor.id}>{supervisor.name}</option>
+              ))}
+            </select>
           </div>
 
           <div className="col-span-2">
             <label className="block text-xs font-medium text-gray-600 mb-1.5">Coordenador *</label>
-            <input
-              name="coordinatorName"
-              value={form.coordinatorName || ''}
+            <select
+              name="coordinatorId"
+              value={form.coordinatorId || ''}
               onChange={handleChange}
               required
-              className="input-field"
-              placeholder="Nome do coordenador"
-            />
+              className="select-field"
+            >
+              <option value="">Selecionar coordenador...</option>
+              {participants.coordinators.map((coordinator) => (
+                <option key={coordinator.id} value={coordinator.id}>{coordinator.name}</option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -493,7 +543,7 @@ function CourseModal({ course, open, onClose, onSave, saving = false, error = nu
 
 export default function Cursos() {
   const { user } = useAuth()
-  const { materials, courses, coursesLoading, coursesError, saveCourse } = useData()
+  const { materials, courses, coursesLoading, coursesError, courseParticipants, saveCourse } = useData()
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editCourse, setEditCourse] = useState(null)
@@ -507,7 +557,8 @@ export default function Cursos() {
     coordinators: [],
   })
 
-  const canManage = user?.role === 'administrador' || user?.role === 'supervisor'
+  const isCoordinator = (user?.function || '').toLowerCase().includes('coordenador')
+  const canManage = user?.role === 'administrador' || isCoordinator
 
   const filterOptions = useMemo(() => ({
     primaryTrails: Array.from(new Set(courses.map((course) => course.primaryTrail).filter(Boolean))),
@@ -743,6 +794,7 @@ export default function Cursos() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onSave={handleSave}
+        participants={courseParticipants}
         saving={savingCourse}
         error={saveError}
       />

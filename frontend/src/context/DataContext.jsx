@@ -11,10 +11,15 @@ export function DataProvider({ children }) {
   const [courses, setCourses] = useState(mockCourses)
   const [coursesLoading, setCoursesLoading] = useState(false)
   const [coursesError, setCoursesError] = useState(null)
+  const [courseParticipants, setCourseParticipants] = useState({ supervisors: [], coordinators: [] })
+  const [materialAssignees, setMaterialAssignees] = useState([])
 
   const loadCourses = useCallback(async () => {
     if (!user) {
+      setMaterials(mockMaterials)
       setCourses(mockCourses)
+      setCourseParticipants({ supervisors: [], coordinators: [] })
+      setMaterialAssignees([])
       setCoursesError(null)
       return
     }
@@ -23,8 +28,14 @@ export function DataProvider({ children }) {
     setCoursesError(null)
 
     try {
+      const { data: materialsData } = await api.get('/materials')
+      setMaterials(materialsData)
       const { data } = await api.get('/courses')
       setCourses(data)
+      const { data: participants } = await api.get('/course-participants')
+      setCourseParticipants(participants)
+      const { data: assignees } = await api.get('/material-assignees')
+      setMaterialAssignees(assignees)
     } catch (error) {
       setCoursesError(getApiErrorMessage(error, 'Erro ao carregar cursos.'))
     } finally {
@@ -66,6 +77,37 @@ export function DataProvider({ children }) {
     }
   }
 
+  const saveMaterial = async (material) => {
+    try {
+      const request = material.id
+        ? api.put(`/materials/${material.id}`, material)
+        : api.post('/materials', material)
+      const { data } = await request
+
+      setMaterials((current) => {
+        if (material.id) {
+          return current.map((item) => (item.id === data.id ? data : item))
+        }
+
+        return [...current, data]
+      })
+
+      return data
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error, 'Erro ao salvar atividade.'))
+    }
+  }
+
+  const approveMaterial = async (materialId) => {
+    try {
+      const { data } = await api.patch(`/materials/${materialId}/approve`)
+      setMaterials((current) => current.map((item) => (item.id === data.id ? data : item)))
+      return data
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error, 'Erro ao aprovar atividade.'))
+    }
+  }
+
   return (
     <DataContext.Provider value={{
       materials,
@@ -74,9 +116,13 @@ export function DataProvider({ children }) {
       setCourses,
       coursesLoading,
       coursesError,
+      courseParticipants,
+      materialAssignees,
       loadCourses,
       saveCourse,
       deleteCourse,
+      saveMaterial,
+      approveMaterial,
     }}>
       {children}
     </DataContext.Provider>
