@@ -1166,6 +1166,26 @@ async function saveEmenta(courseId, payload, userId) {
   return getEmentaByCourseId(courseId)
 }
 
+async function getAllEmentas() {
+  if (!isMysqlMode()) {
+    return ementas_data.map((e) => ({
+      courseId: e.courseId,
+      professorStatus: e.professorStatus,
+      supervisorStatus: e.supervisorStatus,
+      coordinatorStatus: e.coordinatorStatus,
+    }))
+  }
+  const [rows] = await pool.execute(
+    'SELECT course_id, professor_status, supervisor_status, coordinator_status FROM ementas'
+  )
+  return rows.map((r) => ({
+    courseId: r.course_id,
+    professorStatus: r.professor_status || 'rascunho',
+    supervisorStatus: r.supervisor_status || 'pendente',
+    coordinatorStatus: r.coordinator_status || 'pendente',
+  }))
+}
+
 async function updateEmentaStatus(courseId, updates) {
   if (!isMysqlMode()) {
     const idx = ementas_data.findIndex((e) => e.courseId === Number(courseId))
@@ -1419,6 +1439,7 @@ module.exports = {
   updateMaterial,
   approveMaterial,
   deleteMaterial,
+  getAllEmentas,
   getEmentaByCourseId,
   saveEmenta,
   updateEmentaStatus,

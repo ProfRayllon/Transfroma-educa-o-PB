@@ -645,12 +645,22 @@ app.patch('/api/notifications/:id/read', auth, async (req, res) => {
   res.json(notification)
 })
 
+app.get('/api/ementas', auth, async (req, res) => {
+  try {
+    res.json(await store.getAllEmentas())
+  } catch (err) {
+    console.error('[GET /api/ementas]', err)
+    res.status(500).json({ message: 'Erro ao carregar ementas.' })
+  }
+})
+
 app.get('/api/ementas/:courseId', auth, async (req, res) => {
   try {
     const ementa = await store.getEmentaByCourseId(req.params.courseId)
     if (!ementa) return res.status(404).json({ message: 'Ementa nao encontrada.' })
     res.json(ementa)
-  } catch {
+  } catch (err) {
+    console.error('[GET /api/ementas/:courseId]', err)
     res.status(500).json({ message: 'Erro ao carregar ementa.' })
   }
 })
@@ -662,7 +672,7 @@ app.put('/api/ementas/:courseId', auth, async (req, res) => {
     if (!course) return res.status(404).json({ message: 'Curso nao encontrado.' })
 
     const isCoord = isCoordinator(actor)
-    const isProducer = course.producers?.some((p) => p.id === actor.id)
+    const isProducer = course.producers?.some((p) => Number(p.id) === Number(actor.id))
     const isSup = actor.role === 'supervisor' && (course.supervisorId === actor.id || course.supervisorName === actor.name)
     const isCoord2 = isCoord && (course.coordinatorId === actor.id || course.coordinatorName === actor.name)
 
@@ -672,7 +682,8 @@ app.put('/api/ementas/:courseId', auth, async (req, res) => {
 
     const ementa = await store.saveEmenta(req.params.courseId, req.body, actor.id)
     res.json(ementa)
-  } catch {
+  } catch (err) {
+    console.error('[PUT /api/ementas/:courseId]', err)
     res.status(500).json({ message: 'Erro ao salvar ementa.' })
   }
 })
@@ -694,7 +705,7 @@ app.patch('/api/ementas/:courseId/status', auth, async (req, res) => {
       if (req.body.supervisorStatus) update.supervisorStatus = req.body.supervisorStatus
       if (req.body.coordinatorStatus) update.coordinatorStatus = req.body.coordinatorStatus
     } else if (req.body.professorStatus) {
-      const isProducer = course.producers?.some((p) => p.id === actor.id)
+      const isProducer = course.producers?.some((p) => Number(p.id) === Number(actor.id))
       if (!isProducer) return res.status(403).json({ message: 'Apenas produtores do curso podem submeter a ementa.' })
       update.professorStatus = req.body.professorStatus
     } else if (req.body.supervisorStatus) {
@@ -712,7 +723,8 @@ app.patch('/api/ementas/:courseId/status', auth, async (req, res) => {
     const updated = await store.updateEmentaStatus(req.params.courseId, update)
     if (!updated) return res.status(404).json({ message: 'Ementa nao encontrada.' })
     res.json(updated)
-  } catch {
+  } catch (err) {
+    console.error('[PATCH /api/ementas/:courseId/status]', err)
     res.status(500).json({ message: 'Erro ao atualizar status da ementa.' })
   }
 })
