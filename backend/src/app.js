@@ -257,6 +257,12 @@ async function materialPayload(body, actor, currentMaterial) {
       payload.responsibleRole = responsible?.function || body.responsibleRole || currentMaterial?.responsibleRole || ''
     }
 
+    if (Array.isArray(body.responsibles) && body.responsibles.length > 0) {
+      payload.responsibles = body.responsibles
+    } else {
+      payload.responsibles = currentMaterial?.responsibles || null
+    }
+
     return payload
   }
 

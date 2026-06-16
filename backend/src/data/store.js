@@ -42,6 +42,7 @@ function mapMaterialRow(row) {
     responsibleId: row.responsible_id,
     responsibleName: row.responsible_name,
     responsibleRole: row.responsible_role,
+    responsibles: parseJsonArray(row.responsibles),
     status: row.status,
     deliveryDate: formatDate(row.delivery_date),
     originalLink: row.original_link,
@@ -300,7 +301,7 @@ async function ensureMysqlSchema() {
   const [newMatColumns] = await pool.execute(
     `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'materials'
-       AND COLUMN_NAME IN ('module', 'supervisor_status', 'coordinator_status')`
+       AND COLUMN_NAME IN ('module', 'supervisor_status', 'coordinator_status', 'responsibles')`
   )
   const existingNewCols = new Set(newMatColumns.map((c) => c.COLUMN_NAME))
 
@@ -318,6 +319,10 @@ async function ensureMysqlSchema() {
     await pool.execute(
       "ALTER TABLE materials ADD COLUMN coordinator_status ENUM('em_revisao','nao_validado','validado_com_ajustes','valido') NOT NULL DEFAULT 'em_revisao' AFTER supervisor_status"
     )
+  }
+
+  if (!existingNewCols.has('responsibles')) {
+    await pool.execute('ALTER TABLE materials ADD COLUMN responsibles TEXT DEFAULT NULL AFTER responsible_role')
   }
 }
 
@@ -928,8 +933,8 @@ async function createMaterial(payload) {
 
   const [result] = await pool.execute(
     `INSERT INTO materials
-     (course, session, module, theme, objective, type, duration, responsible_id, responsible_name, responsible_role, status, delivery_date, original_link, adjusted_link, review_status, supervisor_status, coordinator_status, review_notes, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (course, session, module, theme, objective, type, duration, responsible_id, responsible_name, responsible_role, responsibles, status, delivery_date, original_link, adjusted_link, review_status, supervisor_status, coordinator_status, review_notes, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       payload.course,
       payload.session,
@@ -941,6 +946,7 @@ async function createMaterial(payload) {
       payload.responsibleId || null,
       payload.responsibleName || null,
       payload.responsibleRole || null,
+      payload.responsibles?.length ? JSON.stringify(payload.responsibles) : null,
       payload.status,
       payload.deliveryDate || null,
       payload.originalLink || null,
@@ -967,7 +973,7 @@ async function updateMaterial(id, payload) {
   await pool.execute(
     `UPDATE materials
      SET course = ?, session = ?, module = ?, theme = ?, objective = ?, type = ?, duration = ?,
-         responsible_id = ?, responsible_name = ?, responsible_role = ?, status = ?,
+         responsible_id = ?, responsible_name = ?, responsible_role = ?, responsibles = ?, status = ?,
          delivery_date = ?, original_link = ?, adjusted_link = ?, review_status = ?,
          supervisor_status = ?, coordinator_status = ?, review_notes = ?
      WHERE id = ?`,
@@ -982,6 +988,7 @@ async function updateMaterial(id, payload) {
       payload.responsibleId || null,
       payload.responsibleName || null,
       payload.responsibleRole || null,
+      payload.responsibles?.length ? JSON.stringify(payload.responsibles) : null,
       payload.status,
       payload.deliveryDate || null,
       payload.originalLink || null,

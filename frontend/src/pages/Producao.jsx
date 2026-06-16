@@ -119,6 +119,38 @@ function AvatarTooltip({ name, role }) {
   )
 }
 
+function StackedAvatars({ responsibles }) {
+  if (!responsibles?.length) return <span className="text-gray-300 text-xs">—</span>
+  const visible = responsibles.slice(0, 3)
+  const extra = responsibles.length - visible.length
+  return (
+    <div className="flex items-center">
+      {visible.map((r, i) => {
+        const initials = (r.name || '').split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
+        return (
+          <div key={r.id || i} className={`relative group ${i > 0 ? '-ml-2' : ''}`} style={{ zIndex: visible.length - i }}>
+            <div className="w-7 h-7 rounded-full bg-brand-700 text-white text-xs font-semibold flex items-center justify-center border-2 border-white cursor-default select-none">
+              {initials}
+            </div>
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none">
+              <div className="bg-gray-800 text-white text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-lg">
+                <div className="font-medium">{r.name}</div>
+                {r.role && <div className="text-gray-300 text-[10px] mt-0.5">{r.role}</div>}
+              </div>
+              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+            </div>
+          </div>
+        )
+      })}
+      {extra > 0 && (
+        <div className="-ml-2 w-7 h-7 rounded-full bg-gray-200 text-gray-600 text-[10px] font-bold flex items-center justify-center border-2 border-white flex-shrink-0">
+          +{extra}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function MiniAvatar({ name, roleLabel }) {
   if (!name) return null
   const initials = name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
@@ -197,7 +229,7 @@ function ActionButtons({ material, onView, onEdit, onDelete, canEdit }) {
 function ColumnsToggle({ cols, onChange }) {
   const [open, setOpen] = useState(false)
   const labels = {
-    tema: 'Tema',
+    tema: 'Título',
     objetivo: 'Objetivo',
     tempo: 'Tempo',
     dataEntrega: 'Data Entrega',
@@ -255,8 +287,15 @@ function MaterialModal({ material, open, onClose }) {
             <div className="text-sm text-gray-800">{material.objective}</div>
           </div>
           <div>
-            <div className="text-xs font-medium text-gray-500 mb-1">Responsável</div>
-            <AvatarChip name={material.responsibleName} role={material.responsibleRole} />
+            <div className="text-xs font-medium text-gray-500 mb-1">Responsável(is)</div>
+            <div className="space-y-1.5">
+              {(material.responsibles?.length
+                ? material.responsibles
+                : material.responsibleName ? [{ name: material.responsibleName, role: material.responsibleRole }] : []
+              ).map((r, i) => (
+                <AvatarChip key={i} name={r.name} role={r.role} />
+              ))}
+            </div>
           </div>
           <div>
             <div className="text-xs font-medium text-gray-500 mb-1">Tempo estimado</div>
@@ -296,48 +335,62 @@ function MaterialModal({ material, open, onClose }) {
 
 function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove, courses, assignees = [], saving }) {
   const isNew = !material?.id
-  const [form, setForm] = useState(() => ({
-    course: defaultCourse && defaultCourse !== 'Todos' ? defaultCourse : '',
-    session: '',
-    module: 1,
-    type: 'videoaula',
-    theme: '',
-    objective: '',
-    duration: '',
-    deliveryDate: '',
-    status: 'nao_iniciado',
-    supervisorStatus: 'em_revisao',
-    coordinatorStatus: 'em_revisao',
-    reviewNotes: '',
-    responsibleId: '',
-    responsibleName: '',
-    responsibleRole: '',
-    originalLink: '',
-    adjustedLink: '',
-    ...(material || {}),
-  }))
+  const [form, setForm] = useState(() => {
+    const base = {
+      course: defaultCourse && defaultCourse !== 'Todos' ? defaultCourse : '',
+      session: '',
+      module: 1,
+      type: 'videoaula',
+      theme: '',
+      objective: '',
+      duration: '',
+      deliveryDate: '',
+      status: 'nao_iniciado',
+      supervisorStatus: 'em_revisao',
+      coordinatorStatus: 'em_revisao',
+      reviewNotes: '',
+      responsibleId: '',
+      responsibleName: '',
+      responsibleRole: '',
+      originalLink: '',
+      adjustedLink: '',
+      ...(material || {}),
+    }
+    base.responsibles = material?.responsibles?.length
+      ? material.responsibles
+      : (material?.responsibleId ? [{ id: material.responsibleId, name: material.responsibleName, role: material.responsibleRole }] : [])
+    return base
+  })
 
   const handleChange = e => {
     const { name, value } = e.target
-    if (name === 'responsibleId') {
-      const user = assignees.find(u => u.id === Number(value))
-      setForm(f => ({
-        ...f,
-        responsibleId: Number(value),
-        responsibleName: user?.name || '',
-        responsibleRole: user?.function || '',
-      }))
-    } else {
-      setForm(f => ({ ...f, [name]: value }))
-    }
+    setForm(f => ({ ...f, [name]: value }))
+  }
+
+  const addResponsible = (e) => {
+    const userId = Number(e.target.value)
+    if (!userId) return
+    const u = assignees.find(a => a.id === userId)
+    if (!u || form.responsibles.some(r => r.id === u.id)) return
+    setForm(f => ({ ...f, responsibles: [...f.responsibles, { id: u.id, name: u.name, role: u.function || '' }] }))
+  }
+
+  const removeResponsible = (i) => {
+    setForm(f => ({ ...f, responsibles: f.responsibles.filter((_, j) => j !== i) }))
   }
 
   const selectedCourse = courses.find((course) => course.name === form.course)
   const supervisor = selectedCourse?.supervisorName || null
 
   const handleSubmit = async () => {
-    if (!form.course || !form.theme || !form.responsibleId) return
-    const saved = await onSave(form)
+    if (!form.course || !form.theme || !form.responsibles.length) return
+    const primary = form.responsibles[0]
+    const saved = await onSave({
+      ...form,
+      responsibleId: primary.id,
+      responsibleName: primary.name,
+      responsibleRole: primary.role,
+    })
     if (saved !== false) onClose()
   }
 
@@ -387,10 +440,10 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
           </select>
         </div>
 
-        {/* Tema */}
+        {/* Título */}
         <div className="col-span-2">
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">Tema *</label>
-          <input name="theme" value={form.theme} onChange={handleChange} className="input-field" placeholder="Tema da sessão" required />
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Título *</label>
+          <input name="theme" value={form.theme} onChange={handleChange} className="input-field" placeholder="Título do conteúdo" required />
         </div>
 
         {/* Objetivo */}
@@ -409,19 +462,34 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
           <input name="deliveryDate" value={form.deliveryDate} onChange={handleChange} type="date" className="input-field" />
         </div>
 
-        {/* Produtor responsável */}
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">Produtor responsável *</label>
-          <select name="responsibleId" value={form.responsibleId || ''} onChange={handleChange} className="select-field" required>
-            <option value="">Selecionar produtor...</option>
-            {assignees.map(u => (
+        {/* Produtor(es) responsável(is) */}
+        <div className="col-span-2">
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Produtor(es) responsável(is) *</label>
+          {form.responsibles.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {form.responsibles.map((r, i) => (
+                <div key={r.id || i} className="flex items-center gap-1.5 bg-brand-50 border border-brand-200 rounded-lg px-2 py-1">
+                  <div className="w-5 h-5 rounded-full bg-brand-700 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">
+                    {r.name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()}
+                  </div>
+                  <span className="text-xs font-medium text-brand-700 truncate max-w-[120px]">{r.name}</span>
+                  <button type="button" onClick={() => removeResponsible(i)} className="text-brand-300 hover:text-red-500 transition-colors flex-shrink-0">
+                    <X size={11} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <select value="" onChange={addResponsible} className="select-field">
+            <option value="">+ Adicionar produtor...</option>
+            {assignees.filter(u => !form.responsibles.some(r => r.id === u.id)).map(u => (
               <option key={u.id} value={u.id}>{u.name}</option>
             ))}
           </select>
         </div>
 
         {/* Supervisor (auto) */}
-        <div>
+        <div className="col-span-2">
           <label className="block text-xs font-medium text-gray-600 mb-1.5">Supervisor para aprovação</label>
           <div className={`input-field flex items-center gap-2 ${supervisor ? 'bg-gray-50' : 'bg-gray-50 text-gray-400'}`}>
             {supervisor ? (
@@ -432,7 +500,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
                 <span className="text-sm text-gray-700">{supervisor}</span>
               </>
             ) : (
-              <span className="text-xs text-gray-400">Selecione um produtor primeiro</span>
+              <span className="text-xs text-gray-400">Selecione um curso primeiro</span>
             )}
           </div>
         </div>
@@ -838,7 +906,7 @@ export default function Producao() {
               <tr className="border-b border-gray-100">
                 <th className="table-header w-12">N</th>
                 <th className="table-header w-16">Módulo</th>
-                {visibleCols.tema && <th className="table-header">Tema</th>}
+                {visibleCols.tema && <th className="table-header">Título</th>}
                 {visibleCols.objetivo && <th className="table-header">Objetivo</th>}
                 <th className="table-header w-24">Tipo</th>
                 {visibleCols.tempo && <th className="table-header w-16">Tempo</th>}
@@ -898,7 +966,13 @@ export default function Producao() {
                   )}
                   <td className="table-cell"><TypeBadge type={mat.type} /></td>
                   {visibleCols.tempo && <td className="table-cell text-gray-500">{mat.duration}</td>}
-                  <td className="table-cell"><AvatarTooltip name={mat.responsibleName} role={mat.responsibleRole} /></td>
+                  <td className="table-cell">
+                    <StackedAvatars responsibles={
+                      mat.responsibles?.length
+                        ? mat.responsibles
+                        : (mat.responsibleName ? [{ id: mat.responsibleId, name: mat.responsibleName, role: mat.responsibleRole }] : [])
+                    } />
+                  </td>
                   <td className="table-cell">
                     {canEditThis ? (
                       <InlineStatusSelect
