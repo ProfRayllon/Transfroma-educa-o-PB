@@ -95,6 +95,24 @@ function AvatarChip({ name, role }) {
   )
 }
 
+function AvatarTooltip({ name, role }) {
+  const initials = name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
+  return (
+    <div className="relative group inline-flex">
+      <div className="w-7 h-7 rounded-full bg-brand-700 text-white text-xs font-semibold flex items-center justify-center cursor-default select-none">
+        {initials}
+      </div>
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none">
+        <div className="bg-gray-800 text-white text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-lg">
+          <div className="font-medium">{name}</div>
+          {role && <div className="text-gray-300 text-[10px] mt-0.5">{role}</div>}
+        </div>
+        <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+      </div>
+    </div>
+  )
+}
+
 function InlineStatusSelect({ value, options, onChange }) {
   const STATUS_COLORS = {
     em_execucao: 'text-blue-700 bg-blue-50 border-blue-200',
@@ -128,13 +146,13 @@ function ActionsMenu({ material, onView, onEdit, onApprove, onRequestAdjust, can
   const [open, setOpen] = useState(false)
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1">
       <button
         onClick={() => onView(material)}
-        className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-lg transition-colors"
+        title="Visualizar"
+        className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
       >
-        <Eye size={12} />
-        Ver
+        <Eye size={14} />
       </button>
 
       <div className="relative">
@@ -572,12 +590,12 @@ export default function Producao() {
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           {initialCourse !== 'Todos' && (
             <button
               onClick={() => navigate('/cursos')}
-              className="flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-800 font-medium mb-2 group"
+              className="flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-800 font-medium mb-1.5 group"
             >
               <ArrowLeft size={13} className="group-hover:-translate-x-0.5 transition-transform" />
               Voltar para Cursos
@@ -590,34 +608,21 @@ export default function Producao() {
               : 'Acompanhe os materiais produzidos pelos professores/produtores.'}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {canApprove && (
+        <div className="flex items-center gap-2">
+          <button className="btn-secondary">
+            <Upload size={14} />
+            Importar planilha
+          </button>
+          {canEdit && (
             <button
-              onClick={handleApproveAll}
-              className="btn-primary bg-green-700 hover:bg-green-800"
+              onClick={() => { setEditMaterial({}); setEditOpen(true) }}
+              className="btn-primary"
             >
-              <CheckCircle size={15} />
-              Aprovar todos os conteúdos
+              <Plus size={14} />
+              Novo material
             </button>
           )}
         </div>
-      </div>
-
-      {/* Action buttons */}
-      <div className="flex flex-wrap gap-2 justify-end">
-        <button className="btn-secondary">
-          <Upload size={15} />
-          Importar planilha
-        </button>
-        {canEdit && (
-          <button
-            onClick={() => { setEditMaterial({}); setEditOpen(true) }}
-            className="btn-primary"
-          >
-            <Plus size={15} />
-            Novo material
-          </button>
-        )}
       </div>
 
       {/* Filters */}
@@ -763,7 +768,7 @@ export default function Producao() {
                   </td>
                   <td className="table-cell"><TypeBadge type={mat.type} /></td>
                   <td className="table-cell text-xs text-gray-500">{mat.duration}</td>
-                  <td className="table-cell"><AvatarChip name={mat.responsibleName} role={mat.responsibleRole} /></td>
+                  <td className="table-cell"><AvatarTooltip name={mat.responsibleName} role={mat.responsibleRole} /></td>
                   <td className="table-cell">
                     {canEditThis && user?.role !== 'supervisor' ? (
                       <InlineStatusSelect
