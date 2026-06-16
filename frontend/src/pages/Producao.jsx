@@ -9,31 +9,48 @@ import { useData } from '../context/DataContext'
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Todos' },
-  { value: 'pendente', label: 'Pendente' },
-  { value: 'em_producao', label: 'Em produção' },
-  { value: 'em_revisao', label: 'Em revisão' },
+  { value: 'em_execucao', label: 'Em execução' },
+  { value: 'validado', label: 'Validado' },
+  { value: 'em_ajustes', label: 'Em ajustes' },
+  { value: 'revisao_linguistica', label: 'Revisão linguística' },
+  { value: 'edicao', label: 'Edição' },
   { value: 'concluido', label: 'Concluído' },
-  { value: 'aprovado', label: 'Aprovado' },
-  { value: 'reprovado', label: 'Reprovado' },
-  { value: 'ajuste_solicitado', label: 'Ajuste solicitado' },
 ]
 
 const REVIEW_STATUS_OPTIONS = [
-  { value: 'pendente', label: 'Pendente' },
-  { value: 'em_revisao', label: 'Em revisão' },
-  { value: 'aprovado', label: 'Aprovado' },
-  { value: 'reprovado', label: 'Reprovado' },
-  { value: 'ajuste_solicitado', label: 'Ajuste solicitado' },
+  { value: 'em_execucao', label: 'Em execução' },
+  { value: 'validado', label: 'Validado' },
+  { value: 'em_ajustes', label: 'Em ajustes' },
+  { value: 'revisao_linguistica', label: 'Revisão linguística' },
+  { value: 'edicao', label: 'Edição' },
+  { value: 'concluido', label: 'Concluído' },
+  { value: 'esperando_material', label: 'Esperando material' },
 ]
 
+const MATERIAL_TYPE_OPTIONS = [
+  { value: 'videoaula', label: 'Videoaula' },
+  { value: 'apresentacao', label: 'Apresentação' },
+  { value: 'atividade_escrita', label: 'Atividade escrita' },
+  { value: 'material_complementar', label: 'Material complementar' },
+  { value: 'atividade_interativa', label: 'Atividade interativa' },
+  { value: 'outro', label: 'Outro' },
+  { value: 'ebook', label: 'Ebook' },
+  { value: 'avaliacao_final', label: 'Avaliação final' },
+  { value: 'atividade_objetiva', label: 'Atividade objetiva' },
+  { value: 'pdf', label: 'PDF' },
+]
+
+const TYPE_LABELS = Object.fromEntries(MATERIAL_TYPE_OPTIONS.map((option) => [option.value, option.label]))
+
 function TypeBadge({ type }) {
-  const cls = type === 'Aula'
+  const documentTypes = ['videoaula', 'apresentacao', 'ebook', 'pdf', 'Aula']
+  const cls = documentTypes.includes(type)
     ? 'bg-blue-50 text-blue-700 border border-blue-200'
     : 'bg-orange-50 text-orange-700 border border-orange-200'
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium ${cls}`}>
-      {type === 'Aula' ? <FileText size={10} /> : <CheckSquare size={10} />}
-      {type}
+      {documentTypes.includes(type) ? <FileText size={10} /> : <CheckSquare size={10} />}
+      {TYPE_LABELS[type] || type}
     </span>
   )
 }
@@ -210,13 +227,13 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
   const [form, setForm] = useState(() => ({
     course: defaultCourse && defaultCourse !== 'Todos' ? defaultCourse : '',
     session: '',
-    type: 'Aula',
+    type: 'videoaula',
     theme: '',
     objective: '',
     duration: '',
     deliveryDate: '',
-    status: 'pendente',
-    reviewStatus: 'pendente',
+    status: 'em_execucao',
+    reviewStatus: 'em_execucao',
     reviewNotes: '',
     responsibleId: '',
     responsibleName: '',
@@ -282,10 +299,11 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
           <input name="session" value={form.session} onChange={handleChange} type="number" min={1} className="input-field" placeholder="Ex: 1" required />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">Tipo</label>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Tipo de material</label>
           <select name="type" value={form.type} onChange={handleChange} className="select-field">
-            <option value="Aula">Aula</option>
-            <option value="Atividade">Atividade</option>
+            {MATERIAL_TYPE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
           </select>
         </div>
 
@@ -371,7 +389,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
         {(!isNew || canApprove) && (
           <>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Status</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Status do professor</label>
               <select name="status" value={form.status} onChange={handleChange} className="select-field">
                 {STATUS_OPTIONS.filter(s => s.value).map(s => (
                   <option key={s.value} value={s.value}>{s.label}</option>
@@ -379,7 +397,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Status da revisão</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Status do supervisor</label>
               <select name="reviewStatus" value={form.reviewStatus} onChange={handleChange} className="select-field">
                 {REVIEW_STATUS_OPTIONS.map(s => (
                   <option key={s.value} value={s.value}>{s.label}</option>
@@ -441,9 +459,9 @@ export default function Producao() {
     : materials
   const stats = {
     total: statsMaterials.length,
-    emProducao: statsMaterials.filter(m => m.status === 'em_producao').length,
-    concluidos: statsMaterials.filter(m => ['concluido', 'aprovado'].includes(m.status)).length,
-    emRevisao: statsMaterials.filter(m => m.status === 'em_revisao').length,
+    emProducao: statsMaterials.filter(m => ['em_producao', 'em_execucao', 'edicao'].includes(m.status)).length,
+    concluidos: statsMaterials.filter(m => ['concluido', 'aprovado', 'validado'].includes(m.status)).length,
+    emRevisao: statsMaterials.filter(m => ['em_revisao', 'revisao_linguistica', 'em_ajustes', 'ajuste_solicitado'].includes(m.status)).length,
   }
 
   const handleApprove = async (mat) => {

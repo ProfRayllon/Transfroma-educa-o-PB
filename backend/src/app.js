@@ -243,8 +243,8 @@ async function materialPayload(body, actor, currentMaterial) {
   }
 
   if (canAssignMaterial(actor)) {
-    payload.status = body.status || currentMaterial?.status || 'pendente'
-    payload.reviewStatus = body.reviewStatus || currentMaterial?.reviewStatus || 'pendente'
+    payload.status = body.status || currentMaterial?.status || 'em_execucao'
+    payload.reviewStatus = body.reviewStatus || currentMaterial?.reviewStatus || 'em_execucao'
     payload.reviewNotes = body.reviewNotes ?? currentMaterial?.reviewNotes ?? ''
     payload.responsibleId = Number(body.responsibleId) || currentMaterial?.responsibleId
 
@@ -258,7 +258,7 @@ async function materialPayload(body, actor, currentMaterial) {
   }
 
   payload.status = currentMaterial?.status || 'em_producao'
-  payload.reviewStatus = currentMaterial?.reviewStatus || 'pendente'
+  payload.reviewStatus = currentMaterial?.reviewStatus || 'em_execucao'
   payload.reviewNotes = currentMaterial?.reviewNotes || ''
   payload.responsibleId = actor.id
 
