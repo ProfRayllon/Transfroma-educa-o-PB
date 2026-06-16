@@ -184,8 +184,8 @@ function MultiSelectFilter({ label, placeholder, options, values, onChange }) {
 function CourseCard({ course, materials, onEdit, ementaStatus }) {
   const navigate = useNavigate()
   const color = getTrailColor(course.primaryTrail)
-  const alert = deadlineBadge(course.deadline)
   const ementaApproved = ementaStatus?.coordinatorStatus === 'valido'
+  const alert = deadlineBadge(course.deadline)
 
   const courseMaterials = materials.filter((material) => material.course === course.name)
   const totalContents = courseMaterials.length
@@ -610,6 +610,13 @@ export default function Cursos() {
   const [savingCourse, setSavingCourse] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [ementaStatuses, setEmentaStatuses] = useState({})
+  const [filters, setFilters] = useState({
+    primaryTrails: [],
+    trails: [],
+    courses: [],
+    supervisors: [],
+    coordinators: [],
+  })
 
   useEffect(() => {
     api.get('/ementas').then(({ data }) => {
@@ -618,13 +625,6 @@ export default function Cursos() {
       setEmentaStatuses(map)
     }).catch(() => {})
   }, [])
-  const [filters, setFilters] = useState({
-    primaryTrails: [],
-    trails: [],
-    courses: [],
-    supervisors: [],
-    coordinators: [],
-  })
 
   const isCoordinator = user?.role === 'coordenador' || (user?.function || '').toLowerCase().includes('coordenador')
   const canManage = user?.role === 'administrador' || user?.role === 'supervisor' || isCoordinator

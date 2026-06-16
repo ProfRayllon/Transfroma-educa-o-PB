@@ -68,10 +68,12 @@ const STATUS_COLORS = {
 
 /* ─── helpers ─── */
 
-function Field({ label, children }) {
+function Field({ label, children, required }) {
   return (
     <div>
-      <label className="block text-xs font-semibold text-gray-600 mb-1.5">{label}</label>
+      <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
+      </label>
       {children}
     </div>
   )
@@ -98,7 +100,7 @@ function StatusControl({ label, value, options, canEdit, onChange }) {
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className={`text-xs font-semibold px-2.5 py-1 rounded-lg border cursor-pointer appearance-none
+          className={`text-xs font-semibold px-2.5 py-1 rounded-lg border cursor-pointer
             ${STATUS_COLORS[value] || STATUS_COLORS.pendente}`}
         >
           {options.map((o) => (
@@ -344,7 +346,6 @@ function EmentaViewModal({ course, ementa, form, materials, onClose, onPrint }) 
   const totalModules = new Set(courseMaterials.map((m) => m.module || 1)).size
   const producers = course.producers?.map((p) => p.name).join(', ') || '—'
   const specificObjs = (form.specificObjectives || []).filter(Boolean)
-  const resources = (form.educationalResources || []).map((v) => RESOURCE_OPTIONS.find((o) => o.value === v)?.label || v)
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -363,6 +364,7 @@ function EmentaViewModal({ course, ementa, form, materials, onClose, onPrint }) 
         </div>
 
         <div className="overflow-y-auto flex-1">
+          {/* Institutional header */}
           <div className="bg-gradient-to-r from-brand-900 to-brand-700 text-white px-8 py-8">
             <div className="text-[10px] font-bold tracking-[3px] text-white/60 uppercase mb-2">
               Secretaria de Educação · Transforma Educação PB
@@ -381,6 +383,7 @@ function EmentaViewModal({ course, ementa, form, materials, onClose, onPrint }) 
             </div>
           </div>
 
+          {/* Status bar */}
           <div className="flex items-center gap-6 px-8 py-3 bg-gray-50 border-b border-gray-100 flex-wrap">
             {[
               { label: 'Professor', val: ementa?.professorStatus || 'rascunho' },
@@ -396,6 +399,7 @@ function EmentaViewModal({ course, ementa, form, materials, onClose, onPrint }) 
             ))}
           </div>
 
+          {/* Content */}
           <div className="px-8 py-6 space-y-8">
             <SectionBlock num={1} title="Identificação do Curso">
               <div className="grid grid-cols-2 gap-3">
@@ -447,12 +451,12 @@ function EmentaViewModal({ course, ementa, form, materials, onClose, onPrint }) 
               </SectionBlock>
             )}
 
-            {resources.length > 0 && (
+            {(form.educationalResources || []).length > 0 && (
               <SectionBlock num={6} title="Recursos Educacionais">
                 <div className="flex flex-wrap gap-2">
-                  {resources.map((r) => (
-                    <span key={r} className="bg-brand-50 text-brand-700 border border-brand-100 text-xs font-semibold px-3 py-1 rounded-full">
-                      {r}
+                  {form.educationalResources.map((v) => (
+                    <span key={v} className="bg-brand-50 text-brand-700 border border-brand-100 text-xs font-semibold px-3 py-1 rounded-full">
+                      {RESOURCE_OPTIONS.find((o) => o.value === v)?.label || v}
                     </span>
                   ))}
                 </div>
@@ -504,22 +508,29 @@ export default function Ementa() {
 
   const canEdit = !!(
     user?.role === 'administrador'
-    || course?.producers?.some((p) => p.id === user?.id)
+    || course?.producers?.some((p) => Number(p.id) === Number(user?.id))
     || (user?.role === 'supervisor' && (course?.supervisorId === user?.id || course?.supervisorName === user?.name))
     || (isCoord && (course?.coordinatorId === user?.id || course?.coordinatorName === user?.name))
   )
 
-  const isProfessor = !!(course?.producers?.some((p) => p.id === user?.id)) || user?.role === 'administrador'
+  const isProfessor = !!(
+    user?.role === 'administrador'
+    || course?.producers?.some((p) => Number(p.id) === Number(user?.id))
+  )
 
-  const canEditSupStatus = user?.role === 'administrador'
+  const canEditSupStatus = !!(
+    user?.role === 'administrador'
     || (user?.role === 'supervisor' && (course?.supervisorId === user?.id || course?.supervisorName === user?.name))
+  )
 
-  const canEditCoordStatus = user?.role === 'administrador'
+  const canEditCoordStatus = !!(
+    user?.role === 'administrador'
     || (isCoord && (course?.coordinatorId === user?.id || course?.coordinatorName === user?.name))
+  )
 
   const isFinalizado = ementa?.professorStatus === 'concluido'
   const isApproved = isFinalizado && ementa?.supervisorStatus === 'valido' && ementa?.coordinatorStatus === 'valido'
-  const formDisabled = isFinalizado || !canEdit
+  const formDisabled = isFinalizado && !canEdit
 
   useEffect(() => {
     const load = async () => {
@@ -545,7 +556,7 @@ export default function Ementa() {
           })
         }
       } catch {
-        /* ementa ainda não existe */
+        /* ementa ainda não existe — ok */
       } finally {
         setLoading(false)
       }
@@ -750,7 +761,7 @@ export default function Ementa() {
       {/* Status bar */}
       <div className="card p-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-6 flex-wrap">
             <StatusControl
               label="Professor"
               value={ementa?.professorStatus || 'rascunho'}
@@ -851,6 +862,7 @@ export default function Ementa() {
         </div>
       </div>
 
+      {/* View modal */}
       {viewOpen && (
         <EmentaViewModal
           course={course}
@@ -862,6 +874,7 @@ export default function Ementa() {
         />
       )}
 
+      {/* Toast */}
       {toast && (
         <div className={`fixed bottom-6 right-6 z-[200] flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium animate-fade-in
           ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-gray-900 text-white'}`}>
