@@ -119,6 +119,25 @@ function AvatarTooltip({ name, role }) {
   )
 }
 
+function MiniAvatar({ name, roleLabel }) {
+  if (!name) return null
+  const initials = name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
+  return (
+    <div className="relative group inline-flex flex-shrink-0">
+      <div className="w-5 h-5 rounded-full bg-slate-500 text-white text-[9px] font-bold flex items-center justify-center cursor-default select-none">
+        {initials}
+      </div>
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none">
+        <div className="bg-gray-800 text-white text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-lg">
+          <div className="font-medium">{name}</div>
+          {roleLabel && <div className="text-gray-300 text-[10px] mt-0.5">{roleLabel}</div>}
+        </div>
+        <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+      </div>
+    </div>
+  )
+}
+
 function InlineStatusSelect({ value, options, onChange }) {
   const STATUS_COLORS = {
     nao_iniciado: 'text-gray-600 bg-gray-50 border-gray-200',
@@ -772,6 +791,9 @@ export default function Producao() {
                 const canEditThis = getCanEditMaterial(mat)
                 const canEditSupStatus = getCanEditSupervisorStatus(mat)
                 const canEditCoordStatus = getCanEditCoordinatorStatus(mat)
+                const matCourse = courses.find(c => c.name === mat.course)
+                const supName = matCourse?.supervisorName || null
+                const coordName = matCourse?.coordinatorName || null
                 return (
                 <tr key={mat.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                   <td className="table-cell text-center">
@@ -826,26 +848,32 @@ export default function Producao() {
                     )}
                   </td>
                   <td className="table-cell">
-                    {canEditSupStatus ? (
-                      <InlineStatusSelect
-                        value={mat.supervisorStatus || 'em_revisao'}
-                        options={SUPERVISOR_STATUS_OPTIONS}
-                        onChange={val => handleStatusChange(mat, 'supervisorStatus', val)}
-                      />
-                    ) : (
-                      <Badge status={mat.supervisorStatus || 'em_revisao'} />
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      <MiniAvatar name={supName} roleLabel="Supervisor" />
+                      {canEditSupStatus ? (
+                        <InlineStatusSelect
+                          value={mat.supervisorStatus || 'em_revisao'}
+                          options={SUPERVISOR_STATUS_OPTIONS}
+                          onChange={val => handleStatusChange(mat, 'supervisorStatus', val)}
+                        />
+                      ) : (
+                        <Badge status={mat.supervisorStatus || 'em_revisao'} />
+                      )}
+                    </div>
                   </td>
                   <td className="table-cell">
-                    {canEditCoordStatus ? (
-                      <InlineStatusSelect
-                        value={mat.coordinatorStatus || 'em_revisao'}
-                        options={COORDINATOR_STATUS_OPTIONS}
-                        onChange={val => handleStatusChange(mat, 'coordinatorStatus', val)}
-                      />
-                    ) : (
-                      <Badge status={mat.coordinatorStatus || 'em_revisao'} />
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      <MiniAvatar name={coordName} roleLabel="Coordenador" />
+                      {canEditCoordStatus ? (
+                        <InlineStatusSelect
+                          value={mat.coordinatorStatus || 'em_revisao'}
+                          options={COORDINATOR_STATUS_OPTIONS}
+                          onChange={val => handleStatusChange(mat, 'coordinatorStatus', val)}
+                        />
+                      ) : (
+                        <Badge status={mat.coordinatorStatus || 'em_revisao'} />
+                      )}
+                    </div>
                   </td>
                   {visibleCols.dataEntrega && (
                     <td className="table-cell text-gray-500">
