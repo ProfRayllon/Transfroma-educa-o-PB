@@ -5,6 +5,8 @@ import { BrandingProvider } from './context/BrandingContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { AvatarProvider } from './context/AvatarContext'
 import Layout from './components/layout/Layout'
+import Home from './pages/Home'
+import PublicCourses from './pages/PublicCourses'
 import Login from './pages/Login'
 import Painel from './pages/Painel'
 import Cursos from './pages/Cursos'
@@ -38,9 +40,10 @@ export default function App() {
         <BrandingProvider>
         <DataProvider>
         <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/catalogo-cursos" element={<PublicCourses />} />
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route index element={<Navigate to="/painel" replace />} />
+          <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route path="painel" element={<Painel />} />
             <Route path="cursos" element={<Cursos />} />
             <Route path="cursos/:courseId/ementa" element={<Ementa />} />
@@ -50,7 +53,7 @@ export default function App() {
             <Route path="notificacoes" element={<Notificacoes />} />
             <Route path="perfil" element={<Perfil />} />
           </Route>
-          <Route path="*" element={<Navigate to="/painel" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </DataProvider>
         </BrandingProvider>
