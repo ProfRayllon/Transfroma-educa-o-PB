@@ -1,162 +1,105 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { ComposableMap, Geographies, Geography } from 'react-simple-maps'
-import municipiosPB from '../../data/municipiosPB'
+import gresPB from '../../data/gresPB'
 
 const GEO_URL =
   'https://raw.githubusercontent.com/tbrugz/geodata-br/master/geojson/geojs-25-mun.json'
 
-const TOTAL = municipiosPB.reduce((s, m) => s + m.quantidade, 0)
-const MAX_QTD = municipiosPB[0].quantidade // já está ordenado desc
-
-// Normaliza nome para comparação (remove acentos, lower)
 const norm = (s) =>
-  s
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/['']/g, "'")
-    .trim()
+  s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/['']/g, "'").trim()
 
-// Mapeia nome normalizado → dados
-const dataMap = Object.fromEntries(municipiosPB.map((m) => [norm(m.municipio), m]))
+// Lookup pré-computado: normName → índice da GRE (0-15)
+const normToGRE = {}
+gresPB.forEach((gre, gi) => {
+  gre.municipios.forEach((m) => {
+    const k = norm(m)
+    if (!(k in normToGRE)) normToGRE[k] = gi
+  })
+})
 
-// Cor roxa baseada na quantidade (gradiente de intensidade)
-function purpleFor(quantidade) {
-  const ratio = Math.sqrt(quantidade / MAX_QTD)
-  const r = Math.round(80 + ratio * 100)
-  const g = Math.round(20 + ratio * 30)
-  const b = Math.round(160 + ratio * 80)
-  return `rgb(${r},${g},${b})`
-}
+const BRAND = '#7336C1'
+const GRAY  = '#dcd8eb'
+const NEON  = `drop-shadow(0 0 5px ${BRAND}) drop-shadow(0 0 12px rgba(115,54,193,0.55))`
 
-function useCountUp(target, duration = 900) {
-  const [value, setValue] = useState(0)
-  useEffect(() => {
-    if (target === 0) { setValue(0); return }
-    let raf
-    const start = performance.now()
-    const tick = (now) => {
-      const p = Math.min((now - start) / duration, 1)
-      const ease = 1 - Math.pow(1 - p, 3)
-      setValue(Math.round(target * ease))
-      if (p < 1) raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [target, duration])
-  return value
+function approxLabel(n) {
+  if (!n) return '+0'
+  const round = n >= 2000 ? 1000 : n >= 400 ? 100 : 50
+  return '+' + (Math.round(n / round) * round).toLocaleString('pt-BR')
 }
 
 export default function MapaParaiba() {
-  const sectionRef = useRef(null)
-  const [litSet, setLitSet] = useState(new Set())
-  const [activeCity, setActiveCity] = useState(municipiosPB[0])
-  const [manualActive, setManualActive] = useState(false)
-  const started = useRef(false)
+  const sectionRef  = useRef(null)
+  const intervalRef = useRef(null)
+  const [activeGRE, setActiveGRE] = useState(-1)
 
-  // Ordem de animação: maior → menor
-  const animOrder = useMemo(() => [...municipiosPB].sort((a, b) => b.quantidade - a.quantidade), [])
+  const startLoop = useCallback(() => {
+    if (intervalRef.current) return
+    let gi = 0
+    setActiveGRE(gi)
+    intervalRef.current = setInterval(() => {
+      gi = (gi + 1) % gresPB.length
+      setActiveGRE(gi)
+    }, 1500)
+  }, [])
 
-  // Inicia animação quando seção entra na viewport
+  // Limpa intervalo ao desmontar
+  useEffect(() => () => clearInterval(intervalRef.current), [])
+
+  // Inicia quando a seção entra na viewport
   useEffect(() => {
     const obs = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !started.current) {
-          started.current = true
-          let i = 0
-          const STEP = 55 // ms entre cada município
-
-          const tick = () => {
-            if (i >= animOrder.length) return
-            const city = animOrder[i]
-            setLitSet((prev) => new Set([...prev, norm(city.municipio)]))
-            if (!manualActive) setActiveCity(city)
-            i++
-            setTimeout(tick, STEP)
-          }
-          tick()
-        }
-      },
+      ([entry]) => { if (entry.isIntersecting) startLoop() },
       { threshold: 0.2 },
     )
     if (sectionRef.current) obs.observe(sectionRef.current)
     return () => obs.disconnect()
-  }, [animOrder, manualActive])
+  }, [startLoop])
 
-  const displayCount = useCountUp(activeCity?.quantidade ?? 0)
-  const totalCount = useCountUp(litSet.size > 0 ? TOTAL : 0, 12000)
+  const gre = activeGRE >= 0 ? gresPB[activeGRE] : null
 
   return (
-    <section ref={sectionRef} className="overflow-hidden bg-[#0a0615] px-[22px] pb-16 pt-14">
+    <section ref={sectionRef} className="overflow-hidden bg-white px-[22px] pb-16 pt-14">
       <div className="mx-auto max-w-[1240px]">
-        {/* Header */}
-        <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="mb-1 text-xs font-black uppercase tracking-[0.3em] text-[#a855f7]">Alcance do programa</p>
-            <h2 className="text-[38px] font-black leading-tight text-white">
-              Paraíba transformada
-            </h2>
-          </div>
-          <div className="text-right">
-            <span className="block text-[48px] font-black leading-none tabular-nums text-[#c084fc]">
-              {totalCount.toLocaleString('pt-BR')}
-            </span>
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-white/50">cursistas em todo o estado</span>
-          </div>
+        {/* Título */}
+        <div className="mb-8">
+          <p className="mb-1 text-xs font-black uppercase tracking-[0.3em] text-[#7336C1]">
+            Alcance do programa
+          </p>
+          <h2 className="text-[38px] font-black leading-tight text-[#1c1033]">
+            Paraíba transformada
+          </h2>
         </div>
 
-        {/* Mapa + painel lateral */}
-        <div className="grid items-center gap-6 lg:grid-cols-[1fr_320px]">
-          {/* Mapa — ocupa quase toda a largura */}
-          <div className="relative overflow-hidden rounded-2xl border border-[#2d1b4e] bg-[#0e0425]"
-               style={{ boxShadow: '0 0 60px rgba(168,85,247,.18)' }}>
+        {/* Mapa + painel */}
+        <div className="grid items-center gap-10 lg:grid-cols-[1fr_240px]">
+          {/* Mapa — fundo transparente, somente GRE ativa acende */}
+          <div style={{ overflow: 'visible' }}>
             <ComposableMap
               projection="geoMercator"
-              projectionConfig={{ scale: 10500, center: [-36.75, -7.2] }}
-              style={{ width: '100%', height: 'auto', display: 'block' }}
-              viewBox="0 0 900 620"
+              projectionConfig={{ scale: 10500, center: [-36.75, -7.25] }}
+              style={{ width: '100%', height: 'auto', display: 'block', overflow: 'visible' }}
+              viewBox="30 60 840 440"
             >
               <Geographies geography={GEO_URL}>
                 {({ geographies }) =>
                   geographies.map((geo) => {
-                    const geoName = geo.properties.name || geo.properties.NM_MUN || ''
-                    const key = norm(geoName)
-                    const isLit = litSet.has(key)
-                    const isActive = norm(activeCity?.municipio ?? '') === key
-                    const cityData = dataMap[key]
-
+                    const key      = norm(geo.properties.name || geo.properties.NM_MUN || '')
+                    const isActive = normToGRE[key] === activeGRE
                     return (
                       <Geography
                         key={geo.rsmKey}
                         geography={geo}
-                        onClick={() => {
-                          if (cityData) {
-                            setActiveCity(cityData)
-                            setManualActive(true)
-                          }
-                        }}
                         style={{
                           default: {
-                            fill: isActive
-                              ? '#e879f9'
-                              : isLit
-                              ? purpleFor(cityData?.quantidade ?? 1)
-                              : '#1a0535',
-                            stroke: '#0a0615',
-                            strokeWidth: 0.5,
-                            filter: isActive
-                              ? 'drop-shadow(0 0 8px #d946ef) drop-shadow(0 0 20px #a855f7)'
-                              : 'none',
-                            transition: 'fill 0.3s ease, filter 0.3s ease',
-                            cursor: 'pointer',
-                            outline: 'none',
+                            fill:        isActive ? BRAND : GRAY,
+                            stroke:      isActive ? BRAND : GRAY,
+                            strokeWidth: 0.3,
+                            filter:      isActive ? NEON : 'none',
+                            transition:  'fill 0.55s ease, stroke 0.55s ease, filter 0.55s ease',
+                            outline:     'none',
                           },
-                          hover: {
-                            fill: '#d946ef',
-                            filter: 'drop-shadow(0 0 6px #a855f7)',
-                            outline: 'none',
-                          },
-                          pressed: { fill: '#c026d3', outline: 'none' },
+                          hover:   { fill: '#5b1fa8', stroke: '#5b1fa8', outline: 'none' },
+                          pressed: { fill: '#4a1882', stroke: '#4a1882', outline: 'none' },
                         }}
                       />
                     )
@@ -166,61 +109,46 @@ export default function MapaParaiba() {
             </ComposableMap>
           </div>
 
-          {/* Painel lateral — fixo à direita */}
-          <div className="flex flex-col gap-3 rounded-2xl border border-[#2d1b4e] bg-[#0e0425] p-7"
-               style={{ boxShadow: '0 0 40px rgba(168,85,247,.12)' }}>
-            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#a855f7]">
-              {manualActive ? 'Selecionado' : 'Em destaque'}
-            </p>
-            <h3
-              key={activeCity?.municipio}
-              className="text-[28px] font-black leading-tight text-white"
-              style={{ animation: 'fadeSlideIn 0.35s ease' }}
-            >
-              {activeCity?.municipio ?? '—'}
-            </h3>
-
-            <div className="mt-1">
-              <span className="block text-[58px] font-black leading-none tabular-nums text-[#c084fc]">
-                {displayCount.toLocaleString('pt-BR')}
-              </span>
-              <span className="text-xs font-semibold uppercase tracking-wider text-white/50">cursistas</span>
-            </div>
-
-            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[#1a0535]">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-[#7336C0] to-[#e879f9] transition-all duration-700"
-                style={{ width: `${((activeCity?.quantidade ?? 0) / MAX_QTD) * 100}%` }}
-              />
-            </div>
-            <p className="text-[10px] text-white/35">vs maior município do estado</p>
-
-            <div className="mt-4 border-t border-[#2d1b4e] pt-4">
-              <p className="text-[10px] font-black uppercase tracking-wider text-white/30">Total no estado</p>
-              <span className="text-[22px] font-black tabular-nums text-[#7c3aed]">
-                {totalCount.toLocaleString('pt-BR')}
-              </span>
-              <span className="ml-1 text-xs text-white/40">cursistas</span>
-            </div>
-
-            {!manualActive ? (
-              <p className="mt-2 text-[10px] text-white/25">Clique em um município para fixar</p>
+          {/* Painel lateral */}
+          <div className="flex min-h-[200px] flex-col justify-center gap-3">
+            {gre ? (
+              <>
+                <p
+                  key={activeGRE + '-label'}
+                  className="text-[13px] font-black uppercase tracking-[0.3em] text-[#7336C1]"
+                  style={{ animation: 'fadeUp 0.3s ease both' }}
+                >
+                  {gre.gre}
+                </p>
+                <h3
+                  key={activeGRE + '-sede'}
+                  className="text-[42px] font-black leading-tight text-[#1c1033]"
+                  style={{ animation: 'fadeUp 0.4s ease both' }}
+                >
+                  {gre.sede}
+                </h3>
+                <div key={activeGRE + '-val'} style={{ animation: 'fadeUp 0.5s ease both' }}>
+                  <span className="block text-[76px] font-black leading-none tabular-nums text-[#7336C1]">
+                    {approxLabel(gre.total)}
+                  </span>
+                  <span className="text-[13px] font-semibold uppercase tracking-wider text-gray-400">
+                    inscrições
+                  </span>
+                </div>
+              </>
             ) : (
-              <button
-                type="button"
-                onClick={() => setManualActive(false)}
-                className="mt-3 w-fit rounded-full border border-[#a855f7]/30 px-4 py-1.5 text-[11px] font-bold text-[#a855f7] hover:bg-[#a855f7]/10 transition"
-              >
-                Retomar animação
-              </button>
+              <div className="flex items-center gap-2">
+                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#7336C1]" />
+                <span className="text-[11px] text-gray-400">carregando…</span>
+              </div>
             )}
           </div>
         </div>
       </div>
 
       <style>{`
-        @keyframes fadeSlideIn {
-          from { opacity: 0; transform: translateY(8px); }
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(10px); }
           to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>

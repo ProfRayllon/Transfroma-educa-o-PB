@@ -88,13 +88,13 @@ export default function PublicCourses() {
       <PublicNav />
 
       {/* ── Hero ── */}
-      <section className="border-b border-[#e9d5ff] bg-[#faf5ff] px-[22px] py-12">
+      <section className="bg-[#4A238A] px-[22px] py-14">
         <div className="mx-auto max-w-[1180px]">
-          <span className="mb-2 inline-block rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-black uppercase tracking-wider text-[#6f35b5]">
+          <span className="mb-2 inline-block rounded-full bg-white/20 px-3 py-1 text-xs font-black uppercase tracking-wider text-white/90 ring-1 ring-white/25">
             Formação 2026
           </span>
-          <h1 className="text-[36px] font-black leading-tight text-[#1c1033]">Trilhas Formativas</h1>
-          <p className="mt-2 max-w-2xl text-[16px] leading-relaxed text-[#566176]">
+          <h1 className="text-[36px] font-black leading-tight text-white">Trilhas Formativas</h1>
+          <p className="mt-2 max-w-2xl text-[16px] leading-relaxed text-white/70">
             Portal direcionado aos cursistas da formação Transforma Educação PB para consulta, escolha e inscrição nos cursos disponíveis.
           </p>
         </div>
@@ -131,7 +131,7 @@ export default function PublicCourses() {
         </div>
 
         {/* Cards */}
-        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
           {filteredCourses.map((course) => (
             <article
               key={course.id}
@@ -141,7 +141,7 @@ export default function PublicCourses() {
                 <img
                   src={course.image}
                   alt={course.title}
-                  className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]"
+                  className="h-full w-full object-cover object-top transition duration-500 group-hover:scale-[1.04]"
                 />
                 <span className={`absolute left-3 top-3 rounded-full px-3 py-1 text-xs font-black backdrop-blur-sm ${
                   course.available
