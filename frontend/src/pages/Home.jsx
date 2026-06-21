@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, CheckCircle, Download } from 'lucide-react'
+import { ArrowRight, Download } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
 import MapaParaiba from '../components/public/MapaParaiba'
@@ -398,6 +398,9 @@ export default function Home() {
           </div>
         </section>
 
+        {/* ── Fluxo ── */}
+        <FluxoTimeline />
+
         {/* ── Guia ── */}
         <section id="guia" className="relative overflow-hidden bg-[#3b1d7a] px-[22px] py-20">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(168,85,247,.25)_0%,_transparent_60%)]" />
@@ -430,40 +433,28 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── Fluxo ── */}
-        <FluxoTimeline />
-
         <MapaParaiba />
 
         {/* ── AVA ── */}
-        <section className="mx-auto max-w-[1180px] px-[22px] py-14">
-          <div className="grid items-center gap-8 overflow-hidden rounded-2xl border border-[rgba(20,131,95,.2)] bg-gradient-to-br from-[#ecfff5] to-[#f0fdf6] p-8 shadow-[0_12px_32px_rgba(20,131,95,.10)] md:grid-cols-[1fr_0.9fr]">
-            <div>
-              <span className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-[#dff8eb] px-3 py-1.5 text-xs font-black uppercase tracking-wide text-[#14835f]">
-                <CheckCircle size={12} /> Ambiente virtual
-              </span>
-              <h2 className="mb-3 text-[32px] font-black leading-tight tracking-tight">
-                Acesse o <span className="text-[#14835f]">AVA RIEH/PB</span>
-              </h2>
-              <p className="text-[16px] leading-relaxed text-[#374151]">
-                O <strong className="text-[#14835f]">AVA</strong> é o ambiente virtual onde ficam as aulas,
-                materiais, atividades e acompanhamento dos cursos do Transforma Educação 2026.
-              </p>
-              <p className="mt-3 text-[16px] leading-relaxed text-[#374151]">
-                Após concluir sua inscrição e validar o CPF, entre por meio da sua conta <strong className="text-[#14835f]">gov.br</strong>.
-              </p>
-              <div className="mt-7">
-                <a
-                  className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-[#14835f] px-7 py-3 text-[15px] font-black text-white shadow-md transition hover:bg-[#0f6d4f] hover:-translate-y-0.5"
-                  href={avaUrl} target="_blank" rel="noreferrer"
-                >
-                  Acessar AVA RIEH/PB <ArrowRight size={16} />
-                </a>
-              </div>
-            </div>
-            <div className="overflow-hidden rounded-xl shadow-[0_10px_28px_rgba(20,131,95,.14)]">
-              <img src={avaImage} alt="Ambiente Virtual de Aprendizagem RIEH PB" className="h-full min-h-[260px] w-full object-cover" />
-            </div>
+        <section className="bg-[#f0fdf4] px-[22px] py-24">
+          <div className="mx-auto max-w-[660px] text-center">
+            <span className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#bbf7d0] bg-white px-4 py-1.5 text-xs font-black uppercase tracking-[0.22em] text-[#166534]">
+              <span className="h-2 w-2 rounded-full bg-[#16a34a]" /> Ambiente virtual
+            </span>
+            <h2 className="mb-5 text-[52px] font-black leading-tight text-[#14532d]">
+              Acesse o <span className="text-[#16a34a]">AVA RIEH/PB</span>
+            </h2>
+            <p className="mb-10 text-[18px] leading-relaxed text-[#374151]">
+              O ambiente virtual reúne aulas, materiais, atividades e o acompanhamento dos cursos. Após validar o CPF, entre com sua conta <strong className="text-[#14532d]">gov.br</strong>.
+            </p>
+            <a
+              href={avaUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 rounded-full bg-[#14532d] px-9 py-4 text-[16px] font-black text-white shadow-md transition hover:-translate-y-0.5 hover:bg-[#166534] hover:shadow-lg"
+            >
+              Acessar AVA RIEH/PB <ArrowRight size={16} />
+            </a>
           </div>
         </section>
 
