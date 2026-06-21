@@ -7,9 +7,9 @@ const ROLE_LABELS = {
   administrador: 'Administrador',
   coordenador: 'Coordenador',
   supervisor: 'Supervisor',
-  professor: 'Professor/Produtor',
+  professor: 'Professor',
   tutor: 'Tutor',
-  tecnico: 'Técnico',
+  tecnico: 'Apoio tecnico',
   gestao: 'Gestão de Pessoas',
 }
 

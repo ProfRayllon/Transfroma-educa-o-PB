@@ -174,6 +174,7 @@ function userPayload(body, { requirePassword = false } = {}) {
     registration: String(body.registration || '').trim() || null,
     role: String(body.role || '').trim(),
     function: String(body.function || '').trim() || null,
+    area: String(body.area || '').trim() || null,
     status: String(body.status || 'ativo').trim(),
     password: body.password ? String(body.password) : '',
   }
@@ -205,6 +206,10 @@ function userPayload(body, { requirePassword = false } = {}) {
 
   if (payload.function && payload.function.length > 100) {
     return { error: 'A funcao deve ter no maximo 100 caracteres.' }
+  }
+
+  if (payload.area && payload.area.length > 150) {
+    return { error: 'A area deve ter no maximo 150 caracteres.' }
   }
 
   if (requirePassword && payload.password.length < 8) {

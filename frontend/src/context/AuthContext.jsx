@@ -121,7 +121,7 @@ const PERMISSIONS = {
     'view_pessoas', 'update_atividades', 'view_ocorrencias',
   ],
   tecnico: [
-    'view_pessoas', 'view_frequencia', 'view_atividades', 'view_ocorrencias', 'update_atividades',
+    'view_pessoas', 'view_frequencia', 'view_atividades', 'view_ocorrencias', 'view_producao', 'view_cursos',
   ],
   gestao: [
     'view_pessoas', 'edit_frequencia', 'update_funcional', 'view_ocorrencias',

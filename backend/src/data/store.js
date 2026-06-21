@@ -23,6 +23,7 @@ function mapUserRow(row) {
     registration: row.registration,
     role: row.role,
     function: row.function,
+    area: row.area,
     avatar: row.avatar,
     status: row.status,
     lastAccess: row.last_access,
@@ -199,15 +200,20 @@ async function ensureMysqlSchema() {
     "ALTER TABLE users MODIFY role ENUM('administrador','coordenador','supervisor','professor','tutor','tecnico','gestao') NOT NULL DEFAULT 'professor'"
   )
 
-  const [avatarColumns] = await pool.execute(
+  const [userExtraColumns] = await pool.execute(
     `SELECT COLUMN_NAME
      FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE()
        AND TABLE_NAME = 'users'
-       AND COLUMN_NAME = 'avatar'`
+       AND COLUMN_NAME IN ('area', 'avatar')`
   )
+  const existingUserExtraColumns = new Set(userExtraColumns.map((column) => column.COLUMN_NAME))
 
-  if (avatarColumns.length === 0) {
+  if (!existingUserExtraColumns.has('area')) {
+    await pool.execute('ALTER TABLE users ADD COLUMN area VARCHAR(150) DEFAULT NULL AFTER `function`')
+  }
+
+  if (!existingUserExtraColumns.has('avatar')) {
     await pool.execute('ALTER TABLE users ADD COLUMN avatar MEDIUMTEXT DEFAULT NULL AFTER `function`')
   }
 
@@ -388,8 +394,8 @@ async function seedMysqlIfNeeded() {
 
   for (const user of users) {
     await pool.execute(
-      `INSERT INTO users (id, name, email, password_hash, registration, role, \`function\`, avatar, status, last_access, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO users (id, name, email, password_hash, registration, role, \`function\`, area, avatar, status, last_access, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         user.id,
         user.name,
@@ -398,6 +404,7 @@ async function seedMysqlIfNeeded() {
         user.registration,
         user.role,
         user.function,
+        user.area || null,
         user.avatar || null,
         user.status,
         user.lastAccess || null,
@@ -569,8 +576,8 @@ async function createUser(payload) {
 
   const passwordHash = await bcrypt.hash(payload.password, 10)
   const [result] = await pool.execute(
-    `INSERT INTO users (name, email, password_hash, registration, role, \`function\`, avatar, status, last_access, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO users (name, email, password_hash, registration, role, \`function\`, area, avatar, status, last_access, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       payload.name,
       payload.email,
@@ -578,6 +585,7 @@ async function createUser(payload) {
       payload.registration || null,
       payload.role,
       payload.function || null,
+      payload.area || null,
       payload.avatar || null,
       payload.status || 'ativo',
       null,
@@ -614,6 +622,7 @@ async function updateUser(id, updates) {
     registration: updates.registration,
     role: updates.role,
     '`function`': updates.function,
+    area: updates.area,
     avatar: updates.avatar,
     status: updates.status,
   }

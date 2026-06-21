@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
   registration VARCHAR(30) DEFAULT NULL,
   role ENUM('administrador','coordenador','supervisor','professor','tutor','tecnico','gestao') NOT NULL DEFAULT 'professor',
   `function` VARCHAR(100) DEFAULT NULL,
+  area VARCHAR(150) DEFAULT NULL,
   avatar MEDIUMTEXT DEFAULT NULL,
   status ENUM('ativo','inativo','pendente','desligado','substituido') NOT NULL DEFAULT 'ativo',
   last_access DATETIME DEFAULT NULL,
