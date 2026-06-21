@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, CheckCircle } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
@@ -12,24 +12,24 @@ const avaUrl = 'https://pb.ava.rieh.nees.ufal.br/login/index.php'
 
 const allCourses = [
   { title: 'Google for Education', tag: 'Trilha Institucional', workload: '20h', status: 'Em andamento', image: '/images/home/curso-google.png' },
-  { title: 'Antes que aconteca nas Escolas', tag: 'Trilha Institucional', workload: '20h', status: 'Em breve', image: '/images/home/curso-antes-escolas.png' },
-  { title: 'Legislacao Educacional na Pratica Docente', tag: 'Trilha Institucional', workload: '20h', status: 'Em breve', image: '/images/home/curso-legislacao.png' },
+  { title: 'Antes que aconteça nas Escolas', tag: 'Trilha Institucional', workload: '20h', status: 'Em breve', image: '/images/home/curso-antes-escolas.png' },
+  { title: 'Legislação Educacional na Prática Docente', tag: 'Trilha Institucional', workload: '20h', status: 'Em breve', image: '/images/home/curso-legislacao.png' },
 ]
 
 const timeline = [
-  ['1', 'Inscricao', 'Realize a inscricao no formulario do Programa de Formacao.'],
-  ['2', 'Acesso ao portal', 'Acesse o portal do Transforma Educacao PB, na area de cursos.'],
+  ['1', 'Inscrição', 'Realize a inscrição no formulário do Programa de Formação.'],
+  ['2', 'Acesso ao portal', 'Acesse o portal do Transforma Educação PB, na área de cursos.'],
   ['3', 'Escolha do curso', 'Selecione o curso desejado e confira a trilha correspondente.'],
-  ['4', 'Validacao do CPF', 'Informe o CPF para confirmar se sua inscricao foi localizada.'],
-  ['5', 'Acesso ao AVA', 'Apos a validacao, acesse o Ambiente Virtual de Aprendizagem.'],
-  ['6', 'Entrada gov.br', 'Entre no ambiente usando o sistema de autenticacao do gov.br.'],
+  ['4', 'Validação do CPF', 'Informe o CPF para confirmar se sua inscrição foi localizada.'],
+  ['5', 'Acesso ao AVA', 'Após a validação, acesse o Ambiente Virtual de Aprendizagem.'],
+  ['6', 'Entrada gov.br', 'Entre no ambiente usando o sistema de autenticação do gov.br.'],
 ]
 
 const stats = [
-  { value: 200, prefix: '+', suffix: 'h', label: 'de formacao' },
+  { value: 200, prefix: '+', suffix: 'h', label: 'de formação' },
   { value: 100, suffix: '%', label: 'certificados emitidos para concluintes' },
   { value: 13000, prefix: '+', label: 'cursistas' },
-  { value: 95, prefix: '+', suffix: '%', label: 'de satisfacao' },
+  { value: 95, prefix: '+', suffix: '%', label: 'de satisfação' },
 ]
 
 const FILTERS = [
@@ -37,7 +37,8 @@ const FILTERS = [
   { label: 'Institucional', match: 'Trilha Institucional' },
   { label: 'Socioemocional', match: 'Educacao Socioemocional' },
   { label: 'Tecnologia', match: 'Educacao, Ciencia e Tecnologia' },
-  { label: 'Gestao', match: 'Gestao Pedagogica' },
+  { label: 'Gestão', match: 'Gestao Pedagogica' },
+  { label: 'Pedagogia', match: 'Gestao Pedagogica' },
   { label: 'Inclusiva', match: 'Educacao Inclusiva' },
 ]
 
@@ -143,6 +144,7 @@ function FluxoTimeline() {
           Fluxo de acesso<br />aos cursos
         </h2>
 
+
         {/* Desktop: linha horizontal com círculos */}
         <div className="hidden lg:block">
           {/* Linha conectora animada */}
@@ -243,8 +245,9 @@ function FluxoTimeline() {
 }
 
 export default function Home() {
-  const [activeFilter, setActiveFilter] = useState(0)
+  const [activeFilter, setActiveFilter] = useState(1)
   const carouselRef = useRef(null)
+  const navigate = useNavigate()
 
   const visibleCourses = useMemo(() => {
     const match = FILTERS[activeFilter]?.match
@@ -275,15 +278,15 @@ export default function Home() {
           <div className="mb-6 flex items-end justify-between gap-4">
             <div>
               <span className="mb-2 inline-block rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-black uppercase tracking-wider text-[#6f35b5]">
-                Formacao 2026
+                Formação 2026
               </span>
-              <h2 className="text-[34px] font-black leading-tight tracking-tight">Transforma Educacao PB</h2>
+              <h2 className="text-[34px] font-black leading-tight tracking-tight">Transforma Educação PB</h2>
               <p className="mt-2 max-w-xl text-[17px] leading-relaxed text-[#566176]">
-                Trilhas formativas para fortalecer a pratica pedagogica e elevar a qualidade da educacao na Paraiba.
+                Trilhas formativas para fortalecer a prática pedagógica e elevar a qualidade da educação na Paraíba.
               </p>
             </div>
             <Link to="/catalogo-cursos" className="shrink-0 text-sm font-black text-[#6f35b5] hover:underline">
-              Ver catalogo →
+              Ver catálogo →
             </Link>
           </div>
 
@@ -293,7 +296,9 @@ export default function Home() {
               <button
                 key={f.label}
                 type="button"
-                onClick={() => setActiveFilter(i)}
+                onClick={() => {
+                  if (i === 0) { navigate('/catalogo-cursos') } else { setActiveFilter(i) }
+                }}
                 className={`shrink-0 whitespace-nowrap rounded-full border px-5 py-2 text-sm font-bold transition ${
                   activeFilter === i
                     ? 'border-[#6f35b5] bg-[#6f35b5] text-white shadow-md'
@@ -312,7 +317,17 @@ export default function Home() {
               className="flex gap-5 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               style={{ scrollSnapType: 'x mandatory' }}
             >
-              {(visibleCourses.length > 0 ? visibleCourses : allCourses).map((course) => (
+              {visibleCourses.length === 0 && (
+                <div className="flex h-[240px] w-full items-center justify-center rounded-2xl border border-dashed border-[#ddd6fe]">
+                  <div className="text-center">
+                    <p className="mb-3 text-[#9070c8]">Nenhum curso disponível nesta trilha ainda.</p>
+                    <Link to="/catalogo-cursos" className="text-sm font-black text-[#6f35b5] hover:underline">
+                      Ver catálogo completo →
+                    </Link>
+                  </div>
+                </div>
+              )}
+              {visibleCourses.map((course) => (
                 <Link
                   key={course.title}
                   to="/catalogo-cursos"
@@ -377,11 +392,11 @@ export default function Home() {
                 Acesse o <span className="text-[#14835f]">AVA RIEH/PB</span>
               </h2>
               <p className="text-[16px] leading-relaxed text-[#374151]">
-                O <strong className="text-[#14835f]">AVA</strong> e o ambiente virtual onde ficam as aulas,
-                materiais, atividades e acompanhamento dos cursos do Transforma Educacao 2026.
+                O <strong className="text-[#14835f]">AVA</strong> é o ambiente virtual onde ficam as aulas,
+                materiais, atividades e acompanhamento dos cursos do Transforma Educação 2026.
               </p>
               <p className="mt-3 text-[16px] leading-relaxed text-[#374151]">
-                Apos concluir sua inscricao e validar o CPF, entre por meio da sua conta <strong className="text-[#14835f]">gov.br</strong>.
+                Após concluir sua inscrição e validar o CPF, entre por meio da sua conta <strong className="text-[#14835f]">gov.br</strong>.
               </p>
               <div className="mt-7">
                 <a
@@ -406,10 +421,10 @@ export default function Home() {
                 Formacao continuada
               </span>
               <h2 className="mb-4 text-[40px] font-black uppercase leading-tight text-white tracking-tight">
-                Transforme<br />sua pratica
+                Transforme<br />sua prática
               </h2>
               <p className="text-[17px] leading-relaxed text-white/80">
-                Participe de formacoes alinhadas a realidade da rede com intencao, metodo e resultado.
+                Participe de formações alinhadas à realidade da rede com intenção, método e resultado.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Link
@@ -441,7 +456,7 @@ export default function Home() {
         {/* ── Resultados ── */}
         <section className="mx-auto max-w-[1180px] px-[22px] py-14">
           <span className="mb-2 inline-block rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-black uppercase tracking-wider text-[#6f35b5]">
-            Numeros
+            Números
           </span>
           <h2 className="mb-8 text-[32px] font-black leading-tight tracking-tight">Resultados esperados</h2>
           <div className="grid items-stretch gap-6 md:grid-cols-[0.85fr_1.15fr]">
