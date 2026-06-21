@@ -14,12 +14,8 @@ export default function PublicNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-[#ded6ea] bg-white">
       <div className="mx-auto flex h-16 max-w-[1180px] items-center justify-between px-[22px]">
-        <Link to="/" className="flex items-center gap-3">
-          <img src="/logo.png" alt="Transforma Educação PB" className="h-9 w-auto" style={{ filter: logoFilter }} />
-          <div>
-            <p className="text-xl font-black leading-tight text-[#7336C0]">Transforma</p>
-            <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-[#c14aa0]">Educação PB</p>
-          </div>
+        <Link to="/">
+          <img src="/logo.png" alt="Transforma Educação PB" className="h-10 w-auto" style={{ filter: logoFilter }} />
         </Link>
 
         <nav className="flex items-center gap-0.5">
