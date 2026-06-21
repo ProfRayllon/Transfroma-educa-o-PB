@@ -87,31 +87,34 @@ export default function MapaParaiba() {
   const totalCount = useCountUp(litSet.size > 0 ? TOTAL : 0, 12000)
 
   return (
-    <section ref={sectionRef} className="overflow-hidden bg-[#0a0615] px-[22px] py-20">
-      <div className="mx-auto max-w-[1180px]">
+    <section ref={sectionRef} className="overflow-hidden bg-[#0a0615] px-[22px] pb-16 pt-14">
+      <div className="mx-auto max-w-[1240px]">
         {/* Header */}
-        <p className="mb-2 text-xs font-black uppercase tracking-[0.3em] text-[#a855f7]">Alcance do programa</p>
-        <div className="mb-12 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <h2 className="text-[38px] font-black leading-tight text-white">
-            Paraíba<br />transformada
-          </h2>
+        <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="mb-1 text-xs font-black uppercase tracking-[0.3em] text-[#a855f7]">Alcance do programa</p>
+            <h2 className="text-[38px] font-black leading-tight text-white">
+              Paraíba transformada
+            </h2>
+          </div>
           <div className="text-right">
-            <span className="block text-[42px] font-black leading-none tabular-nums text-[#c084fc]">
+            <span className="block text-[48px] font-black leading-none tabular-nums text-[#c084fc]">
               {totalCount.toLocaleString('pt-BR')}
             </span>
-            <span className="text-sm font-semibold uppercase tracking-wider text-white/50">cursistas em todo o estado</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-white/50">cursistas em todo o estado</span>
           </div>
         </div>
 
         {/* Mapa + painel lateral */}
-        <div className="grid items-center gap-10 lg:grid-cols-[1.4fr_0.6fr]">
-          {/* Mapa */}
-          <div className="relative">
+        <div className="grid items-center gap-6 lg:grid-cols-[1fr_320px]">
+          {/* Mapa — ocupa quase toda a largura */}
+          <div className="relative overflow-hidden rounded-2xl border border-[#2d1b4e] bg-[#0e0425]"
+               style={{ boxShadow: '0 0 60px rgba(168,85,247,.18)' }}>
             <ComposableMap
               projection="geoMercator"
-              projectionConfig={{ scale: 5200, center: [-36.75, -7.15] }}
-              style={{ width: '100%', height: 'auto' }}
-              viewBox="0 0 800 560"
+              projectionConfig={{ scale: 10500, center: [-36.75, -7.2] }}
+              style={{ width: '100%', height: 'auto', display: 'block' }}
+              viewBox="0 0 900 620"
             >
               <Geographies geography={GEO_URL}>
                 {({ geographies }) =>
@@ -138,19 +141,19 @@ export default function MapaParaiba() {
                               ? '#e879f9'
                               : isLit
                               ? purpleFor(cityData?.quantidade ?? 1)
-                              : '#16052e',
+                              : '#1a0535',
                             stroke: '#0a0615',
-                            strokeWidth: 0.6,
+                            strokeWidth: 0.5,
                             filter: isActive
-                              ? 'drop-shadow(0 0 6px #d946ef) drop-shadow(0 0 14px #a855f7)'
+                              ? 'drop-shadow(0 0 8px #d946ef) drop-shadow(0 0 20px #a855f7)'
                               : 'none',
-                            transition: 'fill 0.35s ease, filter 0.35s ease',
+                            transition: 'fill 0.3s ease, filter 0.3s ease',
                             cursor: 'pointer',
                             outline: 'none',
                           },
                           hover: {
                             fill: '#d946ef',
-                            filter: 'drop-shadow(0 0 5px #a855f7)',
+                            filter: 'drop-shadow(0 0 6px #a855f7)',
                             outline: 'none',
                           },
                           pressed: { fill: '#c026d3', outline: 'none' },
@@ -163,43 +166,50 @@ export default function MapaParaiba() {
             </ComposableMap>
           </div>
 
-          {/* Painel lateral */}
-          <div className="flex flex-col gap-2">
-            <p className="text-xs font-black uppercase tracking-[0.3em] text-[#a855f7]">
-              {manualActive ? 'Município selecionado' : 'Município em destaque'}
+          {/* Painel lateral — fixo à direita */}
+          <div className="flex flex-col gap-3 rounded-2xl border border-[#2d1b4e] bg-[#0e0425] p-7"
+               style={{ boxShadow: '0 0 40px rgba(168,85,247,.12)' }}>
+            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[#a855f7]">
+              {manualActive ? 'Selecionado' : 'Em destaque'}
             </p>
             <h3
               key={activeCity?.municipio}
-              className="text-[32px] font-black leading-tight text-white transition-all"
-              style={{ animation: 'fadeSlideIn 0.4s ease' }}
+              className="text-[28px] font-black leading-tight text-white"
+              style={{ animation: 'fadeSlideIn 0.35s ease' }}
             >
               {activeCity?.municipio ?? '—'}
             </h3>
-            <div className="mt-2">
-              <span className="block text-[64px] font-black leading-none tabular-nums text-[#c084fc]">
+
+            <div className="mt-1">
+              <span className="block text-[58px] font-black leading-none tabular-nums text-[#c084fc]">
                 {displayCount.toLocaleString('pt-BR')}
               </span>
-              <span className="text-sm font-semibold uppercase tracking-wider text-white/50">cursistas</span>
+              <span className="text-xs font-semibold uppercase tracking-wider text-white/50">cursistas</span>
             </div>
 
-            <div className="mt-6 h-1.5 w-full overflow-hidden rounded-full bg-[#2d1b4e]">
+            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[#1a0535]">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-[#7336C0] to-[#e879f9] transition-all duration-700"
                 style={{ width: `${((activeCity?.quantidade ?? 0) / MAX_QTD) * 100}%` }}
               />
             </div>
-            <p className="mt-1 text-[11px] text-white/40">
-              em relação ao município com mais cursistas
-            </p>
+            <p className="text-[10px] text-white/35">vs maior município do estado</p>
 
-            {!manualActive && (
-              <p className="mt-6 text-xs text-white/30">Clique em um município para fixar</p>
-            )}
-            {manualActive && (
+            <div className="mt-4 border-t border-[#2d1b4e] pt-4">
+              <p className="text-[10px] font-black uppercase tracking-wider text-white/30">Total no estado</p>
+              <span className="text-[22px] font-black tabular-nums text-[#7c3aed]">
+                {totalCount.toLocaleString('pt-BR')}
+              </span>
+              <span className="ml-1 text-xs text-white/40">cursistas</span>
+            </div>
+
+            {!manualActive ? (
+              <p className="mt-2 text-[10px] text-white/25">Clique em um município para fixar</p>
+            ) : (
               <button
                 type="button"
                 onClick={() => setManualActive(false)}
-                className="mt-4 w-fit rounded-full border border-[#a855f7]/30 px-4 py-1.5 text-xs font-bold text-[#a855f7] hover:bg-[#a855f7]/10"
+                className="mt-3 w-fit rounded-full border border-[#a855f7]/30 px-4 py-1.5 text-[11px] font-bold text-[#a855f7] hover:bg-[#a855f7]/10 transition"
               >
                 Retomar animação
               </button>
@@ -210,7 +220,7 @@ export default function MapaParaiba() {
 
       <style>{`
         @keyframes fadeSlideIn {
-          from { opacity: 0; transform: translateY(6px); }
+          from { opacity: 0; transform: translateY(8px); }
           to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
