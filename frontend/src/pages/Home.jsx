@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, BookOpen, CheckCircle, Download, ExternalLink, FileText, Layers, Target } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
+import MapaParaiba from '../components/public/MapaParaiba'
 
 const heroImage = '/images/home/hero-capa.png'
 const avaImage = '/images/home/ava.png'
@@ -415,59 +416,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="mx-auto max-w-[1180px] px-[22px] py-16">
-          <span className="mb-2 inline-block rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-black uppercase tracking-wider text-[#6f35b5]">
-            Passo a passo
-          </span>
-          <h3 className="mb-10 text-[34px] font-black leading-tight">Como se inscrever</h3>
-          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {inscricaoSteps.map((s, i) => (
-              <div key={s.num} className="relative rounded-2xl border border-[#e9d5ff] bg-gradient-to-br from-white to-[#faf5ff] p-6 shadow-[0_4px_20px_rgba(111,53,181,.07)]">
-                {i < inscricaoSteps.length - 1 && (
-                  <div className="absolute -right-2.5 top-8 hidden lg:block">
-                    <ArrowRight size={16} className="text-[#c4a7e7]" />
-                  </div>
-                )}
-                <span className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#6f35b5] to-[#9333ea] text-sm font-black text-white shadow-md">
-                  {s.num}
-                </span>
-                <h4 className="mb-2 text-[15px] font-black text-[#1c1033]">{s.title}</h4>
-                <p className="text-[13.5px] leading-relaxed text-[#566176]">{s.desc}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="bg-[#0a0615] px-[22px] py-16">
-          <div className="mx-auto max-w-[1180px]">
-            <div className="grid items-center gap-10 lg:grid-cols-[1fr_1.4fr]">
-              <div>
-                <span className="mb-2 inline-block text-xs font-black uppercase tracking-[0.3em] text-[#a855f7]">Vídeo informativo</span>
-                <h3 className="mb-4 text-[34px] font-black leading-tight text-white">Saiba tudo sobre as inscrições</h3>
-                <div className="space-y-2">
-                  {['Inscrições abertas para profissionais da rede', 'Certificado 100% para quem concluir', 'Mais de 13 mil cursistas no programa'].map((t) => (
-                    <div key={t} className="flex items-center gap-3">
-                      <CheckCircle size={16} className="shrink-0 text-[#a855f7]" />
-                      <span className="text-sm text-white/70">{t}</span>
-                    </div>
-                  ))}
-                </div>
-                <a href={formUrl} target="_blank" rel="noreferrer" className="mt-8 inline-flex items-center gap-2 rounded-xl bg-[#6f35b5] px-6 py-3 text-[15px] font-black text-white transition hover:bg-[#7e22ce]">
-                  Quero me inscrever <ArrowRight size={16} />
-                </a>
-              </div>
-              <div className="aspect-video overflow-hidden rounded-2xl border border-white/10 shadow-[0_16px_48px_rgba(0,0,0,.5)]">
-                <iframe
-                  className="h-full w-full"
-                  src={`https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&playsinline=1`}
-                  title="Como se inscrever no Transforma Educação PB"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              </div>
-            </div>
-          </div>
-        </section>
+        <MapaParaiba />
 
         {/* ── Guia ── */}
         <section id="guia" className="mx-auto max-w-[1180px] px-[22px] py-16">
