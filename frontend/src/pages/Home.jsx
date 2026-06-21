@@ -67,6 +67,48 @@ function CountUp({ value, prefix = '', suffix = '', label }) {
   )
 }
 
+function HeroStats() {
+  const [counts, setCounts] = useState([0, 0, 0])
+  const items = [
+    { target: 13000, prefix: '+', suffix: '', label: 'cursistas', decimals: false },
+    { target: 200,   prefix: '+', suffix: 'h', label: 'de formação', decimals: false },
+    { target: 95,    prefix: '+', suffix: '%', label: 'de satisfação', decimals: false },
+  ]
+
+  useEffect(() => {
+    const duration = 2800
+    const start = performance.now()
+    let raf
+    const tick = (now) => {
+      const p = Math.min((now - start) / duration, 1)
+      const ease = 1 - Math.pow(1 - p, 4)
+      setCounts(items.map((item) => Math.round(item.target * ease)))
+      if (p < 1) raf = requestAnimationFrame(tick)
+    }
+    const timeout = setTimeout(() => { raf = requestAnimationFrame(tick) }, 300)
+    return () => { clearTimeout(timeout); cancelAnimationFrame(raf) }
+  }, [])
+
+  const fmt = (v) => v >= 1000 ? v.toLocaleString('pt-BR') : String(v)
+
+  return (
+    <div className="absolute bottom-0 left-0 right-0 z-10">
+      <div className="mx-auto flex max-w-[700px] divide-x divide-white/20 bg-black/30 backdrop-blur-md">
+        {items.map((item, i) => (
+          <div key={item.label} className="flex flex-1 flex-col items-center justify-center py-5">
+            <span className="text-[32px] font-black leading-none text-white tabular-nums">
+              {item.prefix}{fmt(counts[i])}{item.suffix}
+            </span>
+            <span className="mt-1.5 text-[12px] font-semibold uppercase tracking-wider text-white/65">
+              {item.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 const NEON = '0 0 8px #a855f7, 0 0 20px #7e22ce, 0 0 40px rgba(168,85,247,.35)'
 const NEON_LINE = 'rgba(168,85,247,.55)'
 
@@ -215,12 +257,10 @@ export default function Home() {
 
       <main>
         {/* ── Hero ── */}
-        <section className="relative min-h-[500px] overflow-hidden bg-[#3b1d7a]">
+        <section className="relative min-h-[520px] overflow-hidden bg-[#3b1d7a]">
           <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-b from-[#3b1d7a]/10 via-transparent to-[#1a0733]" />
-          <div className="absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 gap-2">
-            <span className="h-2 w-2 rounded-full bg-white/60" />
-          </div>
+          <div className="absolute inset-0 bg-gradient-to-b from-[#3b1d7a]/10 via-transparent to-[#1a0733]/80" />
+          <HeroStats />
         </section>
 
 
