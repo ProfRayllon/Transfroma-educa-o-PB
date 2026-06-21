@@ -21,7 +21,7 @@ export default function Modal({ open, onClose, title, children, footer, size = '
   }[size] || 'max-w-lg'
 
   return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="modal-overlay">
       <div className={`modal-content ${sizeClass} animate-fade-in`}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
