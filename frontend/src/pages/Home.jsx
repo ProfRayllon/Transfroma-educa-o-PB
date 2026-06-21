@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, CheckCircle } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
@@ -64,6 +64,140 @@ function CountUp({ value, prefix = '', suffix = '', label }) {
       <span className="block text-[42px] font-black leading-none text-[#6f35b5] tabular-nums">{prefix}{current.toLocaleString('pt-BR')}{suffix}</span>
       <p className="mt-3 text-[15px] font-bold leading-snug text-[#374151]">{label}</p>
     </div>
+  )
+}
+
+const NEON = '0 0 8px #a855f7, 0 0 20px #7e22ce, 0 0 40px rgba(168,85,247,.35)'
+const NEON_LINE = 'rgba(168,85,247,.55)'
+
+function FluxoTimeline() {
+  const ref = useRef(null)
+  const [step, setStep] = useState(-1)
+
+  useEffect(() => {
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          let i = 0
+          const tick = () => {
+            setStep(i)
+            i += 1
+            if (i < timeline.length) setTimeout(tick, 340)
+          }
+          tick()
+          obs.disconnect()
+        }
+      },
+      { threshold: 0.25 },
+    )
+    if (ref.current) obs.observe(ref.current)
+    return () => obs.disconnect()
+  }, [])
+
+  return (
+    <section ref={ref} className="overflow-hidden bg-[#0a0615] py-20 px-[22px]">
+      <div className="mx-auto max-w-[1180px]">
+        <p className="mb-2 text-xs font-black uppercase tracking-[0.3em] text-[#a855f7]">Passo a passo</p>
+        <h2 className="mb-14 text-[38px] font-black leading-tight text-white">
+          Fluxo de acesso<br />aos cursos
+        </h2>
+
+        {/* Desktop: linha horizontal com círculos */}
+        <div className="hidden lg:block">
+          {/* Linha conectora animada */}
+          <div className="relative mb-8 flex items-center">
+            {timeline.map(([s], i) => (
+              <div key={s} className="flex flex-1 items-center">
+                {/* Círculo */}
+                <div
+                  className="relative z-10 flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 text-base font-black text-white transition-all duration-500"
+                  style={{
+                    borderColor: step >= i ? '#a855f7' : '#2d1b4e',
+                    background: step >= i ? 'rgba(168,85,247,.12)' : '#0f0a1a',
+                    boxShadow: step >= i ? NEON : 'none',
+                    opacity: step >= i ? 1 : 0.3,
+                    transform: step >= i ? 'scale(1)' : 'scale(0.85)',
+                  }}
+                >
+                  {s}
+                </div>
+                {/* Linha entre círculos */}
+                {i < timeline.length - 1 && (
+                  <div className="relative mx-2 h-[2px] flex-1 overflow-hidden bg-[#1a1030]">
+                    <div
+                      className="absolute inset-y-0 left-0 transition-all duration-[380ms] ease-in-out"
+                      style={{
+                        width: step > i ? '100%' : '0%',
+                        background: `linear-gradient(to right, ${NEON_LINE}, #7e22ce)`,
+                        boxShadow: '0 0 6px #a855f7',
+                        transitionDelay: step > i ? '0ms' : '0ms',
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Textos abaixo */}
+          <div className="grid grid-cols-6 gap-4">
+            {timeline.map(([s, title, text], i) => (
+              <div
+                key={s}
+                className="transition-all duration-500"
+                style={{
+                  opacity: step >= i ? 1 : 0,
+                  transform: step >= i ? 'translateY(0)' : 'translateY(14px)',
+                }}
+              >
+                <h3 className="mb-1.5 text-[14px] font-black leading-tight text-white">{title}</h3>
+                <p className="text-[12.5px] leading-relaxed text-white/50">{text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Mobile: vertical */}
+        <div className="flex flex-col gap-0 lg:hidden">
+          {timeline.map(([s, title, text], i) => (
+            <div
+              key={s}
+              className="flex gap-5 transition-all duration-500"
+              style={{ opacity: step >= i ? 1 : 0.15, transform: step >= i ? 'translateX(0)' : 'translateX(-12px)' }}
+            >
+              <div className="flex flex-col items-center">
+                <div
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 text-sm font-black text-white"
+                  style={{
+                    borderColor: step >= i ? '#a855f7' : '#2d1b4e',
+                    background: step >= i ? 'rgba(168,85,247,.12)' : '#0f0a1a',
+                    boxShadow: step >= i ? NEON : 'none',
+                  }}
+                >
+                  {s}
+                </div>
+                {i < timeline.length - 1 && (
+                  <div className="my-1 w-[2px] flex-1 bg-[#1a1030]">
+                    <div
+                      className="w-full transition-all duration-500"
+                      style={{
+                        height: step > i ? '100%' : '0%',
+                        background: `linear-gradient(to bottom, ${NEON_LINE}, #7e22ce)`,
+                        minHeight: step > i ? '36px' : '0px',
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="pb-8 pt-1">
+                <h3 className="mb-1 text-[15px] font-black text-white">{title}</h3>
+                <p className="text-[13px] leading-relaxed text-white/50">{text}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -178,29 +312,7 @@ export default function Home() {
         </section>
 
         {/* ── Fluxo ── */}
-        <section className="bg-[#faf5ff]">
-          <div className="mx-auto max-w-[1180px] px-[22px] py-14">
-            <span className="mb-2 inline-block rounded-full bg-[#ede9fe] px-3 py-1 text-xs font-black uppercase tracking-wider text-[#6f35b5]">
-              Passo a passo
-            </span>
-            <h2 className="mb-2 text-[32px] font-black leading-tight tracking-tight">Fluxo de acesso aos cursos</h2>
-            <p className="mb-9 text-base leading-relaxed text-[#566176]">
-              O acesso aos cursos do Transforma Educacao PB 2026 ocorre em etapas sequenciais.
-            </p>
-            <div className="relative grid gap-4 md:grid-cols-3 lg:grid-cols-6">
-              <div className="absolute left-[7%] right-[7%] top-6 hidden h-[2px] bg-gradient-to-r from-[#c4a7e7] to-[#dbc7f4] lg:block" />
-              {timeline.map(([step, title, text]) => (
-                <article key={step} className="relative z-10 rounded-2xl border border-[#e9d5ff] bg-white px-4 pb-5 pt-14 shadow-[0_4px_16px_rgba(111,53,181,.07)] transition hover:shadow-[0_8px_24px_rgba(111,53,181,.14)] hover:-translate-y-0.5">
-                  <span className="absolute left-4 top-4 grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-[#6f35b5] to-[#9333ea] font-black text-white shadow-md text-sm">
-                    {step}
-                  </span>
-                  <h3 className="mb-2 text-[14px] font-black leading-tight">{title}</h3>
-                  <p className="text-[12.5px] leading-relaxed text-[#566176]">{text}</p>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
+        <FluxoTimeline />
 
         {/* ── AVA ── */}
         <section className="mx-auto max-w-[1180px] px-[22px] py-14">
