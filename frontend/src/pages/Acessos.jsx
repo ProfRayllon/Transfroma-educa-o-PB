@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ShieldCheck, Users, UserCheck, Search, Plus, X, Edit2, Trash2, Eye, EyeOff } from 'lucide-react'
+import { ShieldCheck, Users, UserCheck, Search, Plus, X, Edit2, Trash2, Eye, EyeOff, Lock } from 'lucide-react'
 import Badge from '../components/ui/Badge'
 import StatCard from '../components/ui/StatCard'
 import Modal from '../components/ui/Modal'
@@ -131,7 +131,7 @@ function buildDefaultForm(editUser) {
 }
 
 function Avatar({ user, size = 'sm' }) {
-  const sizeClass = size === 'md' ? 'w-10 h-10' : 'w-8 h-8'
+  const sizeClass = size === 'lg' ? 'w-20 h-20 text-2xl' : size === 'md' ? 'w-10 h-10' : 'w-8 h-8'
 
   if (user.avatar) {
     return (
@@ -291,24 +291,131 @@ function UserFormModal({ user: editUser, open, onClose, onSave, saving, error })
   )
 }
 
-function PermissionsModal({ role, open, onClose }) {
-  const perms = PERMISSIONS_MAP[role] || ['Permissoes especificas do perfil']
+function UserDetailsModal({ user, open, onClose, canResetPassword, onResetPassword }) {
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const perms = PERMISSIONS_MAP[user?.role] || ['Permissoes especificas do perfil']
+
+  useEffect(() => {
+    if (!open) return
+    setPassword('')
+    setShowPassword(false)
+    setMessage('')
+    setError('')
+  }, [open, user?.id])
+
+  if (!user) return null
+
+  const handleResetPassword = async (event) => {
+    event.preventDefault()
+    setMessage('')
+    setError('')
+
+    if (password.length < 8) {
+      setError('A nova senha deve ter pelo menos 8 caracteres.')
+      return
+    }
+
+    try {
+      setSaving(true)
+      await onResetPassword(user.id, password)
+      setPassword('')
+      setMessage('Senha redefinida com sucesso.')
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Nao foi possivel redefinir a senha.'))
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
-    <Modal open={open} onClose={onClose} title={`Permissoes - ${ROLE_LABELS[role] || role}`}>
-      <ul className="space-y-2">
-        {perms.map((permission) => (
-          <li key={permission} className="flex items-center gap-2 text-sm text-gray-700">
-            <span className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-green-600 flex-shrink-0">OK</span>
-            {permission}
-          </li>
-        ))}
-      </ul>
+    <Modal open={open} onClose={onClose} title="Dados do usuario" size="md">
+      <div className="space-y-5">
+        <div className="flex items-center gap-4">
+          <Avatar user={user} size="lg" />
+          <div className="min-w-0">
+            <h3 className="text-lg font-bold text-gray-900">{user.name}</h3>
+            <p className="text-sm text-gray-500 truncate">{user.email}</p>
+            <div className="mt-2">
+              <Badge status={user.role} />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          <div className="rounded-xl bg-gray-50 p-3">
+            <div className="text-xs font-medium text-gray-500">Status</div>
+            <div className="mt-1 font-semibold text-gray-800">{user.status || '-'}</div>
+          </div>
+          <div className="rounded-xl bg-gray-50 p-3">
+            <div className="text-xs font-medium text-gray-500">Area</div>
+            <div className="mt-1 font-semibold text-gray-800">{user.area || '-'}</div>
+          </div>
+          <div className="rounded-xl bg-gray-50 p-3 sm:col-span-2">
+            <div className="text-xs font-medium text-gray-500">Atuacao</div>
+            <div className="mt-1 font-semibold text-gray-800">{user.function || '-'}</div>
+          </div>
+        </div>
+
+        <div>
+          <h4 className="text-sm font-semibold text-gray-800 mb-2">Permissoes</h4>
+          <ul className="space-y-2">
+            {perms.map((permission) => (
+              <li key={permission} className="flex items-center gap-2 text-sm text-gray-700">
+                <span className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-green-600 flex-shrink-0">OK</span>
+                {permission}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {canResetPassword && (
+          <form onSubmit={handleResetPassword} className="rounded-2xl border border-gray-100 bg-gray-50 p-4 space-y-3">
+            <div>
+              <h4 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                <Lock size={15} className="text-brand-700" />
+                Redefinir senha
+              </h4>
+              <p className="mt-1 text-xs text-gray-500">
+                A senha atual nao pode ser visualizada porque fica protegida por criptografia.
+              </p>
+            </div>
+
+            <div className="relative">
+              <input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                type={showPassword ? 'text' : 'password'}
+                className="input-field pr-10"
+                placeholder="Nova senha para este usuario"
+                minLength={8}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((current) => !current)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-brand-600"
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+
+            {error && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</div>}
+            {message && <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl px-3 py-2">{message}</div>}
+
+            <button type="submit" className="btn-primary" disabled={saving}>
+              {saving ? 'Redefinindo...' : 'Salvar nova senha'}
+            </button>
+          </form>
+        )}
+      </div>
     </Modal>
   )
 }
 
-function UserRow({ user, onEdit, onDelete, onViewPerms, canManage }) {
+function UserRow({ user, onEdit, onDelete, onViewUser, canManage }) {
   return (
     <tr className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
       <td className="table-cell">
@@ -329,9 +436,9 @@ function UserRow({ user, onEdit, onDelete, onViewPerms, canManage }) {
       <td className="table-cell">
         <div className="flex items-center gap-1">
           <button
-            onClick={() => onViewPerms(user.role)}
+            onClick={() => onViewUser(user)}
             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-brand-600 transition-colors"
-            title="Ver permissoes"
+            title="Ver usuario"
           >
             <Eye size={15} />
           </button>
@@ -368,7 +475,7 @@ export default function Acessos() {
   const [editUser, setEditUser] = useState(null)
   const [editOpen, setEditOpen] = useState(false)
   const [deleteUser, setDeleteUser] = useState(null)
-  const [permsRole, setPermsRole] = useState(null)
+  const [detailsUser, setDetailsUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -464,6 +571,10 @@ export default function Acessos() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleResetPassword = async (userId, password) => {
+    await api.patch(`/users/${userId}/password`, { password })
   }
 
   if (!canViewUsers) {
@@ -564,7 +675,7 @@ export default function Acessos() {
                   user={listedUser}
                   onEdit={(userItem) => { setEditUser(userItem); setFormError(''); setEditOpen(true) }}
                   onDelete={(userItem) => setDeleteUser(userItem)}
-                  onViewPerms={(role) => setPermsRole(role)}
+                  onViewUser={(userItem) => setDetailsUser(userItem)}
                   canManage={isAdmin}
                 />
               ))}
@@ -591,10 +702,12 @@ export default function Acessos() {
         saving={saving}
         error={formError}
       />
-      <PermissionsModal
-        role={permsRole}
-        open={!!permsRole}
-        onClose={() => setPermsRole(null)}
+      <UserDetailsModal
+        user={detailsUser}
+        open={!!detailsUser}
+        onClose={() => setDetailsUser(null)}
+        canResetPassword={isAdmin}
+        onResetPassword={handleResetPassword}
       />
       <ConfirmDialog
         open={!!deleteUser}

@@ -324,10 +324,46 @@ app.post('/api/auth/login', async (req, res) => {
   }
 })
 
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase()
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ message: 'Informe um e-mail valido.' })
+  }
+
+  // Senhas sao salvas com hash; por seguranca, a recuperacao exige redefinicao por um administrador.
+  await store.getUserByEmail(email)
+  res.json({
+    message: 'Se o e-mail estiver cadastrado, solicite a redefinicao de senha a um administrador do sistema.',
+  })
+})
+
 app.get('/api/auth/me', auth, async (req, res) => {
   const user = await store.getUserById(req.user.id)
   if (!user) return res.status(404).json({ message: 'Usuario nao encontrado.' })
   res.json(sanitizeUser(user))
+})
+
+app.patch('/api/auth/me/password', auth, async (req, res) => {
+  const currentPassword = String(req.body.currentPassword || '')
+  const newPassword = String(req.body.newPassword || '')
+
+  if (!currentPassword) {
+    return res.status(400).json({ message: 'Informe a senha atual.' })
+  }
+
+  if (newPassword.length < 8) {
+    return res.status(400).json({ message: 'A nova senha deve ter pelo menos 8 caracteres.' })
+  }
+
+  const user = await store.getUserById(req.user.id)
+  if (!user) return res.status(404).json({ message: 'Usuario nao encontrado.' })
+
+  const valid = await bcrypt.compare(currentPassword, user.passwordHash)
+  if (!valid) return res.status(401).json({ message: 'Senha atual incorreta.' })
+
+  const updated = await store.updateUser(user.id, { password: newPassword })
+  res.json(sanitizeUser(updated))
 })
 
 app.patch('/api/auth/me/avatar', auth, async (req, res) => {
@@ -385,6 +421,20 @@ app.put('/api/users/:id', auth, requireRole('administrador'), async (req, res) =
   } catch (err) {
     res.status(500).json({ message: mysqlUserErrorMessage(err) })
   }
+})
+
+app.patch('/api/users/:id/password', auth, requireRole('administrador'), async (req, res) => {
+  const password = String(req.body.password || '')
+
+  if (password.length < 8) {
+    return res.status(400).json({ message: 'A nova senha deve ter pelo menos 8 caracteres.' })
+  }
+
+  const current = await store.getUserById(req.params.id)
+  if (!current) return res.status(404).json({ message: 'Usuario nao encontrado.' })
+
+  const user = await store.updateUser(req.params.id, { password })
+  res.json(sanitizeUser(user))
 })
 
 app.delete('/api/users/:id', auth, requireRole('administrador'), async (req, res) => {

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useBranding } from '../context/BrandingContext'
+import api, { getApiErrorMessage } from '../lib/api'
 import { Mail, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react'
 
 export default function Login() {
@@ -9,7 +10,12 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [error, setError] = useState('')
+  const [forgotOpen, setForgotOpen] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotMessage, setForgotMessage] = useState('')
+  const [forgotError, setForgotError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [forgotLoading, setForgotLoading] = useState(false)
   const { login } = useAuth()
   const { loginBg, logo } = useBranding()
   const navigate = useNavigate()
@@ -25,6 +31,22 @@ export default function Login() {
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleForgotSubmit = async e => {
+    e.preventDefault()
+    setForgotError('')
+    setForgotMessage('')
+    setForgotLoading(true)
+
+    try {
+      const { data } = await api.post('/auth/forgot-password', { email: forgotEmail })
+      setForgotMessage(data.message || 'Solicitacao registrada.')
+    } catch (err) {
+      setForgotError(getApiErrorMessage(err, 'Nao foi possivel registrar a solicitacao.'))
+    } finally {
+      setForgotLoading(false)
     }
   }
 
@@ -82,7 +104,16 @@ export default function Login() {
                 </button>
               </div>
               <div className="text-right mt-1.5">
-                <button type="button" className="text-xs text-brand-700 hover:underline font-medium">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForgotEmail(email)
+                    setForgotMessage('')
+                    setForgotError('')
+                    setForgotOpen(true)
+                  }}
+                  className="text-xs text-brand-700 hover:underline font-medium"
+                >
                   Esqueci minha senha
                 </button>
               </div>
@@ -113,6 +144,66 @@ export default function Login() {
           </form>
 
       </div>
+
+      {forgotOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Recuperar senha</h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Informe seu e-mail para registrar a solicitacao de redefinicao.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setForgotOpen(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                x
+              </button>
+            </div>
+
+            <form onSubmit={handleForgotSubmit} className="mt-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">E-mail</label>
+                <div className="relative">
+                  <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="email"
+                    value={forgotEmail}
+                    onChange={e => setForgotEmail(e.target.value)}
+                    className="input-field pl-10"
+                    placeholder="seu@email.com"
+                    required
+                  />
+                </div>
+              </div>
+
+              {forgotError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {forgotError}
+                </div>
+              )}
+
+              {forgotMessage && (
+                <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+                  {forgotMessage}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setForgotOpen(false)} className="btn-secondary">
+                  Fechar
+                </button>
+                <button type="submit" disabled={forgotLoading} className="btn-primary">
+                  {forgotLoading ? 'Enviando...' : 'Solicitar redefinicao'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
