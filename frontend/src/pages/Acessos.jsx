@@ -474,9 +474,10 @@ export default function Acessos() {
   const stats = {
     total: users.length,
     admins: users.filter((listedUser) => listedUser.role === 'administrador').length,
+    coordinators: users.filter((listedUser) => listedUser.role === 'coordenador').length,
     supervisors: users.filter((listedUser) => listedUser.role === 'supervisor').length,
-    operational: users.filter((listedUser) => ['coordenador', 'professor', 'tecnico'].includes(listedUser.role)).length,
-    active: users.filter((listedUser) => listedUser.status === 'ativo').length,
+    professors: users.filter((listedUser) => listedUser.role === 'professor').length,
+    technicians: users.filter((listedUser) => listedUser.role === 'tecnico').length,
   }
 
   const handleSave = async (form) => {
@@ -549,12 +550,13 @@ export default function Acessos() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         <StatCard icon={Users} iconBg="bg-brand-100" iconColor="text-brand-700" value={stats.total} label="Total de usuarios" />
         <StatCard icon={ShieldCheck} iconBg="bg-purple-100" iconColor="text-purple-700" value={stats.admins} label="Administradores" />
+        <StatCard icon={UserCheck} iconBg="bg-violet-100" iconColor="text-violet-700" value={stats.coordinators} label="Coordenadores" />
         <StatCard icon={UserCheck} iconBg="bg-blue-100" iconColor="text-blue-700" value={stats.supervisors} label="Supervisores" />
-        <StatCard icon={Users} iconBg="bg-indigo-100" iconColor="text-indigo-700" value={stats.operational} label="Equipe operacional" />
-        <StatCard icon={UserCheck} iconBg="bg-green-100" iconColor="text-green-600" value={stats.active} label="Usuarios ativos" />
+        <StatCard icon={Users} iconBg="bg-indigo-100" iconColor="text-indigo-700" value={stats.professors} label="Professores" />
+        <StatCard icon={UserCheck} iconBg="bg-cyan-100" iconColor="text-cyan-700" value={stats.technicians} label="Apoio tecnico" />
       </div>
 
       <div className="card p-4">
