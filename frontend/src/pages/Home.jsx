@@ -4,9 +4,9 @@ import { ArrowRight } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
 
-const heroImage = 'https://raw.githubusercontent.com/ProfRayllon/Icones/efc03a67d01be90d82306db6287440b4e74cedb0/capa_2.png'
-const avaImage = 'https://raw.githubusercontent.com/ProfRayllon/Icones/a90f659919f7eb1ad854a73093d5798c65f90f85/ava.png'
-const statsImage = 'https://raw.githubusercontent.com/ProfRayllon/Icones/8c0a3d4af0517958cbc7e040b37f1d8300c810f3/img.5.png'
+const heroImage = '/images/home/hero-capa.png'
+const avaImage = '/images/home/ava.png'
+const statsImage = '/images/home/resultados.png'
 const formUrl = 'https://forms.gle/uYrVTURKxzq6mcRV6'
 const avaUrl = 'https://pb.ava.rieh.nees.ufal.br/login/index.php'
 
@@ -15,19 +15,19 @@ const courses = [
     title: 'Google for Education',
     tag: 'Trilha Institucional',
     workload: '20h',
-    image: 'https://raw.githubusercontent.com/ProfRayllon/Icones/5dce049ea7ccef0def199569ab3a1c8281e71a91/imagem3.png',
+    image: '/images/home/curso-google.png',
   },
   {
     title: 'Antes que aconteca nas Escolas',
     tag: 'Trilha Institucional',
     workload: '20h',
-    image: 'https://raw.githubusercontent.com/ProfRayllon/Icones/5dce049ea7ccef0def199569ab3a1c8281e71a91/imagem2.png',
+    image: '/images/home/curso-antes-escolas.png',
   },
   {
     title: 'Legislacao Educacional na pratica docente',
     tag: 'Trilha Institucional',
     workload: '20h',
-    image: 'https://raw.githubusercontent.com/ProfRayllon/Icones/5dce049ea7ccef0def199569ab3a1c8281e71a91/img3.png',
+    image: '/images/home/curso-legislacao.png',
   },
 ]
 
