@@ -217,15 +217,15 @@ export default function Home() {
         {/* ── Hero ── */}
         <section className="relative min-h-[500px] overflow-hidden bg-[#3b1d7a]">
           <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-b from-[#3b1d7a]/20 via-transparent to-[#1a0733]/70" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#3b1d7a]/10 via-transparent to-[#1a0733]" />
           <div className="absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 gap-2">
             <span className="h-2 w-2 rounded-full bg-white/60" />
           </div>
         </section>
 
         {/* ── Action Cards ── */}
-        <section className="relative z-10 -mt-16 px-[22px]">
-          <div className="mx-auto grid max-w-[1000px] gap-5 md:grid-cols-2">
+        <section className="bg-gradient-to-b from-[#1a0733] to-[#0f0520] px-[22px] py-14">
+          <div className="mx-auto grid max-w-[1000px] gap-6 md:grid-cols-2">
 
             {/* Inscrições */}
             <a
