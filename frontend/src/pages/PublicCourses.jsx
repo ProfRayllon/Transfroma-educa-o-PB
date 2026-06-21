@@ -1,197 +1,242 @@
 import { useMemo, useState } from 'react'
-import { ArrowRight, BookOpen, Clock, Filter, Search, Users } from 'lucide-react'
+import { BookOpen } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
 import Modal from '../components/ui/Modal'
 
 const formUrl = 'https://forms.gle/uYrVTURKxzq6mcRV6'
+const avaUrl = 'https://pb.ava.rieh.nees.ufal.br/login/index.php'
+
+const tabs = [
+  {
+    value: 'todos',
+    label: 'Todos',
+    icon: 'https://raw.githubusercontent.com/ProfRayllon/Icones/8a2d145f41bdfe6ef4a76d8de7dd189ee5505bfe/Todos.png',
+  },
+  {
+    value: 'institucional',
+    label: 'Trilha Institucional',
+    icon: 'https://raw.githubusercontent.com/ProfRayllon/Icones/3155ea877e04f3fffb0d16486125396b99f67667/Trilha%20institucional.png',
+  },
+  {
+    value: 'socioemocional',
+    label: 'Educacao Socioemocional',
+    icon: 'https://raw.githubusercontent.com/ProfRayllon/Icones/8a2d145f41bdfe6ef4a76d8de7dd189ee5505bfe/Educa%C3%A7%C3%A3o%20Socioemocional.png',
+  },
+  {
+    value: 'tecnologia',
+    label: 'Educacao, Ciencia e Tecnologia',
+    icon: 'https://raw.githubusercontent.com/ProfRayllon/Icones/8a2d145f41bdfe6ef4a76d8de7dd189ee5505bfe/tecnologia.png',
+  },
+  {
+    value: 'gestao',
+    label: 'Gestao Pedagogica',
+    icon: 'https://raw.githubusercontent.com/ProfRayllon/Icones/8a2d145f41bdfe6ef4a76d8de7dd189ee5505bfe/Gest%C3%A3o.png',
+  },
+  {
+    value: 'inclusiva',
+    label: 'Educacao Inclusiva',
+    icon: 'https://raw.githubusercontent.com/ProfRayllon/Icones/3155ea877e04f3fffb0d16486125396b99f67667/Educa%C3%A7%C3%A3o%20inclusiva.png',
+  },
+  {
+    value: 'bncc',
+    label: 'BNCC',
+    icon: 'https://raw.githubusercontent.com/ProfRayllon/Icones/3155ea877e04f3fffb0d16486125396b99f67667/BNCC.png',
+  },
+]
 
 const courses = [
   {
-    id: 'google-education',
+    id: 'google-for-education-2026',
     title: 'Google for Education',
-    category: 'Tecnologia',
-    trail: 'Educacao, Ciencia e Tecnologia',
+    category: 'institucional',
+    categoryLabel: 'Trilha Institucional',
     workload: '20h',
-    audience: 'Professores e equipes escolares',
-    image: 'https://raw.githubusercontent.com/ProfRayllon/Icones/5dce049ea7ccef0def199569ab3a1c8281e71a91/imagem3.png',
-    summary: 'Ferramentas digitais para organizacao de aulas, colaboracao e acompanhamento pedagogico.',
+    status: 'Liberado',
+    available: true,
+    image: 'https://raw.githubusercontent.com/ProfRayllon/Icones/80c9079cc3046da66db1a83e64f6c675606972df/1.png',
+    summary: 'Desenvolva competencias para integrar as ferramentas do Google for Education a pratica pedagogica, promovendo aulas mais dinamicas e organizadas.',
+    details: [
+      'Compreender o ecossistema Google for Education e suas possibilidades pedagogicas.',
+      'Planejar atividades utilizando Google Classroom, Drive, Docs, Forms e outras ferramentas.',
+      'Integrar recursos digitais aos processos de ensino, aprendizagem e avaliacao.',
+    ],
   },
   {
     id: 'antes-que-aconteca',
     title: 'Antes que aconteca nas Escolas',
-    category: 'Socioemocional',
-    trail: 'Educacao Socioemocional',
-    workload: '30h',
-    audience: 'Professores, coordenadores e supervisores',
-    image: 'https://raw.githubusercontent.com/ProfRayllon/Icones/5dce049ea7ccef0def199569ab3a1c8281e71a91/imagem2.png',
-    summary: 'Acoes preventivas, escuta ativa e estrategias de convivencia para o cotidiano escolar.',
+    category: 'institucional',
+    categoryLabel: 'Trilha Institucional',
+    workload: '20h',
+    status: 'Em breve',
+    image: 'https://raw.githubusercontent.com/ProfRayllon/Icones/80c9079cc3046da66db1a83e64f6c675606972df/2.png',
+    summary: 'Desenvolva estrategias para identificar, prevenir e enfrentar a violencia contra as mulheres no contexto escolar.',
+    details: ['Escuta qualificada.', 'Encaminhamentos adequados.', 'Promocao de uma cultura de protecao.'],
   },
   {
     id: 'legislacao-educacional',
     title: 'Legislacao Educacional da Pratica Docente',
-    category: 'Gestao',
-    trail: 'Gestao Pedagogica',
+    category: 'institucional',
+    categoryLabel: 'Trilha Institucional',
     workload: '20h',
-    audience: 'Gestores, coordenadores e professores',
-    image: 'https://raw.githubusercontent.com/ProfRayllon/Icones/5dce049ea7ccef0def199569ab3a1c8281e71a91/img3.png',
-    summary: 'Fundamentos legais aplicados a rotina pedagogica, registros e organizacao da escola.',
+    status: 'Em breve',
+    image: 'https://raw.githubusercontent.com/ProfRayllon/Icones/80c9079cc3046da66db1a83e64f6c675606972df/3.png',
+    summary: 'Conheca os marcos legais que orientam a educacao e fortalecem a atuacao docente.',
+    details: ['Direitos e deveres.', 'Diretrizes educacionais.', 'Aplicacao na pratica pedagogica.'],
+  },
+  {
+    id: 'socioemocional',
+    title: 'Educacao Socioemocional',
+    category: 'socioemocional',
+    categoryLabel: 'Educacao Socioemocional',
+    workload: '20h',
+    status: 'Em breve',
+    image: 'https://raw.githubusercontent.com/ProfRayllon/Icones/5dce049ea7ccef0def199569ab3a1c8281e71a91/imagem2.png',
+    summary: 'Praticas para fortalecer convivencia, cuidado, escuta e desenvolvimento integral.',
+    details: ['Convivencia escolar.', 'Cuidado e escuta.', 'Desenvolvimento integral.'],
   },
   {
     id: 'bncc-linguagens',
-    title: 'BNCC Linguagens em pratica',
-    category: 'BNCC',
-    trail: 'Area de Linguagens',
+    title: 'BNCC Linguagens',
+    category: 'bncc',
+    categoryLabel: 'BNCC',
     workload: '24h',
-    audience: 'Professores da formacao geral basica',
+    status: 'Em breve',
     image: 'https://raw.githubusercontent.com/ProfRayllon/Icones/efc03a67d01be90d82306db6287440b4e74cedb0/capa_2.png',
     summary: 'Planejamento, habilidades e experiencias didaticas alinhadas a BNCC.',
+    details: ['Habilidades BNCC.', 'Planejamento por area.', 'Experiencias de aprendizagem.'],
   },
 ]
 
-const categories = ['Todos', 'Tecnologia', 'Socioemocional', 'Gestao', 'BNCC']
-
 export default function PublicCourses() {
   const [query, setQuery] = useState('')
-  const [category, setCategory] = useState('Todos')
+  const [filter, setFilter] = useState('todos')
+  const [mode, setMode] = useState('Online')
   const [selectedCourse, setSelectedCourse] = useState(null)
 
   const filteredCourses = useMemo(() => {
     const term = query.trim().toLowerCase()
     return courses.filter((course) => {
-      const matchesCategory = category === 'Todos' || course.category === category
-      const matchesSearch = !term || [course.title, course.trail, course.summary, course.category]
+      const matchesFilter = filter === 'todos' || course.category === filter
+      const matchesSearch = !term || [course.title, course.categoryLabel, course.summary]
         .join(' ')
         .toLowerCase()
         .includes(term)
-      return matchesCategory && matchesSearch
+      return matchesFilter && matchesSearch
     })
-  }, [category, query])
+  }, [filter, query])
 
   return (
-    <div className="min-h-screen bg-[#f7f2fb] text-slate-900">
+    <div className="min-h-screen bg-white text-[#172033]">
       <PublicNav />
 
-      <main>
-        <section className="relative overflow-hidden bg-gradient-to-br from-brand-950 via-brand-900 to-fuchsia-800 px-5 py-16 text-white lg:px-8">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(255,255,255,0.18),transparent_26%),radial-gradient(circle_at_90%_10%,rgba(190,242,100,0.16),transparent_28%)]" />
-          <div className="relative mx-auto max-w-7xl">
-            <div className="max-w-3xl">
-              <p className="mb-4 inline-flex rounded-full bg-white/10 px-4 py-2 text-sm font-black uppercase tracking-[0.28em] text-lime-200">
-                Catalogo publico
-              </p>
-              <h1 className="text-4xl font-black md:text-6xl">Cursos do Transforma Educacao PB</h1>
-              <p className="mt-5 text-lg leading-8 text-white/75">
-                Consulte as formacoes disponiveis, filtre por trilha e acesse as orientacoes de inscricao.
-              </p>
+      <main className="mx-auto max-w-[1240px] px-5 pt-10">
+        <header className="mx-auto mb-12 text-center">
+          <h1 className="m-0 text-[2.5em] font-bold uppercase leading-tight text-[#6b21a8]">Trilhas Formativas</h1>
+          <p className="mt-4 text-[1.1em] leading-relaxed text-[#6b7280]">Portal direcionado aos cursistas da formacao Transforma Educacao - PB</p>
+          <p className="text-[1.1em] leading-relaxed text-[#6b7280]">para consulta, escolha e inscricao nos cursos disponiveis</p>
+          <div className="mx-auto mt-5 h-1 w-20 rounded bg-gradient-to-r from-[#8b5cf6] to-[#6f28b2]" />
+        </header>
+
+        <section className="grid items-start gap-6 pb-9 lg:grid-cols-[260px_minmax(0,1fr)]">
+          <div className="rounded-lg border border-[#e4d8f4] bg-[#fbf8ff] p-4">
+            <p className="mb-3 font-black text-[#4f1f87]">Filtrar por trilha</p>
+            <div className="grid gap-2.5">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.value}
+                  type="button"
+                  onClick={() => setFilter(tab.value)}
+                  className={`flex min-h-11 w-full items-center gap-3 rounded-lg border-[1.5px] px-3.5 py-2.5 text-left text-sm font-black transition ${
+                    filter === tab.value
+                      ? 'border-[#6f35b5] bg-[#6f35b5] text-white'
+                      : 'border-[#cdb7ea] bg-white text-[#4f1f87] hover:border-[#6f35b5] hover:bg-[#f7f0ff]'
+                  }`}
+                >
+                  <img src={tab.icon} alt="" className="h-6 w-6 object-contain" />
+                  <span>{tab.label}</span>
+                </button>
+              ))}
             </div>
           </div>
-        </section>
 
-        <section className="mx-auto max-w-7xl px-5 py-8 lg:px-8">
-          <div className="-mt-16 rounded-[2rem] border border-white/70 bg-white/90 p-5 shadow-2xl shadow-brand-900/15 backdrop-blur">
-            <div className="mb-4 flex items-center gap-2 text-sm font-black uppercase tracking-[0.22em] text-brand-800">
-              <Filter size={17} />
-              Filtros
+          <div>
+            <div className="mb-3">
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                className="h-[54px] w-full rounded-lg border-[1.5px] border-[#cdb7ea] bg-white px-5 text-base text-[#172033] outline-none transition placeholder:text-[#7a7286] focus:border-[#6f35b5] focus:ring-4 focus:ring-brand-100"
+                placeholder="Digite o curso aqui"
+                aria-label="Buscar curso"
+              />
             </div>
-            <div className="grid gap-4 md:grid-cols-[1fr_auto]">
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 bg-white py-4 pl-12 pr-4 font-semibold text-slate-700 outline-none transition focus:border-brand-400 focus:ring-4 focus:ring-brand-100"
-                  placeholder="Buscar por curso, trilha ou tema..."
-                />
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {categories.map((item) => (
+
+            <div className="mb-7 flex flex-col gap-3 rounded-lg border border-[#e4d8f4] bg-[#fbf8ff] p-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex flex-wrap gap-2.5">
+                {['Online', 'AVA', '20h'].map((item) => (
                   <button
                     key={item}
                     type="button"
-                    onClick={() => setCategory(item)}
-                    className={`rounded-full px-4 py-3 text-sm font-bold transition ${
-                      category === item
-                        ? 'bg-brand-800 text-white shadow-lg shadow-brand-900/20'
-                        : 'bg-brand-50 text-brand-800 hover:bg-brand-100'
+                    onClick={() => setMode(item)}
+                    className={`min-w-[84px] rounded-lg border-[1.5px] px-4 py-2 text-sm font-black transition ${
+                      mode === item
+                        ? 'border-[#6f35b5] bg-[#6f35b5] text-white'
+                        : 'border-[#cdb7ea] bg-white text-[#6f35b5] hover:bg-[#f7f0ff]'
                     }`}
                   >
                     {item}
                   </button>
                 ))}
               </div>
+              <div className="whitespace-nowrap text-sm font-black text-[#4f1f87]">Ordenar: Mais relevantes</div>
             </div>
-          </div>
-        </section>
 
-        <section className="mx-auto max-w-7xl px-5 pb-16 lg:px-8">
-          <div className="mb-6 flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-black text-brand-950">Cursos encontrados</h2>
-              <p className="text-sm font-semibold text-slate-500">{filteredCourses.length} curso(s) no catalogo</p>
-            </div>
-            <a
-              href={formUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="hidden rounded-full bg-gradient-to-r from-brand-900 to-fuchsia-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-brand-900/20 transition hover:-translate-y-0.5 md:inline-flex"
-            >
-              Realizar inscricao
-            </a>
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {filteredCourses.map((course) => (
-              <article key={course.id} className="group overflow-hidden rounded-[1.75rem] bg-white shadow-xl shadow-brand-900/10 transition hover:-translate-y-2 hover:shadow-2xl">
-                <div className="relative h-52 overflow-hidden">
-                  <img src={course.image} alt={course.title} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
-                  <div className="absolute left-4 top-4 rounded-full bg-white/90 px-3 py-1 text-xs font-black uppercase tracking-wide text-brand-800">
-                    {course.category}
+            <div className="grid gap-[18px] xl:grid-cols-2">
+              {filteredCourses.map((course) => (
+                <article key={course.id} className="flex min-h-[260px] overflow-hidden rounded-lg border border-[#d8d1e4] bg-white shadow-[0_6px_18px_rgba(47,28,73,.06)] transition hover:border-[#a77bdf] max-md:flex-col">
+                  <div className="relative min-h-[260px] w-[132px] flex-none bg-[#f1edf8] max-md:h-48 max-md:w-full max-md:min-h-0">
+                    <img src={course.image} alt={course.title} className="h-full w-full object-cover" />
+                    <span className={`absolute right-3.5 top-3.5 rounded-lg bg-white px-2.5 py-1 text-[11px] font-black shadow-[0_8px_18px_rgba(23,32,51,.12)] ${course.available ? 'text-[#6f35b5]' : 'text-[#8a6a9e]'}`}>
+                      {course.status}
+                    </span>
                   </div>
-                </div>
-                <div className="p-6">
-                  <p className="text-xs font-black uppercase tracking-[0.22em] text-brand-700">{course.trail}</p>
-                  <h3 className="mt-2 text-xl font-black text-slate-950">{course.title}</h3>
-                  <p className="mt-3 min-h-[72px] text-sm leading-6 text-slate-600">{course.summary}</p>
-                  <div className="mt-5 grid gap-3 text-sm font-semibold text-slate-600">
-                    <div className="flex items-center gap-2">
-                      <Clock size={17} className="text-brand-700" />
-                      {course.workload}
+                  <div className="flex flex-1 flex-col gap-3 p-4">
+                    <div className="flex flex-wrap gap-2">
+                      <span className="rounded-lg bg-[#f1e8ff] px-2.5 py-1 text-xs font-bold text-[#6f35b5]">{course.categoryLabel}</span>
+                      <span className="rounded-lg bg-[#f1f5f9] px-2.5 py-1 text-xs font-bold text-[#405168]">{course.workload}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Users size={17} className="text-brand-700" />
-                      {course.audience}
+                    <h3 className="text-lg font-black leading-tight">{course.title}</h3>
+                    <p className="text-[13px] leading-relaxed text-[#5d687a]">{course.summary}</p>
+                    <div className="mt-auto flex flex-wrap gap-2.5 pt-1">
+                      <button type="button" className="inline-flex min-h-8 items-center justify-center rounded-full border border-[#a77bdf] bg-white px-3.5 py-1.5 text-xs font-black text-[#6f35b5]" onClick={() => setSelectedCourse(course)}>
+                        Saber mais
+                      </button>
+                      {course.available ? (
+                        <a className="inline-flex min-h-8 items-center justify-center rounded-full bg-[#6f35b5] px-3.5 py-1.5 text-xs font-black text-white" href={formUrl} target="_blank" rel="noreferrer">
+                          Validar CPF e inscrever-se
+                        </a>
+                      ) : (
+                        <button type="button" disabled className="inline-flex min-h-8 items-center justify-center rounded-full border border-[#d8d1e4] bg-slate-50 px-3.5 py-1.5 text-xs font-black text-slate-400">
+                          Em breve
+                        </button>
+                      )}
+                      <a className="inline-flex min-h-8 items-center justify-center rounded-full bg-[#14835f] px-3.5 py-1.5 text-xs font-black text-white" href={avaUrl} target="_blank" rel="noreferrer">
+                        Acessar AVA
+                      </a>
                     </div>
                   </div>
-                  <div className="mt-6 flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCourse(course)}
-                      className="flex-1 rounded-full border border-brand-200 px-4 py-3 text-sm font-bold text-brand-800 transition hover:bg-brand-50"
-                    >
-                      Detalhes
-                    </button>
-                    <a
-                      href={formUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-brand-800 px-4 py-3 text-sm font-bold text-white transition hover:bg-brand-900"
-                    >
-                      Inscrever
-                      <ArrowRight size={16} />
-                    </a>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-
-          {!filteredCourses.length && (
-            <div className="rounded-[2rem] bg-white p-12 text-center shadow-xl shadow-brand-900/10">
-              <BookOpen className="mx-auto text-brand-300" size={44} />
-              <p className="mt-4 font-bold text-slate-700">Nenhum curso encontrado com esses filtros.</p>
+                </article>
+              ))}
             </div>
-          )}
+
+            {!filteredCourses.length && (
+              <div className="rounded-lg border border-[#d8d1e4] bg-white p-12 text-center">
+                <BookOpen className="mx-auto text-brand-300" size={44} />
+                <p className="mt-4 font-bold text-slate-700">Nenhum curso encontrado com esses filtros.</p>
+              </div>
+            )}
+          </div>
         </section>
       </main>
 
@@ -207,29 +252,31 @@ export default function PublicCourses() {
             <button type="button" className="btn-secondary" onClick={() => setSelectedCourse(null)}>
               Fechar
             </button>
-            <a href={formUrl} target="_blank" rel="noreferrer" className="btn-primary">
-              Inscrever-se
-            </a>
+            {selectedCourse?.available && (
+              <a href={formUrl} target="_blank" rel="noreferrer" className="btn-primary">
+                Validar CPF e inscrever-se
+              </a>
+            )}
           </>
         )}
       >
         {selectedCourse && (
           <div className="space-y-5">
-            <img src={selectedCourse.image} alt={selectedCourse.title} className="h-56 w-full rounded-2xl object-cover" />
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-brand-700">{selectedCourse.trail}</p>
-              <h3 className="mt-2 text-2xl font-black text-slate-950">{selectedCourse.title}</h3>
-              <p className="mt-3 leading-7 text-slate-600">{selectedCourse.summary}</p>
+            <div className="rounded-lg border border-[#e2d5f3] bg-white p-5">
+              <h3 className="mb-2 text-2xl font-black leading-tight text-[#6f35b5]">{selectedCourse.title}</h3>
+              <p className="leading-7 text-[#5d687a]">{selectedCourse.summary}</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <span className="rounded-full bg-[#f1e8ff] px-3 py-1.5 text-xs font-black text-[#6f35b5]">{selectedCourse.categoryLabel}</span>
+                <span className="rounded-full bg-[#f1e8ff] px-3 py-1.5 text-xs font-black text-[#6f35b5]">{selectedCourse.workload}</span>
+              </div>
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Carga horaria</p>
-                <p className="mt-1 font-black text-slate-900">{selectedCourse.workload}</p>
-              </div>
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Publico</p>
-                <p className="mt-1 font-black text-slate-900">{selectedCourse.audience}</p>
-              </div>
+            <div className="grid gap-3">
+              {selectedCourse.details.map((item, index) => (
+                <div key={item} className="grid grid-cols-[44px_1fr] items-center gap-3 rounded-lg border border-[#dde5ef] bg-white p-4 shadow-[0_8px_20px_rgba(47,28,73,.05)]">
+                  <span className="grid h-11 w-11 place-items-center rounded-lg bg-[#f1e8ff] font-black text-[#6f35b5]">{index + 1}</span>
+                  <p className="font-bold text-[#172033]">{item}</p>
+                </div>
+              ))}
             </div>
           </div>
         )}

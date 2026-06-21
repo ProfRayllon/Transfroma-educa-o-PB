@@ -1,16 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  ArrowRight,
-  BookOpen,
-  CheckCircle2,
-  ExternalLink,
-  GraduationCap,
-  Layers3,
-  Play,
-  Sparkles,
-  Users,
-} from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
 
@@ -18,221 +8,224 @@ const heroImage = 'https://raw.githubusercontent.com/ProfRayllon/Icones/efc03a67
 const avaImage = 'https://raw.githubusercontent.com/ProfRayllon/Icones/a90f659919f7eb1ad854a73093d5798c65f90f85/ava.png'
 const statsImage = 'https://raw.githubusercontent.com/ProfRayllon/Icones/8c0a3d4af0517958cbc7e040b37f1d8300c810f3/img.5.png'
 const formUrl = 'https://forms.gle/uYrVTURKxzq6mcRV6'
+const avaUrl = 'https://pb.ava.rieh.nees.ufal.br/login/index.php'
 
 const courses = [
   {
     title: 'Google for Education',
-    tag: 'Tecnologia educacional',
+    tag: 'Trilha Institucional',
+    workload: '20h',
     image: 'https://raw.githubusercontent.com/ProfRayllon/Icones/5dce049ea7ccef0def199569ab3a1c8281e71a91/imagem3.png',
-    text: 'Praticas digitais para organizar aulas, colaborar e acompanhar a aprendizagem com ferramentas Google.',
   },
   {
     title: 'Antes que aconteca nas Escolas',
-    tag: 'Cuidado e convivencia',
+    tag: 'Trilha Institucional',
+    workload: '20h',
     image: 'https://raw.githubusercontent.com/ProfRayllon/Icones/5dce049ea7ccef0def199569ab3a1c8281e71a91/imagem2.png',
-    text: 'Formacao para fortalecer a escuta, prevenir violencias e apoiar a convivencia escolar.',
   },
   {
-    title: 'Legislacao Educacional',
-    tag: 'Gestao pedagogica',
+    title: 'Legislacao Educacional na pratica docente',
+    tag: 'Trilha Institucional',
+    workload: '20h',
     image: 'https://raw.githubusercontent.com/ProfRayllon/Icones/5dce049ea7ccef0def199569ab3a1c8281e71a91/img3.png',
-    text: 'Base legal aplicada ao cotidiano da escola e aos processos pedagogicos da rede.',
   },
 ]
 
 const timeline = [
-  ['1', 'Escolha o curso', 'Consulte trilhas, objetivos e carga horaria antes da inscricao.'],
-  ['2', 'Realize a inscricao', 'Use o formulario oficial e acompanhe os comunicados da formacao.'],
-  ['3', 'Acesse o AVA', 'Entre no ambiente virtual para assistir aulas e realizar atividades.'],
-  ['4', 'Conclua a trilha', 'Finalize as atividades e acompanhe a evolucao da sua formacao.'],
+  ['1', 'Realizacao da inscricao', 'Realize a inscricao inicial no formulario do Programa de Formacao.'],
+  ['2', 'Acesso ao portal', 'Acesse o portal do Transforma Educacao PB, na area de cursos.'],
+  ['3', 'Escolha do curso', 'Selecione o curso desejado e confira a trilha correspondente.'],
+  ['4', 'Validacao do CPF', 'Informe o CPF para confirmar se sua inscricao foi localizada.'],
+  ['5', 'Acesso ao AVA', 'Apos a validacao, acesse o Ambiente Virtual de Aprendizagem.'],
+  ['6', 'Entrada gov.br', 'Entre no ambiente usando o sistema de autenticacao do gov.br.'],
 ]
 
-function CountUp({ value, suffix = '', label, icon: Icon }) {
+const stats = [
+  { value: 200, prefix: '+', suffix: 'h', label: 'de formacao' },
+  { value: 100, suffix: '%', label: 'certificados emitidos para concluintes' },
+  { value: 13000, prefix: '+', label: 'cursistas' },
+  { value: 95, prefix: '+', suffix: '%', label: 'de satisfacao' },
+]
+
+function CountUp({ value, prefix = '', suffix = '', label }) {
   const [current, setCurrent] = useState(0)
 
   useEffect(() => {
     let rafId
     const start = performance.now()
-    const duration = 900
+    const duration = 800
+
     const tick = (now) => {
       const progress = Math.min((now - start) / duration, 1)
       setCurrent(Math.round(value * progress))
       if (progress < 1) rafId = requestAnimationFrame(tick)
     }
+
     rafId = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafId)
   }, [value])
 
   return (
-    <div className="rounded-3xl border border-white/40 bg-white/80 p-6 shadow-xl shadow-brand-900/10 backdrop-blur">
-      <div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-brand-100 text-brand-800">
-        <Icon size={24} />
-      </div>
-      <p className="text-4xl font-black text-brand-950">{current}{suffix}</p>
-      <p className="mt-1 text-sm font-semibold text-slate-600">{label}</p>
+    <div className="rounded-lg border border-[#ded6ea] bg-gradient-to-b from-white to-[#fbf7ff] p-6 shadow-[0_10px_24px_rgba(42,24,70,.06)]">
+      <span className="block text-[38px] font-black leading-none text-[#6f35b5]">{prefix}{current}{suffix}</span>
+      <p className="mt-3 text-[15px] font-extrabold leading-snug text-[#111827]">{label}</p>
     </div>
   )
 }
 
 export default function Home() {
-  const stats = useMemo(() => [
-    { value: 7, suffix: '+', label: 'trilhas formativas', icon: Layers3 },
-    { value: 1200, suffix: '+', label: 'participantes previstos', icon: Users },
-    { value: 2026, suffix: '', label: 'ciclo formativo', icon: GraduationCap },
+  const filters = useMemo(() => [
+    'Todos',
+    'Trilha Institucional',
+    'Educacao Socioemocional',
+    'Educacao, Ciencia e Tecnologia',
+    'Gestao Pedagogica',
+    'Educacao Inclusiva, Equidade e Diversidade',
+    'BNCC',
   ], [])
 
   return (
-    <div className="min-h-screen bg-[#f7f2fb] text-slate-900">
+    <div className="min-h-screen bg-white text-[#111827]">
       <PublicNav />
 
       <main>
-        <section className="relative overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(121,45,166,0.24),transparent_30%),radial-gradient(circle_at_85%_10%,rgba(22,163,74,0.18),transparent_25%)]" />
-          <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-[#f7f2fb] to-transparent" />
-          <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-5 py-16 md:grid-cols-[1.05fr_0.95fr] lg:px-8 lg:py-24">
-            <div className="animate-fade-in">
-              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white/80 px-4 py-2 text-sm font-bold text-brand-800 shadow-sm">
-                <Sparkles size={16} />
-                Formacao Continuada BNCC 2026
-              </div>
-              <h1 className="max-w-3xl text-4xl font-black leading-tight text-brand-950 md:text-6xl">
-                Programas de formacao para transformar praticas pedagogicas.
-              </h1>
-              <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-700">
-                Uma experiencia publica, simples e visual para conhecer trilhas, consultar cursos e
-                acessar o sistema administrativo do Transforma Educacao PB.
-              </p>
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <a
-                  href={formUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-900 to-fuchsia-600 px-6 py-3 font-bold text-white shadow-xl shadow-brand-900/25 transition hover:-translate-y-1"
-                >
-                  Realizar inscricao
-                  <ExternalLink size={18} />
-                </a>
-                <Link
-                  to="/catalogo-cursos"
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-brand-200 bg-white px-6 py-3 font-bold text-brand-900 shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
-                >
-                  Ver cursos
-                  <ArrowRight size={18} />
-                </Link>
-              </div>
+        <section className="relative min-h-[470px] overflow-hidden bg-[#4f1f87] text-white">
+          <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[rgba(32,17,54,.08)] to-[rgba(32,17,54,.5)]" />
+          <div className="relative z-10 mx-auto flex min-h-[470px] max-w-[1180px] items-end px-[22px] py-[54px]">
+            <div className="mb-14 flex flex-wrap gap-3 md:ml-[140px]">
+              <a className="inline-flex min-h-[46px] items-center justify-center rounded-lg bg-white px-6 py-3 text-[15px] font-black text-[#6f35b5] transition hover:-translate-y-0.5" href={formUrl} target="_blank" rel="noreferrer">
+                Realizacao da inscricao
+              </a>
+              <Link className="inline-flex min-h-[46px] items-center justify-center rounded-lg border border-white/70 bg-[#6f35b5]/75 px-6 py-3 text-[15px] font-black text-white backdrop-blur transition hover:-translate-y-0.5" to="/catalogo-cursos">
+                Ver cursos
+              </Link>
+              <a className="inline-flex min-h-[46px] items-center justify-center rounded-lg border border-white/70 bg-[#6f35b5]/75 px-6 py-3 text-[15px] font-black text-white backdrop-blur transition hover:-translate-y-0.5" href="https://drive.google.com/drive/folders/1vZPmyZyxj5mmMBFlSwrVJKQYVAfGRHHK" target="_blank" rel="noreferrer">
+                Guias Transforma
+              </a>
             </div>
-
-            <div className="relative">
-              <div className="absolute -left-8 -top-8 h-32 w-32 rounded-full bg-lime-300/50 blur-3xl" />
-              <div className="absolute -bottom-10 right-0 h-40 w-40 rounded-full bg-fuchsia-400/40 blur-3xl" />
-              <div className="relative overflow-hidden rounded-[2rem] border border-white/70 bg-white p-3 shadow-2xl shadow-brand-900/20">
-                <img
-                  src={heroImage}
-                  alt="Transforma Educacao PB"
-                  className="h-[360px] w-full rounded-[1.5rem] object-cover md:h-[470px]"
-                />
-                <div className="absolute bottom-8 left-8 right-8 rounded-3xl bg-white/90 p-5 shadow-xl backdrop-blur">
-                  <p className="text-sm font-bold uppercase tracking-[0.24em] text-brand-700">Cursos abertos</p>
-                  <p className="mt-2 text-2xl font-black text-brand-950">Trilhas transversais e BNCC</p>
-                </div>
-              </div>
-            </div>
+          </div>
+          <div className="absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 gap-2">
+            <span className="h-2.5 w-2.5 rounded-full border border-white bg-white" />
           </div>
         </section>
 
-        <section className="mx-auto max-w-7xl px-5 py-16 lg:px-8">
-          <div className="mb-10 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+        <section className="mx-auto max-w-[1180px] px-[22px] py-[42px]">
+          <div className="flex flex-col justify-between gap-5 md:flex-row md:items-start">
             <div>
-              <p className="text-sm font-black uppercase tracking-[0.28em] text-brand-700">Cursos em destaque</p>
-              <h2 className="mt-3 text-3xl font-black text-brand-950 md:text-4xl">Conheca as formacoes</h2>
+              <h2 className="mb-3 text-[34px] font-black leading-tight">Transforma Educacao PB</h2>
+              <p className="max-w-3xl text-[17px] leading-relaxed text-[#566176]">
+                Explore trilhas formativas estruturadas para fortalecer a pratica pedagogica e elevar a
+                qualidade da educacao na Paraiba.
+              </p>
+              <p className="mt-2 max-w-3xl text-[17px] leading-relaxed text-[#566176]">
+                Encontre cursos organizados por area e trilha para apoiar sua pratica em sala de aula.
+              </p>
             </div>
-            <Link to="/catalogo-cursos" className="inline-flex items-center gap-2 font-bold text-brand-800 hover:text-brand-950">
-              Abrir catalogo completo
+            <Link to="/catalogo-cursos" className="inline-flex items-center gap-2 whitespace-nowrap font-black text-[#6f35b5] hover:underline">
+              Ver mais cursos
               <ArrowRight size={18} />
             </Link>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-3">
-            {courses.map((course, index) => (
-              <article
-                key={course.title}
-                className="group overflow-hidden rounded-[1.75rem] border border-white/80 bg-white shadow-xl shadow-brand-900/10 transition duration-300 hover:-translate-y-2 hover:shadow-2xl"
-                style={{ animationDelay: `${index * 120}ms` }}
+          <div className="my-7 flex flex-wrap gap-3">
+            {filters.map((filter, index) => (
+              <button
+                key={filter}
+                type="button"
+                className={`rounded-full border-[1.5px] border-[#a77bdf] px-5 py-2.5 font-black text-[#6f35b5] ${index === 0 ? 'bg-[#f4edff]' : 'bg-white'}`}
               >
-                <div className="relative h-48 overflow-hidden">
-                  <img src={course.image} alt={course.title} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
-                  <div className="absolute left-4 top-4 rounded-full bg-white/90 px-3 py-1 text-xs font-black uppercase tracking-wide text-brand-800">
-                    {course.tag}
-                  </div>
+                {filter}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid gap-[18px] md:grid-cols-3">
+            {courses.map((course) => (
+              <Link
+                key={course.title}
+                to="/catalogo-cursos"
+                className="group relative min-h-[360px] overflow-hidden rounded-lg bg-[#21122f] text-white shadow-[0_10px_24px_rgba(17,24,39,.12)]"
+              >
+                <img src={course.image} alt={course.title} className="absolute inset-0 h-full w-full object-cover object-top transition duration-500 group-hover:scale-[1.03]" />
+                <div className="absolute inset-0 bg-gradient-to-b from-black/0 to-black/80" />
+                <div className="absolute left-3.5 top-3.5 z-10 flex flex-wrap gap-2">
+                  <div className="rounded-full bg-[#f0d8ff] px-2.5 py-1 text-xs font-black text-[#4f1f87]">{course.tag}</div>
+                  <div className="rounded-full bg-[#f0d8ff] px-2.5 py-1 text-xs font-black text-[#4f1f87]">{course.workload}</div>
                 </div>
-                <div className="p-6">
-                  <h3 className="text-xl font-black text-slate-950">{course.title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-slate-600">{course.text}</p>
+                <div className="absolute bottom-5 left-5 right-14 z-10">
+                  <small className="mb-1 block text-[#f2eafe]">Curso</small>
+                  <h3 className="text-lg font-black uppercase leading-tight">{course.title}</h3>
                 </div>
+                <span className="absolute bottom-5 right-3 z-10 grid h-8 w-8 place-items-center rounded-full bg-white text-[#6f35b5]">
+                  <ArrowRight size={17} />
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-[1180px] px-[22px] py-[42px]">
+          <h2 className="mb-3 text-[32px] font-black leading-tight">Fluxo de acesso aos cursos</h2>
+          <p className="text-base leading-relaxed text-[#566176]">O acesso aos cursos do Transforma Educacao PB 2026 ocorrera em etapas sequenciais.</p>
+          <div className="relative mt-7 grid gap-3.5 md:grid-cols-3 lg:grid-cols-6">
+            <div className="absolute left-[7%] right-[7%] top-7 hidden h-[3px] bg-[#dbc7f4] lg:block" />
+            {timeline.map(([step, title, text]) => (
+              <article key={step} className="relative z-10 rounded-lg border border-[#ded6ea] bg-white px-3.5 pb-4 pt-14 shadow-[0_10px_24px_rgba(42,24,70,.06)]">
+                <span className="absolute left-3.5 top-3 grid h-8 w-8 place-items-center rounded-full bg-[#6f35b5] font-black text-white">{step}</span>
+                <h3 className="mb-2 text-[15px] font-black leading-tight">{title}</h3>
+                <p className="text-[13px] leading-relaxed text-[#566176]">{text}</p>
               </article>
             ))}
           </div>
         </section>
 
-        <section className="bg-gradient-to-br from-brand-950 via-brand-900 to-fuchsia-800 py-16 text-white">
-          <div className="mx-auto grid max-w-7xl gap-10 px-5 lg:grid-cols-[0.85fr_1.15fr] lg:px-8">
+        <section className="mx-auto max-w-[1180px] px-[22px] pb-[42px] pt-5">
+          <div className="grid items-center gap-8 rounded-lg border border-[rgba(20,131,95,.24)] bg-gradient-to-br from-[#ecfff5] to-[#f7fffb] p-7 shadow-[0_12px_28px_rgba(20,131,95,.10)] md:grid-cols-[1fr_0.9fr]">
             <div>
-              <p className="text-sm font-black uppercase tracking-[0.28em] text-lime-200">Como funciona</p>
-              <h2 className="mt-3 text-3xl font-black md:text-4xl">Fluxo simples para iniciar a formacao</h2>
-              <p className="mt-5 text-white/75">
-                A jornada publica orienta o participante desde a consulta do curso ate o acesso ao AVA.
+              <span className="mb-3 inline-flex rounded-full bg-[#dff8eb] px-2.5 py-1.5 text-xs font-black uppercase tracking-wide text-[#14835f]">Ambiente virtual</span>
+              <h2 className="mb-3 text-[32px] font-black leading-tight">Acesse o <span className="text-[#14835f]">AVA RIEH/PB</span></h2>
+              <p className="text-base leading-relaxed text-[#566176]">
+                O <strong className="text-[#14835f]">AVA</strong> e o ambiente virtual onde ficam as aulas,
+                materiais, atividades e acompanhamento dos cursos do Transforma Educacao 2026.
               </p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {timeline.map(([step, title, text]) => (
-                <div key={step} className="rounded-3xl border border-white/15 bg-white/10 p-5 backdrop-blur">
-                  <div className="mb-4 grid h-11 w-11 place-items-center rounded-2xl bg-lime-300 font-black text-brand-950">{step}</div>
-                  <h3 className="font-black">{title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-white/75">{text}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="mx-auto grid max-w-7xl items-center gap-10 px-5 py-16 md:grid-cols-2 lg:px-8">
-          <div className="rounded-[2rem] bg-white p-4 shadow-2xl shadow-brand-900/10">
-            <img src={avaImage} alt="Ambiente virtual de aprendizagem" className="w-full rounded-[1.5rem] object-cover" />
-          </div>
-          <div>
-            <p className="text-sm font-black uppercase tracking-[0.28em] text-brand-700">Ambiente virtual</p>
-            <h2 className="mt-3 text-3xl font-black text-brand-950 md:text-4xl">Acesso aos cursos no AVA</h2>
-            <p className="mt-5 text-lg leading-8 text-slate-700">
-              A plataforma organiza materiais, atividades e acompanhamento para apoiar o desenvolvimento
-              dos participantes ao longo de cada trilha.
-            </p>
-            <div className="mt-6 grid gap-3">
-              {['Conteudos por trilha', 'Acompanhamento de progresso', 'Atividades e materiais centralizados'].map((item) => (
-                <div key={item} className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm">
-                  <CheckCircle2 className="text-green-600" size={20} />
-                  <span className="font-semibold text-slate-700">{item}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="mx-auto max-w-7xl px-5 py-8 lg:px-8">
-          <div className="grid overflow-hidden rounded-[2rem] bg-white shadow-2xl shadow-brand-900/10 md:grid-cols-[1fr_1.15fr]">
-            <div className="bg-gradient-to-br from-brand-900 to-fuchsia-700 p-8 text-white md:p-10">
-              <div className="mb-6 grid h-14 w-14 place-items-center rounded-2xl bg-white/15">
-                <Play size={26} />
+              <p className="mt-2 text-base leading-relaxed text-[#566176]">
+                Apos concluir sua inscricao e validar o CPF, entre no <strong className="text-[#14835f]">AVA</strong>
+                por meio da sua conta gov.br para iniciar o curso.
+              </p>
+              <div className="mt-6">
+                <a className="inline-flex min-h-[46px] items-center justify-center rounded-lg bg-[#14835f] px-6 py-3 text-[15px] font-black text-white transition hover:bg-[#0f6d4f]" href={avaUrl} target="_blank" rel="noreferrer">
+                  Acessar AVA RIEH/PB
+                </a>
               </div>
-              <h2 className="text-3xl font-black">Veja a proposta do Transforma</h2>
-              <p className="mt-4 leading-7 text-white/75">
-                Um video curto para apresentar a experiencia de formacao e orientar os primeiros passos.
-              </p>
             </div>
-            <div className="aspect-video bg-slate-950">
+            <div className="min-h-[260px] overflow-hidden rounded-lg bg-[#dff8eb] shadow-[0_10px_24px_rgba(20,131,95,.12)]">
+              <img src={avaImage} alt="Ambiente Virtual de Aprendizagem RIEH PB" className="h-full min-h-[260px] w-full object-cover" />
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-10 bg-gradient-to-r from-[#6f35b5] via-[#8b5cf6] to-[#c14aa0] text-white">
+          <div className="mx-auto grid max-w-[1240px] items-center gap-9 px-[22px] py-14 md:grid-cols-[0.9fr_1.1fr]">
+            <div>
+              <h2 className="mb-4 text-[40px] font-black uppercase leading-tight">Transforme sua pratica</h2>
+              <p className="text-[17px] leading-relaxed text-[#f8f4ff]">
+                Participe de formacoes alinhadas a realidade da rede com intencao, metodo e resultado.
+              </p>
+              <div className="mt-7 flex flex-wrap gap-3">
+                <Link className="inline-flex min-h-[46px] items-center justify-center rounded-lg bg-white px-6 py-3 text-[15px] font-black text-[#6f35b5]" to="/catalogo-cursos">
+                  Acessar cursos
+                </Link>
+                <a className="inline-flex min-h-[46px] items-center justify-center rounded-lg border border-white/70 bg-[#6f35b5]/70 px-6 py-3 text-[15px] font-black text-white" href={avaUrl} target="_blank" rel="noreferrer">
+                  Entrar no AVA
+                </a>
+              </div>
+            </div>
+            <div className="aspect-video overflow-hidden rounded-lg border border-white/20 bg-[#25163a]">
               <iframe
                 className="h-full w-full"
                 src="https://www.youtube.com/embed/K7sHZjRxk9g?rel=0&modestbranding=1&playsinline=1"
-                title="Video Transforma Educacao PB"
+                title="Video Transforma Educacao"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
               />
@@ -240,14 +233,17 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="mx-auto grid max-w-7xl items-center gap-10 px-5 py-16 md:grid-cols-[1fr_1.1fr] lg:px-8">
-          <div className="grid gap-4 sm:grid-cols-3 md:grid-cols-1 lg:grid-cols-3">
-            {stats.map((stat) => (
-              <CountUp key={stat.label} {...stat} />
-            ))}
-          </div>
-          <div className="relative">
-            <img src={statsImage} alt="Indicadores do Transforma" className="w-full rounded-[2rem] shadow-2xl shadow-brand-900/10" />
+        <section className="mx-auto max-w-[1180px] px-[22px] py-[42px]">
+          <h2 className="mb-5 text-[32px] font-black leading-tight">Resultados esperados</h2>
+          <div className="grid items-stretch gap-6 md:grid-cols-[0.8fr_1.2fr]">
+            <div className="min-h-[310px] overflow-hidden rounded-[14px] shadow-[0_10px_24px_rgba(42,24,70,.06)]">
+              <img src={statsImage} alt="Resultados esperados do Transforma Educacao" className="h-full w-full object-cover" />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {stats.map((stat) => (
+                <CountUp key={stat.label} {...stat} />
+              ))}
+            </div>
           </div>
         </section>
       </main>
