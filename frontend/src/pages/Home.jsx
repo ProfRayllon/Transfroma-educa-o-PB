@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, CheckCircle } from 'lucide-react'
+import { ArrowRight, BookOpen, CheckCircle, ClipboardList } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
 
@@ -82,7 +82,7 @@ function FluxoTimeline() {
           const tick = () => {
             setStep(i)
             i += 1
-            if (i < timeline.length) setTimeout(tick, 340)
+            if (i < timeline.length) setTimeout(tick, 750)
           }
           tick()
           obs.disconnect()
@@ -215,35 +215,80 @@ export default function Home() {
 
       <main>
         {/* ── Hero ── */}
-        <section className="relative min-h-[540px] overflow-hidden bg-[#3b1d7a]">
+        <section className="relative min-h-[500px] overflow-hidden bg-[#3b1d7a]">
           <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-b from-[#3b1d7a]/30 via-transparent to-[#1a0733]/65" />
-
-          <div className="relative z-10 mx-auto flex min-h-[540px] max-w-[1180px] flex-col justify-end px-[22px] pb-14 md:justify-center md:pb-0">
-            <div className="flex flex-wrap gap-3 md:ml-[120px]">
-              <a
-                className="inline-flex min-h-[48px] items-center justify-center rounded-xl bg-white px-6 py-3 text-[15px] font-black text-[#6f35b5] shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl"
-                href={formUrl} target="_blank" rel="noreferrer"
-              >
-                Realizacao da inscricao
-              </a>
-              <Link
-                className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl border border-white/60 bg-white/15 px-6 py-3 text-[15px] font-black text-white backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-white/25"
-                to="/catalogo-cursos"
-              >
-                Ver cursos <ArrowRight size={16} />
-              </Link>
-              <a
-                className="inline-flex min-h-[48px] items-center justify-center rounded-xl border border-white/60 bg-white/15 px-6 py-3 text-[15px] font-black text-white backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-white/25"
-                href="https://drive.google.com/drive/folders/1vZPmyZyxj5mmMBFlSwrVJKQYVAfGRHHK" target="_blank" rel="noreferrer"
-              >
-                Guias Transforma
-              </a>
-            </div>
-          </div>
-
+          <div className="absolute inset-0 bg-gradient-to-b from-[#3b1d7a]/20 via-transparent to-[#1a0733]/70" />
           <div className="absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 gap-2">
             <span className="h-2 w-2 rounded-full bg-white/60" />
+          </div>
+        </section>
+
+        {/* ── Action Cards ── */}
+        <section className="relative z-10 -mt-16 px-[22px]">
+          <div className="mx-auto grid max-w-[1000px] gap-5 md:grid-cols-2">
+
+            {/* Inscrições */}
+            <a
+              href={formUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="group relative flex flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br from-[#6b21a8] to-[#3b1d7a] p-8 shadow-[0_16px_48px_rgba(59,29,122,.55)] transition hover:-translate-y-1 hover:shadow-[0_24px_64px_rgba(111,53,181,.5)]"
+            >
+              {/* Glow blob */}
+              <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-[#a855f7]/20 blur-3xl" />
+
+              <div className="relative">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/25">
+                  <ClipboardList size={22} className="text-white" />
+                </div>
+                <p className="mb-1 text-[11px] font-black uppercase tracking-[0.3em] text-purple-300">Programa 2026</p>
+                <h3 className="text-[22px] font-black leading-tight text-white">
+                  Realizacao das<br />Inscricoes
+                </h3>
+                <p className="mt-3 text-[14px] leading-relaxed text-white/65">
+                  Acesse o formulario oficial e realize sua inscricao no Programa de Formacao Transforma Educacao PB.
+                </p>
+              </div>
+
+              <div className="relative mt-8 flex items-center justify-between border-t border-white/15 pt-5">
+                <span className="text-sm font-black text-white/80">Realizar inscricao</span>
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/25 transition group-hover:bg-white group-hover:text-[#6b21a8]">
+                  <ArrowRight size={16} className="text-white transition group-hover:text-[#6b21a8]" />
+                </span>
+              </div>
+            </a>
+
+            {/* Guias */}
+            <a
+              href="https://drive.google.com/drive/folders/1vZPmyZyxj5mmMBFlSwrVJKQYVAfGRHHK"
+              target="_blank"
+              rel="noreferrer"
+              className="group relative flex flex-col justify-between overflow-hidden rounded-2xl bg-[#0f0720] p-8 shadow-[0_16px_48px_rgba(10,6,21,.6)] ring-1 ring-white/8 transition hover:-translate-y-1 hover:shadow-[0_24px_64px_rgba(168,85,247,.25)] hover:ring-[#a855f7]/40"
+            >
+              {/* Neon accent */}
+              <div className="absolute -left-8 -bottom-8 h-32 w-32 rounded-full bg-[#a855f7]/15 blur-3xl" />
+
+              <div className="relative">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-[#a855f7]/40 bg-[#a855f7]/10">
+                  <BookOpen size={22} className="text-[#c084fc]" />
+                </div>
+                <p className="mb-1 text-[11px] font-black uppercase tracking-[0.3em] text-[#a855f7]">Material de apoio</p>
+                <h3 className="text-[22px] font-black leading-tight text-white">
+                  Guias<br />Transforma
+                </h3>
+                <p className="mt-3 text-[14px] leading-relaxed text-white/50">
+                  Acesse os guias e materiais de orientacao do programa para apoiar sua jornada de formacao.
+                </p>
+              </div>
+
+              <div className="relative mt-8 flex items-center justify-between border-t border-white/10 pt-5">
+                <span className="text-sm font-black text-white/60">Acessar guias</span>
+                <span className="flex h-9 w-9 items-center justify-center rounded-full border border-[#a855f7]/40 bg-[#a855f7]/10 transition group-hover:border-[#a855f7] group-hover:bg-[#a855f7]/25">
+                  <ArrowRight size={16} className="text-[#c084fc]" />
+                </span>
+              </div>
+            </a>
+
           </div>
         </section>
 
