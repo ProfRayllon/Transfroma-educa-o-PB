@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ShieldCheck, Users, UserCheck, Search, Plus, X, Edit2, Trash2, Eye, EyeOff, Lock, Copy, RefreshCw } from 'lucide-react'
+import { ShieldCheck, Users, UserCheck, Search, Plus, X, Edit2, Trash2, Eye, EyeOff, Lock } from 'lucide-react'
 import Badge from '../components/ui/Badge'
 import StatCard from '../components/ui/StatCard'
 import Modal from '../components/ui/Modal'
@@ -291,58 +291,10 @@ function UserFormModal({ user: editUser, open, onClose, onSave, saving, error })
   )
 }
 
-function UserDetailsModal({ user, open, onClose, canResetPassword, onResetPassword }) {
-  const [generatedPassword, setGeneratedPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [message, setMessage] = useState('')
-  const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
+function UserDetailsModal({ user, open, onClose, canResetPassword }) {
   const perms = PERMISSIONS_MAP[user?.role] || ['Permissoes especificas do perfil']
 
-  useEffect(() => {
-    if (!open) return
-    setGeneratedPassword('')
-    setShowPassword(false)
-    setMessage('')
-    setError('')
-  }, [open, user?.id])
-
   if (!user) return null
-
-  const generatePassword = () => {
-    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
-    const numbers = '23456789'
-    const symbols = '@#$!'
-    const all = `${letters}${numbers}${symbols}`
-    const bytes = new Uint32Array(14)
-    window.crypto.getRandomValues(bytes)
-    const body = Array.from(bytes).map((value) => all[value % all.length]).join('')
-    return `${body}${symbols[bytes[0] % symbols.length]}${numbers[bytes[1] % numbers.length]}`
-  }
-
-  const copyPassword = async () => {
-    if (!generatedPassword) return
-    await navigator.clipboard.writeText(generatedPassword)
-    setMessage('Senha copiada.')
-  }
-
-  const handleGeneratePassword = async () => {
-    setMessage('')
-    setError('')
-    const nextPassword = generatePassword()
-
-    try {
-      setSaving(true)
-      await onResetPassword(user.id, nextPassword)
-      setGeneratedPassword(nextPassword)
-      setShowPassword(true)
-      setMessage('Nova senha gerada e aplicada ao usuario.')
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'Nao foi possivel redefinir a senha.'))
-    } finally {
-      setSaving(false)
-    }
-  }
 
   return (
     <Modal open={open} onClose={onClose} title="Dados do usuario" size="xl">
@@ -396,46 +348,10 @@ function UserDetailsModal({ user, open, onClose, canResetPassword, onResetPasswo
                   Senha de acesso
                 </h4>
                 <p className="mt-1 text-xs text-gray-500">
-                  A senha antiga nao pode ser visualizada. Gere uma nova senha para mostrar e copiar.
+                  A senha atual nao pode ser visualizada nem copiada porque fica protegida por hash no banco.
+                  Para alterar, use o icone de editar e informe uma nova senha.
                 </p>
               </div>
-
-              <div className="flex flex-col sm:flex-row gap-2">
-                <div className="relative flex-1">
-                  <input
-                    value={generatedPassword}
-                    readOnly
-                    type={showPassword ? 'text' : 'password'}
-                    className="input-field pr-10 font-mono"
-                    placeholder="Gere uma nova senha"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((current) => !current)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-brand-600"
-                    disabled={!generatedPassword}
-                  >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={copyPassword}
-                  className="btn-secondary"
-                  disabled={!generatedPassword}
-                >
-                  <Copy size={14} />
-                  Copiar
-                </button>
-              </div>
-
-              {error && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</div>}
-              {message && <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl px-3 py-2">{message}</div>}
-
-              <button type="button" onClick={handleGeneratePassword} className="btn-primary" disabled={saving}>
-                <RefreshCw size={14} />
-                {saving ? 'Gerando...' : 'Gerar nova senha'}
-              </button>
             </div>
           )}
         </div>
@@ -572,6 +488,8 @@ export default function Acessos() {
       if (form.id) {
         const { data } = await api.put(`/users/${form.id}`, form)
         setUsers((current) => current.map((listedUser) => (listedUser.id === form.id ? data : listedUser)))
+        setDetailsUser((current) => (current?.id === form.id ? data : current))
+        setEditUser((current) => (current?.id === form.id ? data : current))
         return true
       }
 
@@ -600,10 +518,6 @@ export default function Acessos() {
     } finally {
       setSaving(false)
     }
-  }
-
-  const handleResetPassword = async (userId, password) => {
-    await api.patch(`/users/${userId}/password`, { password })
   }
 
   if (!canViewUsers) {
@@ -736,7 +650,6 @@ export default function Acessos() {
         open={!!detailsUser}
         onClose={() => setDetailsUser(null)}
         canResetPassword={isAdmin}
-        onResetPassword={handleResetPassword}
       />
       <ConfirmDialog
         open={!!deleteUser}
