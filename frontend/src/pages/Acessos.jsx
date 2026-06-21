@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ShieldCheck, Users, UserCheck, Search, Plus, X, Edit2, Trash2, Eye, EyeOff, Lock } from 'lucide-react'
+import { ShieldCheck, Users, UserCheck, Search, Plus, X, Edit2, Trash2, Eye, EyeOff, Lock, Copy, RefreshCw } from 'lucide-react'
 import Badge from '../components/ui/Badge'
 import StatCard from '../components/ui/StatCard'
 import Modal from '../components/ui/Modal'
@@ -292,7 +292,7 @@ function UserFormModal({ user: editUser, open, onClose, onSave, saving, error })
 }
 
 function UserDetailsModal({ user, open, onClose, canResetPassword, onResetPassword }) {
-  const [password, setPassword] = useState('')
+  const [generatedPassword, setGeneratedPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -301,7 +301,7 @@ function UserDetailsModal({ user, open, onClose, canResetPassword, onResetPasswo
 
   useEffect(() => {
     if (!open) return
-    setPassword('')
+    setGeneratedPassword('')
     setShowPassword(false)
     setMessage('')
     setError('')
@@ -309,21 +309,34 @@ function UserDetailsModal({ user, open, onClose, canResetPassword, onResetPasswo
 
   if (!user) return null
 
-  const handleResetPassword = async (event) => {
-    event.preventDefault()
+  const generatePassword = () => {
+    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+    const numbers = '23456789'
+    const symbols = '@#$!'
+    const all = `${letters}${numbers}${symbols}`
+    const bytes = new Uint32Array(14)
+    window.crypto.getRandomValues(bytes)
+    const body = Array.from(bytes).map((value) => all[value % all.length]).join('')
+    return `${body}${symbols[bytes[0] % symbols.length]}${numbers[bytes[1] % numbers.length]}`
+  }
+
+  const copyPassword = async () => {
+    if (!generatedPassword) return
+    await navigator.clipboard.writeText(generatedPassword)
+    setMessage('Senha copiada.')
+  }
+
+  const handleGeneratePassword = async () => {
     setMessage('')
     setError('')
-
-    if (password.length < 8) {
-      setError('A nova senha deve ter pelo menos 8 caracteres.')
-      return
-    }
+    const nextPassword = generatePassword()
 
     try {
       setSaving(true)
-      await onResetPassword(user.id, password)
-      setPassword('')
-      setMessage('Senha redefinida com sucesso.')
+      await onResetPassword(user.id, nextPassword)
+      setGeneratedPassword(nextPassword)
+      setShowPassword(true)
+      setMessage('Nova senha gerada e aplicada ao usuario.')
     } catch (err) {
       setError(getApiErrorMessage(err, 'Nao foi possivel redefinir a senha.'))
     } finally {
@@ -332,84 +345,100 @@ function UserDetailsModal({ user, open, onClose, canResetPassword, onResetPasswo
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Dados do usuario" size="md">
-      <div className="space-y-5">
-        <div className="flex items-center gap-4">
-          <Avatar user={user} size="lg" />
-          <div className="min-w-0">
-            <h3 className="text-lg font-bold text-gray-900">{user.name}</h3>
-            <p className="text-sm text-gray-500 truncate">{user.email}</p>
-            <div className="mt-2">
-              <Badge status={user.role} />
+    <Modal open={open} onClose={onClose} title="Dados do usuario" size="xl">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.1fr] gap-5">
+        <div className="space-y-4">
+          <div className="flex items-center gap-4">
+            <Avatar user={user} size="lg" />
+            <div className="min-w-0">
+              <h3 className="text-lg font-bold text-gray-900">{user.name}</h3>
+              <p className="text-sm text-gray-500 truncate">{user.email}</p>
+              <div className="mt-2">
+                <Badge status={user.role} />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <div className="rounded-xl bg-gray-50 p-3">
+              <div className="text-xs font-medium text-gray-500">Status</div>
+              <div className="mt-1 font-semibold text-gray-800">{user.status || '-'}</div>
+            </div>
+            <div className="rounded-xl bg-gray-50 p-3">
+              <div className="text-xs font-medium text-gray-500">Area</div>
+              <div className="mt-1 font-semibold text-gray-800">{user.area || '-'}</div>
+            </div>
+            <div className="rounded-xl bg-gray-50 p-3 sm:col-span-2">
+              <div className="text-xs font-medium text-gray-500">Atuacao</div>
+              <div className="mt-1 font-semibold text-gray-800">{user.function || '-'}</div>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-          <div className="rounded-xl bg-gray-50 p-3">
-            <div className="text-xs font-medium text-gray-500">Status</div>
-            <div className="mt-1 font-semibold text-gray-800">{user.status || '-'}</div>
+        <div className="space-y-4">
+          <div>
+            <h4 className="text-sm font-semibold text-gray-800 mb-2">Permissoes</h4>
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {perms.map((permission) => (
+                <li key={permission} className="flex items-center gap-2 text-sm text-gray-700">
+                  <span className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-green-600 flex-shrink-0">OK</span>
+                  {permission}
+                </li>
+              ))}
+            </ul>
           </div>
-          <div className="rounded-xl bg-gray-50 p-3">
-            <div className="text-xs font-medium text-gray-500">Area</div>
-            <div className="mt-1 font-semibold text-gray-800">{user.area || '-'}</div>
-          </div>
-          <div className="rounded-xl bg-gray-50 p-3 sm:col-span-2">
-            <div className="text-xs font-medium text-gray-500">Atuacao</div>
-            <div className="mt-1 font-semibold text-gray-800">{user.function || '-'}</div>
-          </div>
-        </div>
 
-        <div>
-          <h4 className="text-sm font-semibold text-gray-800 mb-2">Permissoes</h4>
-          <ul className="space-y-2">
-            {perms.map((permission) => (
-              <li key={permission} className="flex items-center gap-2 text-sm text-gray-700">
-                <span className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-green-600 flex-shrink-0">OK</span>
-                {permission}
-              </li>
-            ))}
-          </ul>
-        </div>
+          {canResetPassword && (
+            <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 space-y-3">
+              <div>
+                <h4 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                  <Lock size={15} className="text-brand-700" />
+                  Senha de acesso
+                </h4>
+                <p className="mt-1 text-xs text-gray-500">
+                  A senha antiga nao pode ser visualizada. Gere uma nova senha para mostrar e copiar.
+                </p>
+              </div>
 
-        {canResetPassword && (
-          <form onSubmit={handleResetPassword} className="rounded-2xl border border-gray-100 bg-gray-50 p-4 space-y-3">
-            <div>
-              <h4 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-                <Lock size={15} className="text-brand-700" />
-                Redefinir senha
-              </h4>
-              <p className="mt-1 text-xs text-gray-500">
-                A senha atual nao pode ser visualizada porque fica protegida por criptografia.
-              </p>
-            </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <input
+                    value={generatedPassword}
+                    readOnly
+                    type={showPassword ? 'text' : 'password'}
+                    className="input-field pr-10 font-mono"
+                    placeholder="Gere uma nova senha"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-brand-600"
+                    disabled={!generatedPassword}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={copyPassword}
+                  className="btn-secondary"
+                  disabled={!generatedPassword}
+                >
+                  <Copy size={14} />
+                  Copiar
+                </button>
+              </div>
 
-            <div className="relative">
-              <input
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                type={showPassword ? 'text' : 'password'}
-                className="input-field pr-10"
-                placeholder="Nova senha para este usuario"
-                minLength={8}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((current) => !current)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-brand-600"
-              >
-                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              {error && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</div>}
+              {message && <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl px-3 py-2">{message}</div>}
+
+              <button type="button" onClick={handleGeneratePassword} className="btn-primary" disabled={saving}>
+                <RefreshCw size={14} />
+                {saving ? 'Gerando...' : 'Gerar nova senha'}
               </button>
             </div>
-
-            {error && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</div>}
-            {message && <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl px-3 py-2">{message}</div>}
-
-            <button type="submit" className="btn-primary" disabled={saving}>
-              {saving ? 'Redefinindo...' : 'Salvar nova senha'}
-            </button>
-          </form>
-        )}
+          )}
+        </div>
       </div>
     </Modal>
   )
