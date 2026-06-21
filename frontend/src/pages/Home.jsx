@@ -10,10 +10,13 @@ const statsImage = '/images/home/resultados.png'
 const formUrl = 'https://forms.gle/uYrVTURKxzq6mcRV6'
 const avaUrl = 'https://pb.ava.rieh.nees.ufal.br/login/index.php'
 
-const courses = [
+const allCourses = [
   { title: 'Google for Education', tag: 'Trilha Institucional', workload: '20h', image: '/images/home/curso-google.png' },
   { title: 'Antes que aconteca nas Escolas', tag: 'Trilha Institucional', workload: '20h', image: '/images/home/curso-antes-escolas.png' },
-  { title: 'Legislacao Educacional na pratica docente', tag: 'Trilha Institucional', workload: '20h', image: '/images/home/curso-legislacao.png' },
+  { title: 'Legislacao Educacional na Pratica Docente', tag: 'Trilha Institucional', workload: '20h', image: '/images/home/curso-legislacao.png' },
+  { title: 'Competencias Socioemocionais na Escola', tag: 'Educacao Socioemocional', workload: '15h', image: '/images/home/curso-antes-escolas.png' },
+  { title: 'Tecnologia e Inovacao na Educacao', tag: 'Educacao, Ciencia e Tecnologia', workload: '20h', image: '/images/home/curso-legislacao.png' },
+  { title: 'Gestao Pedagogica e Lideranca', tag: 'Gestao Pedagogica', workload: '20h', image: '/images/home/curso-google.png' },
 ]
 
 const timeline = [
@@ -32,14 +35,13 @@ const stats = [
   { value: 95, prefix: '+', suffix: '%', label: 'de satisfacao' },
 ]
 
-const filters = [
-  { label: 'Todos', icon: '/images/icons/todos.png' },
-  { label: 'Trilha Institucional', icon: '/images/icons/trilha-institucional.png' },
-  { label: 'Educacao Socioemocional', icon: '/images/icons/socioemocional.png' },
-  { label: 'Educacao, Ciencia e Tecnologia', icon: '/images/icons/tecnologia.png' },
-  { label: 'Gestao Pedagogica', icon: '/images/icons/gestao.png' },
-  { label: 'Educacao Inclusiva, Equidade e Diversidade', icon: '/images/icons/inclusiva.png' },
-  { label: 'BNCC', icon: '/images/icons/bncc.png' },
+const FILTERS = [
+  { label: 'Todos', match: null },
+  { label: 'Institucional', match: 'Trilha Institucional' },
+  { label: 'Socioemocional', match: 'Educacao Socioemocional' },
+  { label: 'Tecnologia', match: 'Educacao, Ciencia e Tecnologia' },
+  { label: 'Gestao', match: 'Gestao Pedagogica' },
+  { label: 'Inclusiva', match: 'Educacao Inclusiva' },
 ]
 
 function CountUp({ value, prefix = '', suffix = '', label }) {
@@ -245,11 +247,17 @@ function FluxoTimeline() {
 
 export default function Home() {
   const [activeFilter, setActiveFilter] = useState(0)
+  const carouselRef = useRef(null)
 
   const visibleCourses = useMemo(() => {
-    if (activeFilter === 0) return courses
-    return courses.filter((c) => c.tag === filters[activeFilter].label)
+    const match = FILTERS[activeFilter]?.match
+    if (!match) return allCourses
+    return allCourses.filter((c) => c.tag.startsWith(match))
   }, [activeFilter])
+
+  const scrollCarousel = (dir) => {
+    carouselRef.current?.scrollBy({ left: dir * 380, behavior: 'smooth' })
+  }
 
   return (
     <div className="min-h-screen bg-white text-[#111827]">
@@ -265,9 +273,10 @@ export default function Home() {
 
 
         {/* ── Cursos ── */}
-        <section className="mx-auto max-w-[1180px] px-[22px] py-14">
-          <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
-            <div>
+        <section className="py-14">
+          <div className="mx-auto max-w-[1180px] px-[22px]">
+            {/* Header */}
+            <div className="mb-6">
               <span className="mb-2 inline-block rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-black uppercase tracking-wider text-[#6f35b5]">
                 Formacao 2026
               </span>
@@ -276,55 +285,91 @@ export default function Home() {
                 Trilhas formativas para fortalecer a pratica pedagogica e elevar a qualidade da educacao na Paraiba.
               </p>
             </div>
-            <Link to="/catalogo-cursos" className="inline-flex shrink-0 items-center gap-2 font-black text-[#6f35b5] hover:underline">
-              Ver todos os cursos <ArrowRight size={16} />
-            </Link>
+
+            {/* Filtros — linha única */}
+            <div className="mb-8 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {FILTERS.map((f, i) => (
+                <button
+                  key={f.label}
+                  type="button"
+                  onClick={() => setActiveFilter(i)}
+                  className={`shrink-0 rounded-full border px-5 py-2 text-sm font-bold whitespace-nowrap transition ${
+                    activeFilter === i
+                      ? 'border-[#6f35b5] bg-[#6f35b5] text-white shadow-md'
+                      : 'border-[#ddd6fe] bg-white text-[#6f35b5] hover:border-[#6f35b5] hover:bg-[#faf5ff]'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Filtros com ícones */}
-          <div className="mb-8 flex flex-wrap gap-2.5">
-            {filters.map((filter, i) => (
-              <button
-                key={filter.label}
-                type="button"
-                onClick={() => setActiveFilter(i)}
-                className={`flex items-center gap-2 rounded-full border-[1.5px] px-4 py-2 text-sm font-black transition ${
-                  activeFilter === i
-                    ? 'border-[#6f35b5] bg-[#6f35b5] text-white shadow-md'
-                    : 'border-[#c4a7e7] bg-white text-[#6f35b5] hover:border-[#6f35b5] hover:bg-[#faf5ff]'
-                }`}
-              >
-                <img src={filter.icon} alt="" className="h-4 w-4 object-contain" />
-                {filter.label}
-              </button>
-            ))}
-          </div>
+          {/* Carrossel */}
+          <div className="relative">
+            {/* Scroll container — padding lateral para alinhar com conteúdo */}
+            <div
+              ref={carouselRef}
+              className="flex gap-5 overflow-x-auto px-[calc((100vw-1180px)/2+22px)] pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth"
+              style={{ scrollSnapType: 'x mandatory' }}
+            >
+              {(visibleCourses.length > 0 ? visibleCourses : allCourses).map((course) => (
+                <Link
+                  key={course.title}
+                  to="/catalogo-cursos"
+                  className="group relative h-[380px] w-[340px] shrink-0 overflow-hidden rounded-2xl bg-[#1a0a2e] text-white shadow-[0_8px_28px_rgba(17,24,39,.16)] transition hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(111,53,181,.25)]"
+                  style={{ scrollSnapAlign: 'start' }}
+                >
+                  <img
+                    src={course.image} alt={course.title}
+                    className="absolute inset-0 h-full w-full object-cover object-top transition duration-500 group-hover:scale-[1.04]"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-black/10 to-black/85" />
+                  <div className="absolute left-4 top-4 z-10 flex flex-wrap gap-2">
+                    <span className="rounded-full bg-[#f3e8ff]/90 px-3 py-1 text-xs font-black text-[#4f1f87] backdrop-blur-sm">{course.tag}</span>
+                    <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-black text-white backdrop-blur-sm">{course.workload}</span>
+                  </div>
+                  <div className="absolute bottom-5 left-5 right-14 z-10">
+                    <small className="mb-1 block text-xs text-[#e9d5ff]">Curso</small>
+                    <h3 className="text-base font-black uppercase leading-snug">{course.title}</h3>
+                  </div>
+                  <span className="absolute bottom-5 right-4 z-10 grid h-9 w-9 place-items-center rounded-full bg-white text-[#6f35b5] shadow-md transition group-hover:bg-[#6f35b5] group-hover:text-white">
+                    <ArrowRight size={17} />
+                  </span>
+                </Link>
+              ))}
 
-          <div className="grid gap-5 md:grid-cols-3">
-            {(visibleCourses.length > 0 ? visibleCourses : courses).map((course) => (
+              {/* Card "Ver todos" */}
               <Link
-                key={course.title}
                 to="/catalogo-cursos"
-                className="group relative min-h-[380px] overflow-hidden rounded-2xl bg-[#1a0a2e] text-white shadow-[0_8px_28px_rgba(17,24,39,.16)] transition hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(111,53,181,.25)]"
+                className="group flex h-[380px] w-[200px] shrink-0 flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-[#ddd6fe] bg-[#faf5ff] text-[#6f35b5] transition hover:border-[#6f35b5] hover:bg-[#f3e8ff]"
+                style={{ scrollSnapAlign: 'start' }}
               >
-                <img
-                  src={course.image} alt={course.title}
-                  className="absolute inset-0 h-full w-full object-cover object-top transition duration-500 group-hover:scale-[1.04]"
-                />
-                <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-black/10 to-black/85" />
-                <div className="absolute left-4 top-4 z-10 flex flex-wrap gap-2">
-                  <span className="rounded-full bg-[#f3e8ff]/90 px-3 py-1 text-xs font-black text-[#4f1f87] backdrop-blur-sm">{course.tag}</span>
-                  <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-black text-white backdrop-blur-sm">{course.workload}</span>
-                </div>
-                <div className="absolute bottom-5 left-5 right-14 z-10">
-                  <small className="mb-1 block text-xs text-[#e9d5ff]">Curso</small>
-                  <h3 className="text-base font-black uppercase leading-snug">{course.title}</h3>
-                </div>
-                <span className="absolute bottom-5 right-4 z-10 grid h-9 w-9 place-items-center rounded-full bg-white text-[#6f35b5] shadow-md transition group-hover:bg-[#6f35b5] group-hover:text-white">
-                  <ArrowRight size={17} />
+                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#ede9fe] transition group-hover:bg-[#6f35b5] group-hover:text-white">
+                  <ArrowRight size={22} />
                 </span>
+                <span className="text-center text-sm font-black leading-tight px-4">Ver todos os cursos</span>
               </Link>
-            ))}
+            </div>
+
+            {/* Setas de navegação */}
+            <div className="mx-auto mt-5 flex max-w-[1180px] items-center justify-end gap-2 px-[22px]">
+              <button
+                onClick={() => scrollCarousel(-1)}
+                className="grid h-9 w-9 place-items-center rounded-full border border-[#ddd6fe] bg-white text-[#6f35b5] shadow-sm transition hover:border-[#6f35b5] hover:bg-[#6f35b5] hover:text-white"
+              >
+                <ArrowRight size={16} className="rotate-180" />
+              </button>
+              <button
+                onClick={() => scrollCarousel(1)}
+                className="grid h-9 w-9 place-items-center rounded-full border border-[#ddd6fe] bg-white text-[#6f35b5] shadow-sm transition hover:border-[#6f35b5] hover:bg-[#6f35b5] hover:text-white"
+              >
+                <ArrowRight size={16} />
+              </button>
+              <Link to="/catalogo-cursos" className="ml-2 text-sm font-bold text-[#6f35b5] hover:underline">
+                Ver catalogo completo →
+              </Link>
+            </div>
           </div>
         </section>
 
