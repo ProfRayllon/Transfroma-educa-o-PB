@@ -18,9 +18,11 @@ export default function PublicNav() {
           </div>
         </Link>
 
-        <nav className="flex items-center gap-1">
+        <nav className="flex items-center gap-0.5">
           <NavLink to="/" className={navLinkClass} end>Home</NavLink>
           <NavLink to="/catalogo-cursos" className={navLinkClass}>Cursos</NavLink>
+          <NavLink to="/inscricoes" className={navLinkClass}>Inscricoes</NavLink>
+          <NavLink to="/guia" className={navLinkClass}>Guia</NavLink>
           <NavLink to="/login" className={navLinkClass}>Login</NavLink>
         </nav>
       </div>

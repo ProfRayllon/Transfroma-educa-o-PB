@@ -228,10 +228,8 @@ export default function Home() {
           <div className="mx-auto grid max-w-[1000px] gap-6 md:grid-cols-2">
 
             {/* Inscrições */}
-            <a
-              href={formUrl}
-              target="_blank"
-              rel="noreferrer"
+            <Link
+              to="/inscricoes"
               className="group relative flex flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br from-[#6b21a8] to-[#3b1d7a] p-8 shadow-[0_16px_48px_rgba(59,29,122,.55)] transition hover:-translate-y-1 hover:shadow-[0_24px_64px_rgba(111,53,181,.5)]"
             >
               {/* Glow blob */}
@@ -256,13 +254,11 @@ export default function Home() {
                   <ArrowRight size={16} className="text-white transition group-hover:text-[#6b21a8]" />
                 </span>
               </div>
-            </a>
+            </Link>
 
             {/* Guias */}
-            <a
-              href="https://drive.google.com/drive/folders/1vZPmyZyxj5mmMBFlSwrVJKQYVAfGRHHK"
-              target="_blank"
-              rel="noreferrer"
+            <Link
+              to="/guia"
               className="group relative flex flex-col justify-between overflow-hidden rounded-2xl bg-[#0f0720] p-8 shadow-[0_16px_48px_rgba(10,6,21,.6)] ring-1 ring-white/8 transition hover:-translate-y-1 hover:shadow-[0_24px_64px_rgba(168,85,247,.25)] hover:ring-[#a855f7]/40"
             >
               {/* Neon accent */}
@@ -287,7 +283,7 @@ export default function Home() {
                   <ArrowRight size={16} className="text-[#c084fc]" />
                 </span>
               </div>
-            </a>
+            </Link>
 
           </div>
         </section>
