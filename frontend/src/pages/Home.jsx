@@ -11,12 +11,9 @@ const formUrl = 'https://forms.gle/uYrVTURKxzq6mcRV6'
 const avaUrl = 'https://pb.ava.rieh.nees.ufal.br/login/index.php'
 
 const allCourses = [
-  { title: 'Google for Education', tag: 'Trilha Institucional', workload: '20h', image: '/images/home/curso-google.png' },
-  { title: 'Antes que aconteca nas Escolas', tag: 'Trilha Institucional', workload: '20h', image: '/images/home/curso-antes-escolas.png' },
-  { title: 'Legislacao Educacional na Pratica Docente', tag: 'Trilha Institucional', workload: '20h', image: '/images/home/curso-legislacao.png' },
-  { title: 'Competencias Socioemocionais na Escola', tag: 'Educacao Socioemocional', workload: '15h', image: '/images/home/curso-antes-escolas.png' },
-  { title: 'Tecnologia e Inovacao na Educacao', tag: 'Educacao, Ciencia e Tecnologia', workload: '20h', image: '/images/home/curso-legislacao.png' },
-  { title: 'Gestao Pedagogica e Lideranca', tag: 'Gestao Pedagogica', workload: '20h', image: '/images/home/curso-google.png' },
+  { title: 'Google for Education', tag: 'Trilha Institucional', workload: '20h', status: 'Em andamento', image: '/images/home/curso-google.png' },
+  { title: 'Antes que aconteca nas Escolas', tag: 'Trilha Institucional', workload: '20h', status: 'Em breve', image: '/images/home/curso-antes-escolas.png' },
+  { title: 'Legislacao Educacional na Pratica Docente', tag: 'Trilha Institucional', workload: '20h', status: 'Em breve', image: '/images/home/curso-legislacao.png' },
 ]
 
 const timeline = [
@@ -273,64 +270,80 @@ export default function Home() {
 
 
         {/* ── Cursos ── */}
-        <section className="py-14">
-          <div className="mx-auto max-w-[1180px] px-[22px]">
-            {/* Header */}
-            <div className="mb-6">
+        <section className="mx-auto max-w-[1180px] px-[22px] py-14">
+          {/* Header */}
+          <div className="mb-6 flex items-end justify-between gap-4">
+            <div>
               <span className="mb-2 inline-block rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-black uppercase tracking-wider text-[#6f35b5]">
                 Formacao 2026
               </span>
               <h2 className="text-[34px] font-black leading-tight tracking-tight">Transforma Educacao PB</h2>
-              <p className="mt-2 max-w-2xl text-[17px] leading-relaxed text-[#566176]">
+              <p className="mt-2 max-w-xl text-[17px] leading-relaxed text-[#566176]">
                 Trilhas formativas para fortalecer a pratica pedagogica e elevar a qualidade da educacao na Paraiba.
               </p>
             </div>
-
-            {/* Filtros — linha única */}
-            <div className="mb-8 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {FILTERS.map((f, i) => (
-                <button
-                  key={f.label}
-                  type="button"
-                  onClick={() => setActiveFilter(i)}
-                  className={`shrink-0 rounded-full border px-5 py-2 text-sm font-bold whitespace-nowrap transition ${
-                    activeFilter === i
-                      ? 'border-[#6f35b5] bg-[#6f35b5] text-white shadow-md'
-                      : 'border-[#ddd6fe] bg-white text-[#6f35b5] hover:border-[#6f35b5] hover:bg-[#faf5ff]'
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
+            <Link to="/catalogo-cursos" className="shrink-0 text-sm font-black text-[#6f35b5] hover:underline">
+              Ver catalogo →
+            </Link>
           </div>
 
-          {/* Carrossel */}
+          {/* Filtros — linha única sem scrollbar */}
+          <div className="mb-8 flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {FILTERS.map((f, i) => (
+              <button
+                key={f.label}
+                type="button"
+                onClick={() => setActiveFilter(i)}
+                className={`shrink-0 whitespace-nowrap rounded-full border px-5 py-2 text-sm font-bold transition ${
+                  activeFilter === i
+                    ? 'border-[#6f35b5] bg-[#6f35b5] text-white shadow-md'
+                    : 'border-[#ddd6fe] bg-white text-[#6f35b5] hover:border-[#6f35b5] hover:bg-[#faf5ff]'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Carrossel com seta sobreposta */}
           <div className="relative">
-            {/* Scroll container — padding lateral para alinhar com conteúdo */}
             <div
               ref={carouselRef}
-              className="flex gap-5 overflow-x-auto px-[calc((100vw-1180px)/2+22px)] pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth"
+              className="flex gap-5 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               style={{ scrollSnapType: 'x mandatory' }}
             >
               {(visibleCourses.length > 0 ? visibleCourses : allCourses).map((course) => (
                 <Link
                   key={course.title}
                   to="/catalogo-cursos"
-                  className="group relative h-[380px] w-[340px] shrink-0 overflow-hidden rounded-2xl bg-[#1a0a2e] text-white shadow-[0_8px_28px_rgba(17,24,39,.16)] transition hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(111,53,181,.25)]"
+                  className="group relative h-[380px] w-[340px] shrink-0 overflow-hidden rounded-2xl bg-[#1a0a2e] text-white shadow-[0_8px_28px_rgba(17,24,39,.14)] transition hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(111,53,181,.22)]"
                   style={{ scrollSnapAlign: 'start' }}
                 >
                   <img
                     src={course.image} alt={course.title}
                     className="absolute inset-0 h-full w-full object-cover object-top transition duration-500 group-hover:scale-[1.04]"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-black/10 to-black/85" />
+                  <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/10 to-black/80" />
+
+                  {/* Tags topo */}
                   <div className="absolute left-4 top-4 z-10 flex flex-wrap gap-2">
-                    <span className="rounded-full bg-[#f3e8ff]/90 px-3 py-1 text-xs font-black text-[#4f1f87] backdrop-blur-sm">{course.tag}</span>
-                    <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-black text-white backdrop-blur-sm">{course.workload}</span>
+                    <span className="rounded-full bg-[#f3e8ff]/90 px-3 py-1 text-xs font-black text-[#4f1f87] backdrop-blur-sm">
+                      {course.tag}
+                    </span>
+                    <span className={`rounded-full px-3 py-1 text-xs font-black backdrop-blur-sm ${
+                      course.status === 'Em andamento'
+                        ? 'bg-green-400/90 text-green-950'
+                        : 'bg-amber-300/90 text-amber-900'
+                    }`}>
+                      {course.status}
+                    </span>
                   </div>
+
+                  {/* Conteúdo base */}
                   <div className="absolute bottom-5 left-5 right-14 z-10">
-                    <small className="mb-1 block text-xs text-[#e9d5ff]">Curso</small>
+                    <small className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-white/60">
+                      {course.workload}
+                    </small>
                     <h3 className="text-base font-black uppercase leading-snug">{course.title}</h3>
                   </div>
                   <span className="absolute bottom-5 right-4 z-10 grid h-9 w-9 place-items-center rounded-full bg-white text-[#6f35b5] shadow-md transition group-hover:bg-[#6f35b5] group-hover:text-white">
@@ -338,38 +351,15 @@ export default function Home() {
                   </span>
                 </Link>
               ))}
-
-              {/* Card "Ver todos" */}
-              <Link
-                to="/catalogo-cursos"
-                className="group flex h-[380px] w-[200px] shrink-0 flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-[#ddd6fe] bg-[#faf5ff] text-[#6f35b5] transition hover:border-[#6f35b5] hover:bg-[#f3e8ff]"
-                style={{ scrollSnapAlign: 'start' }}
-              >
-                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#ede9fe] transition group-hover:bg-[#6f35b5] group-hover:text-white">
-                  <ArrowRight size={22} />
-                </span>
-                <span className="text-center text-sm font-black leading-tight px-4">Ver todos os cursos</span>
-              </Link>
             </div>
 
-            {/* Setas de navegação */}
-            <div className="mx-auto mt-5 flex max-w-[1180px] items-center justify-end gap-2 px-[22px]">
-              <button
-                onClick={() => scrollCarousel(-1)}
-                className="grid h-9 w-9 place-items-center rounded-full border border-[#ddd6fe] bg-white text-[#6f35b5] shadow-sm transition hover:border-[#6f35b5] hover:bg-[#6f35b5] hover:text-white"
-              >
-                <ArrowRight size={16} className="rotate-180" />
-              </button>
-              <button
-                onClick={() => scrollCarousel(1)}
-                className="grid h-9 w-9 place-items-center rounded-full border border-[#ddd6fe] bg-white text-[#6f35b5] shadow-sm transition hover:border-[#6f35b5] hover:bg-[#6f35b5] hover:text-white"
-              >
-                <ArrowRight size={16} />
-              </button>
-              <Link to="/catalogo-cursos" className="ml-2 text-sm font-bold text-[#6f35b5] hover:underline">
-                Ver catalogo completo →
-              </Link>
-            </div>
+            {/* Seta direita sobreposta (estilo da referência) */}
+            <button
+              onClick={() => scrollCarousel(1)}
+              className="absolute -right-4 top-1/2 z-10 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white shadow-[0_4px_16px_rgba(0,0,0,.15)] text-[#6f35b5] transition hover:bg-[#6f35b5] hover:text-white"
+            >
+              <ArrowRight size={18} />
+            </button>
           </div>
         </section>
 
