@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, CheckCircle } from 'lucide-react'
+import { ArrowRight, BookOpen, CheckCircle, Download, ExternalLink, FileText, Layers, Target } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
 
@@ -9,6 +9,23 @@ const avaImage = '/images/home/ava.png'
 const statsImage = '/images/home/resultados.png'
 const formUrl = 'https://forms.gle/uYrVTURKxzq6mcRV6'
 const avaUrl = 'https://pb.ava.rieh.nees.ufal.br/login/index.php'
+const driveUrl = 'https://drive.google.com/drive/folders/1vZPmyZyxj5mmMBFlSwrVJKQYVAfGRHHK'
+const videoId = 'K7sHZjRxk9g'
+
+const inscricaoSteps = [
+  { num: '1', title: 'Acesse o formulário', desc: 'Clique em "Realizar inscrição" e preencha o formulário oficial do Programa Transforma Educação PB 2026.' },
+  { num: '2', title: 'Informe seus dados', desc: 'Preencha nome completo, CPF, escola, município e trilha formativa de interesse.' },
+  { num: '3', title: 'Confirme o envio', desc: 'Após enviar, você receberá uma confirmação. Guarde o comprovante de inscrição.' },
+  { num: '4', title: 'Validação do CPF', desc: 'Acesse o portal Transforma e valide seu CPF para liberar o acesso ao Ambiente Virtual de Aprendizagem.' },
+  { num: '5', title: 'Acesse o AVA', desc: 'Com o CPF validado, entre no AVA RIEH/PB usando sua conta gov.br e inicie sua formação.' },
+]
+
+const guias = [
+  { icon: <BookOpen size={20} />, tag: 'Orientação geral', title: 'Guia do Cursista', desc: 'Instruções para navegar no programa: inscrição, acesso ao AVA, trilhas e certificado.', color: 'from-[#6b21a8] to-[#4c1d95]' },
+  { icon: <Layers size={20} />, tag: 'Trilhas formativas', title: 'Guia das Trilhas', desc: 'Descrição completa de cada trilha formativa: carga horária, público-alvo e estrutura dos cursos.', color: 'from-[#7e22ce] to-[#6b21a8]' },
+  { icon: <Target size={20} />, tag: 'Acesso ao AVA', title: 'Guia do AVA RIEH/PB', desc: 'Como acessar o AVA, navegar nos cursos, entregar atividades e acompanhar seu progresso.', color: 'from-[#9333ea] to-[#7e22ce]' },
+  { icon: <FileText size={20} />, tag: 'Certificação', title: 'Guia de Certificação', desc: 'Critérios para emissão do certificado, prazos de conclusão e como acessar seu documento.', color: 'from-[#a855f7] to-[#9333ea]' },
+]
 
 const allCourses = [
   { title: 'Google for Education', tag: 'Trilha Institucional', workload: '20h', status: 'Em andamento', image: '/images/home/curso-google.png' },
@@ -380,6 +397,119 @@ export default function Home() {
 
         {/* ── Fluxo ── */}
         <FluxoTimeline />
+
+        {/* ── Inscrições ── */}
+        <section id="inscricoes" className="relative overflow-hidden bg-[#3b1d7a] px-[22px] py-20">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(168,85,247,.25)_0%,_transparent_60%)]" />
+          <div className="relative mx-auto max-w-[1180px]">
+            <span className="mb-3 inline-block rounded-full bg-white/15 px-3 py-1 text-xs font-black uppercase tracking-[0.3em] text-purple-200 ring-1 ring-white/20">
+              Programa 2026
+            </span>
+            <h2 className="mb-4 text-[44px] font-black leading-tight text-white">Inscrições</h2>
+            <p className="max-w-2xl text-[18px] leading-relaxed text-white/70">
+              Participe do maior programa de formação continuada da Paraíba. Inscreva-se, escolha sua trilha e inicie sua jornada de aprendizagem.
+            </p>
+            <a href={formUrl} target="_blank" rel="noreferrer" className="mt-8 inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-[16px] font-black text-[#6b21a8] shadow-xl transition hover:-translate-y-0.5 hover:shadow-2xl">
+              Realizar inscrição agora <ArrowRight size={18} />
+            </a>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-[1180px] px-[22px] py-16">
+          <span className="mb-2 inline-block rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-black uppercase tracking-wider text-[#6f35b5]">
+            Passo a passo
+          </span>
+          <h3 className="mb-10 text-[34px] font-black leading-tight">Como se inscrever</h3>
+          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+            {inscricaoSteps.map((s, i) => (
+              <div key={s.num} className="relative rounded-2xl border border-[#e9d5ff] bg-gradient-to-br from-white to-[#faf5ff] p-6 shadow-[0_4px_20px_rgba(111,53,181,.07)]">
+                {i < inscricaoSteps.length - 1 && (
+                  <div className="absolute -right-2.5 top-8 hidden lg:block">
+                    <ArrowRight size={16} className="text-[#c4a7e7]" />
+                  </div>
+                )}
+                <span className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#6f35b5] to-[#9333ea] text-sm font-black text-white shadow-md">
+                  {s.num}
+                </span>
+                <h4 className="mb-2 text-[15px] font-black text-[#1c1033]">{s.title}</h4>
+                <p className="text-[13.5px] leading-relaxed text-[#566176]">{s.desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="bg-[#0a0615] px-[22px] py-16">
+          <div className="mx-auto max-w-[1180px]">
+            <div className="grid items-center gap-10 lg:grid-cols-[1fr_1.4fr]">
+              <div>
+                <span className="mb-2 inline-block text-xs font-black uppercase tracking-[0.3em] text-[#a855f7]">Vídeo informativo</span>
+                <h3 className="mb-4 text-[34px] font-black leading-tight text-white">Saiba tudo sobre as inscrições</h3>
+                <div className="space-y-2">
+                  {['Inscrições abertas para profissionais da rede', 'Certificado 100% para quem concluir', 'Mais de 13 mil cursistas no programa'].map((t) => (
+                    <div key={t} className="flex items-center gap-3">
+                      <CheckCircle size={16} className="shrink-0 text-[#a855f7]" />
+                      <span className="text-sm text-white/70">{t}</span>
+                    </div>
+                  ))}
+                </div>
+                <a href={formUrl} target="_blank" rel="noreferrer" className="mt-8 inline-flex items-center gap-2 rounded-xl bg-[#6f35b5] px-6 py-3 text-[15px] font-black text-white transition hover:bg-[#7e22ce]">
+                  Quero me inscrever <ArrowRight size={16} />
+                </a>
+              </div>
+              <div className="aspect-video overflow-hidden rounded-2xl border border-white/10 shadow-[0_16px_48px_rgba(0,0,0,.5)]">
+                <iframe
+                  className="h-full w-full"
+                  src={`https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&playsinline=1`}
+                  title="Como se inscrever no Transforma Educação PB"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Guia ── */}
+        <section id="guia" className="mx-auto max-w-[1180px] px-[22px] py-16">
+          <span className="mb-2 inline-block rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-black uppercase tracking-wider text-[#6f35b5]">
+            Material de apoio
+          </span>
+          <div className="mb-10 flex items-end justify-between gap-4">
+            <h3 className="text-[34px] font-black leading-tight">Guias Transforma</h3>
+            <a href={driveUrl} target="_blank" rel="noreferrer" className="shrink-0 inline-flex items-center gap-1.5 text-sm font-black text-[#6f35b5] hover:underline">
+              Ver pasta no Drive <ExternalLink size={14} />
+            </a>
+          </div>
+          <div className="grid gap-5 md:grid-cols-2">
+            {guias.map((g) => (
+              <a key={g.title} href={driveUrl} target="_blank" rel="noreferrer"
+                className="group flex items-start gap-5 rounded-2xl border border-[#e9d5ff] bg-white p-6 shadow-[0_4px_20px_rgba(111,53,181,.06)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(111,53,181,.14)]">
+                <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${g.color} text-white shadow-lg`}>
+                  {g.icon}
+                </div>
+                <div className="flex-1">
+                  <p className="mb-0.5 text-[10px] font-black uppercase tracking-wider text-[#a855f7]">{g.tag}</p>
+                  <h4 className="mb-1.5 text-[16px] font-black text-[#1c1033]">{g.title}</h4>
+                  <p className="text-[13px] leading-relaxed text-[#566176]">{g.desc}</p>
+                </div>
+                <ArrowRight size={16} className="mt-1 shrink-0 text-[#c4a7e7] transition group-hover:translate-x-0.5 group-hover:text-[#6f35b5]" />
+              </a>
+            ))}
+          </div>
+        </section>
+
+        <section className="bg-gradient-to-br from-[#3b1d7a] to-[#6b21a8] px-[22px] py-14">
+          <div className="mx-auto flex max-w-[1180px] flex-col items-center gap-6 text-center md:flex-row md:text-left">
+            <div className="flex-1">
+              <h3 className="mb-2 text-[28px] font-black text-white">Acesse todos os guias</h3>
+              <p className="text-[15px] text-white/65">Todos os materiais estão disponíveis gratuitamente na pasta do Google Drive do programa.</p>
+            </div>
+            <a href={driveUrl} target="_blank" rel="noreferrer"
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-white px-8 py-4 text-[15px] font-black text-[#6b21a8] shadow-xl transition hover:-translate-y-0.5">
+              <Download size={16} /> Baixar guias
+            </a>
+          </div>
+        </section>
 
         {/* ── AVA ── */}
         <section className="mx-auto max-w-[1180px] px-[22px] py-14">

@@ -7,8 +7,6 @@ import { AvatarProvider } from './context/AvatarContext'
 import Layout from './components/layout/Layout'
 import Home from './pages/Home'
 import PublicCourses from './pages/PublicCourses'
-import Inscricoes from './pages/Inscricoes'
-import Guia from './pages/Guia'
 import Login from './pages/Login'
 import Painel from './pages/Painel'
 import Cursos from './pages/Cursos'
@@ -44,8 +42,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/catalogo-cursos" element={<PublicCourses />} />
-          <Route path="/inscricoes" element={<Inscricoes />} />
-          <Route path="/guia" element={<Guia />} />
+          <Route path="/inscricoes" element={<Navigate to="/" replace />} />
+          <Route path="/guia" element={<Navigate to="/" replace />} />
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route path="painel" element={<Painel />} />
