@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useBranding } from '../context/BrandingContext'
 import api, { getApiErrorMessage } from '../lib/api'
-import { Mail, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowLeft } from 'lucide-react'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -51,7 +51,14 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4 relative">
+      <a
+        href="https://transformaeducacaopb.com.br/"
+        className="absolute top-5 right-6 flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand-700 font-medium transition-colors group"
+      >
+        <ArrowLeft size={15} className="group-hover:-translate-x-0.5 transition-transform" />
+        Voltar ao site
+      </a>
       <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8">
 
         {/* Logo */}

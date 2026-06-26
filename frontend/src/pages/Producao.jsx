@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 
 const PROFESSOR_STATUS_OPTIONS = [
+  { value: '', label: '—' },
   { value: 'nao_iniciado', label: 'Não iniciado' },
   { value: 'em_execucao', label: 'Em execução' },
   { value: 'em_ajustes', label: 'Em ajustes' },
@@ -15,6 +16,7 @@ const PROFESSOR_STATUS_OPTIONS = [
 ]
 
 const SUPERVISOR_STATUS_OPTIONS = [
+  { value: '', label: '—' },
   { value: 'em_revisao', label: 'Em revisão' },
   { value: 'nao_validado', label: 'Não validado' },
   { value: 'validado_com_ajustes', label: 'Validado c/ ajustes' },
@@ -22,6 +24,7 @@ const SUPERVISOR_STATUS_OPTIONS = [
 ]
 
 const COORDINATOR_STATUS_OPTIONS = [
+  { value: '', label: '—' },
   { value: 'em_revisao', label: 'Em revisão' },
   { value: 'nao_validado', label: 'Não validado' },
   { value: 'validado_com_ajustes', label: 'Validado c/ ajustes' },
@@ -357,9 +360,9 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
       objective: '',
       duration: '',
       deliveryDate: '',
-      status: 'nao_iniciado',
-      supervisorStatus: 'em_revisao',
-      coordinatorStatus: 'em_revisao',
+      status: '',
+      supervisorStatus: '',
+      coordinatorStatus: '',
       reviewNotes: '',
       responsibleId: '',
       responsibleName: '',
@@ -617,6 +620,11 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
           </div>
         </div>
 
+        <div className="col-span-2">
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Observações da revisão</label>
+          <textarea name="reviewNotes" value={form.reviewNotes} onChange={handleChange} className="input-field resize-none" rows={2} placeholder="Observações para o produtor..." />
+        </div>
+
         {/* ── Status ── */}
         <SectionLabel>Status</SectionLabel>
 
@@ -645,10 +653,6 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
           </div>
         )}
 
-        <div className="col-span-2">
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">Observações da revisão</label>
-          <textarea name="reviewNotes" value={form.reviewNotes} onChange={handleChange} className="input-field resize-none" rows={2} placeholder="Observações para o produtor..." />
-        </div>
 
       </div>
     </Modal>
@@ -1059,12 +1063,12 @@ export default function Producao() {
                   <td className="table-cell">
                     {canEditThis ? (
                       <InlineStatusSelect
-                        value={mat.status || 'nao_iniciado'}
+                        value={mat.status || ''}
                         options={PROFESSOR_STATUS_OPTIONS}
                         onChange={val => handleStatusChange(mat, 'status', val)}
                       />
                     ) : (
-                      <Badge status={mat.status || 'nao_iniciado'} />
+                      <Badge status={mat.status || ''} />
                     )}
                   </td>
                   <td className="table-cell">
@@ -1072,12 +1076,12 @@ export default function Producao() {
                       <MiniAvatar name={supName} roleLabel="Supervisor" avatar={supAvatar} />
                       {canEditSupStatus ? (
                         <InlineStatusSelect
-                          value={mat.supervisorStatus || 'em_revisao'}
+                          value={mat.supervisorStatus || ''}
                           options={SUPERVISOR_STATUS_OPTIONS}
                           onChange={val => handleStatusChange(mat, 'supervisorStatus', val)}
                         />
                       ) : (
-                        <Badge status={mat.supervisorStatus || 'em_revisao'} />
+                        <Badge status={mat.supervisorStatus || ''} />
                       )}
                     </div>
                   </td>
@@ -1086,12 +1090,12 @@ export default function Producao() {
                       <MiniAvatar name={coordName} roleLabel="Coordenador" avatar={coordAvatar} />
                       {canEditCoordStatus ? (
                         <InlineStatusSelect
-                          value={mat.coordinatorStatus || 'em_revisao'}
+                          value={mat.coordinatorStatus || ''}
                           options={COORDINATOR_STATUS_OPTIONS}
                           onChange={val => handleStatusChange(mat, 'coordinatorStatus', val)}
                         />
                       ) : (
-                        <Badge status={mat.coordinatorStatus || 'em_revisao'} />
+                        <Badge status={mat.coordinatorStatus || ''} />
                       )}
                     </div>
                   </td>
