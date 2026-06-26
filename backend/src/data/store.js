@@ -290,20 +290,7 @@ async function ensureMysqlSchema() {
 
   await pool.execute(`
     ALTER TABLE materials
-    MODIFY type ENUM(
-      'Aula',
-      'Atividade',
-      'videoaula',
-      'apresentacao',
-      'atividade_escrita',
-      'material_complementar',
-      'atividade_interativa',
-      'outro',
-      'ebook',
-      'avaliacao_final',
-      'atividade_objetiva',
-      'pdf'
-    ) NOT NULL DEFAULT 'videoaula'
+    MODIFY type VARCHAR(500) NOT NULL DEFAULT 'videoaula'
   `)
 
   await pool.execute(`
