@@ -50,14 +50,22 @@ const TYPE_LABELS = Object.fromEntries(MATERIAL_TYPE_OPTIONS.map((option) => [op
 
 function TypeBadge({ type }) {
   const documentTypes = ['videoaula', 'apresentacao', 'ebook', 'pdf', 'Aula']
-  const cls = documentTypes.includes(type)
-    ? 'bg-blue-50 text-blue-700 border border-blue-200'
-    : 'bg-orange-50 text-orange-700 border border-orange-200'
+  const types = Array.isArray(type) ? type : (type ? [type] : [])
+  if (!types.length) return <span className="text-gray-300 text-xs">—</span>
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium ${cls}`}>
-      {documentTypes.includes(type) ? <FileText size={10} /> : <CheckSquare size={10} />}
-      {TYPE_LABELS[type] || type}
-    </span>
+    <div className="flex flex-wrap gap-1">
+      {types.map(t => {
+        const cls = documentTypes.includes(t)
+          ? 'bg-blue-50 text-blue-700 border border-blue-200'
+          : 'bg-orange-50 text-orange-700 border border-orange-200'
+        return (
+          <span key={t} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium ${cls}`}>
+            {documentTypes.includes(t) ? <FileText size={10} /> : <CheckSquare size={10} />}
+            {TYPE_LABELS[t] || t}
+          </span>
+        )
+      })}
+    </div>
   )
 }
 
@@ -343,7 +351,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
       course: defaultCourse && defaultCourse !== 'Todos' ? defaultCourse : '',
       session: '',
       module: 1,
-      type: 'videoaula',
+      type: [],
       theme: '',
       objective: '',
       duration: '',
@@ -359,6 +367,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
       adjustedLink: '',
       ...(material || {}),
     }
+    base.type = Array.isArray(base.type) ? base.type : (base.type ? [base.type] : [])
     base.responsibles = material?.responsibles?.length
       ? material.responsibles
       : (material?.responsibleId ? [{ id: material.responsibleId, name: material.responsibleName, role: material.responsibleRole }] : [])
@@ -436,11 +445,30 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
         {/* Tipo */}
         <div className="col-span-2">
           <label className="block text-xs font-medium text-gray-600 mb-1.5">Tipo de material</label>
-          <select name="type" value={form.type} onChange={handleChange} className="select-field">
-            {MATERIAL_TYPE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
+          <div className="flex flex-wrap gap-2">
+            {MATERIAL_TYPE_OPTIONS.map(option => {
+              const selected = form.type.includes(option.value)
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setForm(f => ({
+                    ...f,
+                    type: selected
+                      ? f.type.filter(t => t !== option.value)
+                      : [...f.type, option.value]
+                  }))}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                    selected
+                      ? 'bg-brand-700 text-white border-brand-700'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-brand-400 hover:text-brand-700'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* Título */}
@@ -801,11 +829,7 @@ export default function Producao() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="btn-secondary">
-            <Upload size={14} />
-            Importar planilha
-          </button>
-          {canEdit && (
+{canEdit && (
             <button
               onClick={() => { setEditMaterial({}); setEditOpen(true) }}
               className="btn-primary"

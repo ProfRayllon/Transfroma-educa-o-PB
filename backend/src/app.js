@@ -244,7 +244,7 @@ async function materialPayload(body, actor, currentMaterial) {
     module: Number(body.module) || currentMaterial?.module || 1,
     theme: body.theme,
     objective: body.objective,
-    type: body.type,
+    type: Array.isArray(body.type) ? body.type : (body.type ? [body.type] : []),
     duration: body.duration,
     deliveryDate: body.deliveryDate,
     originalLink: body.originalLink,

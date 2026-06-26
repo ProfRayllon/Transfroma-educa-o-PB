@@ -39,7 +39,7 @@ function mapMaterialRow(row) {
     module: row.module || 1,
     theme: row.theme,
     objective: row.objective,
-    type: row.type,
+    type: parseTypeField(row.type),
     duration: row.duration,
     responsibleId: row.responsible_id,
     responsibleName: row.responsible_name,
@@ -66,6 +66,17 @@ function parseJsonArray(value) {
   } catch {
     return []
   }
+}
+
+function parseTypeField(value) {
+  if (!value) return []
+  if (Array.isArray(value)) return value
+  if (Buffer.isBuffer(value)) value = value.toString('utf8')
+  try {
+    const parsed = JSON.parse(value)
+    if (Array.isArray(parsed)) return parsed
+  } catch {}
+  return [value]
 }
 
 function mapCourseRow(row) {
@@ -1006,7 +1017,7 @@ async function createMaterial(payload) {
       payload.module || 1,
       payload.theme,
       payload.objective || null,
-      payload.type,
+      Array.isArray(payload.type) ? JSON.stringify(payload.type) : (payload.type || null),
       payload.duration || null,
       payload.responsibleId || null,
       payload.responsibleName || null,
@@ -1048,7 +1059,7 @@ async function updateMaterial(id, payload) {
       payload.module || 1,
       payload.theme,
       payload.objective || null,
-      payload.type,
+      Array.isArray(payload.type) ? JSON.stringify(payload.type) : (payload.type || null),
       payload.duration || null,
       payload.responsibleId || null,
       payload.responsibleName || null,
