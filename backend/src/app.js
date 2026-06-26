@@ -83,7 +83,10 @@ async function canEditMaterial(user, material) {
   if (isCoordinator(user)) {
     return course?.coordinatorId === user.id || course?.coordinatorName === user.name
   }
-  return user.role === 'professor' && material.responsibleId === user.id
+  return user.role === 'professor' && (
+    material.responsibleId === user.id ||
+    material.responsibles?.some(r => Number(r.id) === Number(user.id))
+  )
 }
 
 async function coursePayload(body) {

@@ -119,7 +119,7 @@ function AvatarTooltip({ name, role }) {
   )
 }
 
-function StackedAvatars({ responsibles }) {
+function StackedAvatars({ responsibles, assignees = [] }) {
   if (!responsibles?.length) return <span className="text-gray-300 text-xs">—</span>
   const visible = responsibles.slice(0, 3)
   const extra = responsibles.length - visible.length
@@ -127,10 +127,13 @@ function StackedAvatars({ responsibles }) {
     <div className="flex items-center">
       {visible.map((r, i) => {
         const initials = (r.name || '').split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
+        const avatarUrl = assignees.find(a => Number(a.id) === Number(r.id))?.avatar || r.avatar || null
         return (
           <div key={r.id || i} className={`relative group ${i > 0 ? '-ml-2' : ''}`} style={{ zIndex: visible.length - i }}>
-            <div className="w-7 h-7 rounded-full bg-brand-700 text-white text-xs font-semibold flex items-center justify-center border-2 border-white cursor-default select-none">
-              {initials}
+            <div className="w-7 h-7 rounded-full bg-brand-700 text-white text-xs font-semibold flex items-center justify-center border-2 border-white cursor-default select-none overflow-hidden">
+              {avatarUrl
+                ? <img src={avatarUrl} alt={r.name} className="w-full h-full object-cover" />
+                : initials}
             </div>
             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none">
               <div className="bg-gray-800 text-white text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-lg">
@@ -621,7 +624,10 @@ export default function Producao() {
       const course = courses.find(c => c.name === material.course)
       return course?.supervisorId === user.id || course?.supervisorName === user.name
     }
-    if (user.role === 'professor') return material.responsibleId === user.id
+    if (user.role === 'professor') return (
+      material.responsibleId === user.id ||
+      material.responsibles?.some(r => Number(r.id) === Number(user.id))
+    )
     return false
   }
 
@@ -967,11 +973,14 @@ export default function Producao() {
                   <td className="table-cell"><TypeBadge type={mat.type} /></td>
                   {visibleCols.tempo && <td className="table-cell text-gray-500">{mat.duration}</td>}
                   <td className="table-cell">
-                    <StackedAvatars responsibles={
-                      mat.responsibles?.length
-                        ? mat.responsibles
-                        : (mat.responsibleName ? [{ id: mat.responsibleId, name: mat.responsibleName, role: mat.responsibleRole }] : [])
-                    } />
+                    <StackedAvatars
+                      assignees={materialAssignees}
+                      responsibles={
+                        mat.responsibles?.length
+                          ? mat.responsibles
+                          : (mat.responsibleName ? [{ id: mat.responsibleId, name: mat.responsibleName, role: mat.responsibleRole }] : [])
+                      }
+                    />
                   </td>
                   <td className="table-cell">
                     {canEditThis ? (
