@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Plus, Upload, CheckCircle, FileText, Clock, Eye, Search, Filter, X, ExternalLink, CheckSquare, ArrowLeft, Link2, Pencil, SlidersHorizontal, GripVertical, Trash2 } from 'lucide-react'
+import { Plus, CheckCircle, FileText, Clock, Eye, Search, Filter, X, ExternalLink, CheckSquare, ArrowLeft, Link2, Pencil, SlidersHorizontal, GripVertical, Trash2 } from 'lucide-react'
 import Badge from '../components/ui/Badge'
 import StatCard from '../components/ui/StatCard'
 import Modal from '../components/ui/Modal'
@@ -346,6 +346,7 @@ function MaterialModal({ material, open, onClose }) {
 
 function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove, courses, assignees = [], saving }) {
   const isNew = !material?.id
+  const [errors, setErrors] = useState({})
   const [form, setForm] = useState(() => {
     const base = {
       course: defaultCourse && defaultCourse !== 'Todos' ? defaultCourse : '',
@@ -377,6 +378,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
   const handleChange = e => {
     const { name, value } = e.target
     setForm(f => ({ ...f, [name]: value }))
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: null }))
   }
 
   const addResponsible = (e) => {
@@ -385,6 +387,8 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
     const u = assignees.find(a => a.id === userId)
     if (!u || form.responsibles.some(r => r.id === u.id)) return
     setForm(f => ({ ...f, responsibles: [...f.responsibles, { id: u.id, name: u.name, role: u.function || '' }] }))
+    setErrors(prev => ({ ...prev, responsibles: null }))
+    e.target.value = ''
   }
 
   const removeResponsible = (i) => {
@@ -394,8 +398,17 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
   const selectedCourse = courses.find((course) => course.name === form.course)
   const supervisor = selectedCourse?.supervisorName || null
 
+  const validate = () => {
+    const e = {}
+    if (!form.course) e.course = 'Selecione um curso'
+    if (!form.theme?.trim()) e.theme = 'Informe o título do conteúdo'
+    if (!form.responsibles.length) e.responsibles = 'Adicione pelo menos um produtor responsável'
+    setErrors(e)
+    return Object.keys(e).length === 0
+  }
+
   const handleSubmit = async () => {
-    if (!form.course || !form.theme || !form.responsibles.length) return
+    if (!validate()) return
     const primary = form.responsibles[0]
     const saved = await onSave({
       ...form,
@@ -405,6 +418,12 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
     })
     if (saved !== false) onClose()
   }
+
+  const SectionLabel = ({ children }) => (
+    <div className="col-span-2 pt-2 pb-0.5 border-t border-gray-100 mt-1">
+      <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{children}</span>
+    </div>
+  )
 
   return (
     <Modal
@@ -417,24 +436,36 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
           <button onClick={onClose} className="btn-secondary" disabled={saving}>Cancelar</button>
           <button onClick={handleSubmit} className="btn-primary" disabled={saving}>
             <CheckCircle size={15} />
-            {isNew ? 'Adicionar conteúdo' : 'Salvar alterações'}
+            {saving ? 'Salvando...' : isNew ? 'Adicionar conteúdo' : 'Salvar alterações'}
           </button>
         </>
       }
     >
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+
+        {/* ── Identificação ── */}
+        <SectionLabel>Identificação</SectionLabel>
+
         {/* Curso */}
         <div className="col-span-2">
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">Curso *</label>
-          <select name="course" value={form.course} onChange={handleChange} className="select-field" required>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">
+            Curso <span className="text-red-500">*</span>
+          </label>
+          <select
+            name="course"
+            value={form.course}
+            onChange={handleChange}
+            className={`select-field ${errors.course ? 'border-red-400 ring-1 ring-red-300' : ''}`}
+          >
             <option value="">Selecionar curso...</option>
             {courses.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
           </select>
+          {errors.course && <p className="text-xs text-red-500 mt-1">{errors.course}</p>}
         </div>
 
-        {/* Módulo */}
-        <div className="col-span-2">
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">Módulo *</label>
+        {/* Módulo + Sessão */}
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Módulo</label>
           <select name="module" value={form.module} onChange={handleChange} className="select-field">
             {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
               <option key={n} value={n}>Módulo {n}</option>
@@ -442,9 +473,38 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
           </select>
         </div>
 
-        {/* Tipo */}
+        {/* Título */}
         <div className="col-span-2">
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">Tipo de material</label>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">
+            Título <span className="text-red-500">*</span>
+          </label>
+          <input
+            name="theme"
+            value={form.theme}
+            onChange={handleChange}
+            className={`input-field ${errors.theme ? 'border-red-400 ring-1 ring-red-300' : ''}`}
+            placeholder="Título do conteúdo"
+          />
+          {errors.theme && <p className="text-xs text-red-500 mt-1">{errors.theme}</p>}
+        </div>
+
+        {/* Objetivo */}
+        <div className="col-span-2">
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Objetivo de aprendizagem</label>
+          <textarea
+            name="objective"
+            value={form.objective}
+            onChange={handleChange}
+            className="input-field resize-none"
+            rows={2}
+            placeholder="Descreva o objetivo de aprendizagem..."
+          />
+        </div>
+
+        {/* ── Tipo ── */}
+        <SectionLabel>Tipo de material</SectionLabel>
+
+        <div className="col-span-2">
           <div className="flex flex-wrap gap-2">
             {MATERIAL_TYPE_OPTIONS.map(option => {
               const selected = form.type.includes(option.value)
@@ -469,21 +529,14 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
               )
             })}
           </div>
+          {form.type.length === 0 && (
+            <p className="text-xs text-gray-400 mt-1.5">Nenhum tipo selecionado — clique para selecionar</p>
+          )}
         </div>
 
-        {/* Título */}
-        <div className="col-span-2">
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">Título *</label>
-          <input name="theme" value={form.theme} onChange={handleChange} className="input-field" placeholder="Título do conteúdo" required />
-        </div>
+        {/* ── Entrega ── */}
+        <SectionLabel>Entrega</SectionLabel>
 
-        {/* Objetivo */}
-        <div className="col-span-2">
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">Objetivo de aprendizagem</label>
-          <textarea name="objective" value={form.objective} onChange={handleChange} className="input-field resize-none" rows={2} placeholder="Descreva o objetivo de aprendizagem..." />
-        </div>
-
-        {/* Tempo + Data */}
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">Tempo estimado</label>
           <input name="duration" value={form.duration} onChange={handleChange} className="input-field" placeholder="Ex: 50 min" />
@@ -493,9 +546,14 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
           <input name="deliveryDate" value={form.deliveryDate} onChange={handleChange} type="date" className="input-field" />
         </div>
 
-        {/* Produtor(es) responsável(is) */}
+        {/* ── Responsáveis ── */}
+        <SectionLabel>Responsáveis</SectionLabel>
+
+        {/* Produtor(es) */}
         <div className="col-span-2">
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">Produtor(es) responsável(is) *</label>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">
+            Produtor(es) <span className="text-red-500">*</span>
+          </label>
           {form.responsibles.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-2">
               {form.responsibles.map((r, i) => (
@@ -503,7 +561,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
                   <div className="w-5 h-5 rounded-full bg-brand-700 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">
                     {r.name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()}
                   </div>
-                  <span className="text-xs font-medium text-brand-700 truncate max-w-[120px]">{r.name}</span>
+                  <span className="text-xs font-medium text-brand-700 truncate max-w-[140px]">{r.name}</span>
                   <button type="button" onClick={() => removeResponsible(i)} className="text-brand-300 hover:text-red-500 transition-colors flex-shrink-0">
                     <X size={11} />
                   </button>
@@ -511,89 +569,78 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
               ))}
             </div>
           )}
-          <select value="" onChange={addResponsible} className="select-field">
+          <select
+            value=""
+            onChange={addResponsible}
+            className={`select-field ${errors.responsibles ? 'border-red-400 ring-1 ring-red-300' : ''}`}
+          >
             <option value="">+ Adicionar produtor...</option>
             {assignees.filter(u => !form.responsibles.some(r => r.id === u.id)).map(u => (
               <option key={u.id} value={u.id}>{u.name}</option>
             ))}
           </select>
+          {errors.responsibles && <p className="text-xs text-red-500 mt-1">{errors.responsibles}</p>}
         </div>
 
         {/* Supervisor (auto) */}
         <div className="col-span-2">
           <label className="block text-xs font-medium text-gray-600 mb-1.5">Supervisor para aprovação</label>
-          <div className={`input-field flex items-center gap-2 ${supervisor ? 'bg-gray-50' : 'bg-gray-50 text-gray-400'}`}>
+          <div className={`input-field flex items-center gap-2 bg-gray-50`}>
             {supervisor ? (
               <>
-                <div className="w-5 h-5 rounded-full bg-brand-700 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">
+                <div className="w-5 h-5 rounded-full bg-slate-500 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">
                   {supervisor.split(' ').slice(0, 2).map(n => n[0]).join('')}
                 </div>
                 <span className="text-sm text-gray-700">{supervisor}</span>
               </>
             ) : (
-              <span className="text-xs text-gray-400">Selecione um curso primeiro</span>
+              <span className="text-xs text-gray-400">Preenchido automaticamente ao selecionar o curso</span>
             )}
           </div>
         </div>
 
-        {/* Links */}
-        <div className="col-span-2">
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">Link do material original</label>
+        {/* ── Links ── */}
+        <SectionLabel>Links</SectionLabel>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Material original</label>
           <div className="relative">
             <Link2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              name="originalLink"
-              value={form.originalLink || ''}
-              onChange={handleChange}
-              className="input-field pl-9"
-              placeholder="https://drive.google.com/..."
-            />
+            <input name="originalLink" value={form.originalLink || ''} onChange={handleChange} className="input-field pl-9" placeholder="https://..." />
           </div>
         </div>
-        <div className="col-span-2">
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">Link do material ajustado</label>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Material ajustado</label>
           <div className="relative">
             <Link2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              name="adjustedLink"
-              value={form.adjustedLink || ''}
-              onChange={handleChange}
-              className="input-field pl-9"
-              placeholder="https://drive.google.com/..."
-            />
+            <input name="adjustedLink" value={form.adjustedLink || ''} onChange={handleChange} className="input-field pl-9" placeholder="https://..." />
           </div>
         </div>
 
-        {/* Status do professor (sempre visível no modal) */}
+        {/* ── Status ── */}
+        <SectionLabel>Status</SectionLabel>
+
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">Status do professor</label>
           <select name="status" value={form.status} onChange={handleChange} className="select-field">
-            {PROFESSOR_STATUS_OPTIONS.map(s => (
-              <option key={s.value} value={s.value}>{s.label}</option>
-            ))}
+            {PROFESSOR_STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
         </div>
 
-        {/* Status do supervisor — apenas para supervisor/admin/coordenador */}
         {canApprove && (
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">Status do supervisor</label>
             <select name="supervisorStatus" value={form.supervisorStatus} onChange={handleChange} className="select-field">
-              {SUPERVISOR_STATUS_OPTIONS.map(s => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
+              {SUPERVISOR_STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
           </div>
         )}
 
-        {/* Status do coordenador */}
         {canApprove && (
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">Status do coordenador</label>
             <select name="coordinatorStatus" value={form.coordinatorStatus} onChange={handleChange} className="select-field">
-              {COORDINATOR_STATUS_OPTIONS.map(s => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
+              {COORDINATOR_STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
           </div>
         )}
@@ -602,6 +649,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
           <label className="block text-xs font-medium text-gray-600 mb-1.5">Observações da revisão</label>
           <textarea name="reviewNotes" value={form.reviewNotes} onChange={handleChange} className="input-field resize-none" rows={2} placeholder="Observações para o produtor..." />
         </div>
+
       </div>
     </Modal>
   )
