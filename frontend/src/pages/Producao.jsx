@@ -154,13 +154,13 @@ function StackedAvatars({ responsibles, assignees = [] }) {
   )
 }
 
-function MiniAvatar({ name, roleLabel }) {
+function MiniAvatar({ name, roleLabel, avatar }) {
   if (!name) return null
   const initials = name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
   return (
     <div className="relative group inline-flex flex-shrink-0">
-      <div className="w-7 h-7 rounded-full bg-slate-500 text-white text-xs font-semibold flex items-center justify-center cursor-default select-none">
-        {initials}
+      <div className="w-7 h-7 rounded-full bg-slate-500 text-white text-xs font-semibold flex items-center justify-center cursor-default select-none overflow-hidden">
+        {avatar ? <img src={avatar} alt={name} className="w-full h-full object-cover" /> : initials}
       </div>
       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none">
         <div className="bg-gray-800 text-white text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-lg">
@@ -933,7 +933,9 @@ export default function Producao() {
                 const canEditCoordStatus = getCanEditCoordinatorStatus(mat)
                 const matCourse = courses.find(c => c.name === mat.course)
                 const supName = matCourse?.supervisorName || null
+                const supAvatar = matCourse?.supervisorAvatar || null
                 const coordName = matCourse?.coordinatorName || null
+                const coordAvatar = matCourse?.coordinatorAvatar || null
                 const isDragging = dragId === mat.id
                 const isDragOver = dragOverId === mat.id
                 return (
@@ -995,7 +997,7 @@ export default function Producao() {
                   </td>
                   <td className="table-cell">
                     <div className="flex items-center gap-1.5">
-                      <MiniAvatar name={supName} roleLabel="Supervisor" />
+                      <MiniAvatar name={supName} roleLabel="Supervisor" avatar={supAvatar} />
                       {canEditSupStatus ? (
                         <InlineStatusSelect
                           value={mat.supervisorStatus || 'em_revisao'}
@@ -1009,7 +1011,7 @@ export default function Producao() {
                   </td>
                   <td className="table-cell">
                     <div className="flex items-center gap-1.5">
-                      <MiniAvatar name={coordName} roleLabel="Coordenador" />
+                      <MiniAvatar name={coordName} roleLabel="Coordenador" avatar={coordAvatar} />
                       {canEditCoordStatus ? (
                         <InlineStatusSelect
                           value={mat.coordinatorStatus || 'em_revisao'}
