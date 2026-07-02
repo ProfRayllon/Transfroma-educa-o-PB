@@ -35,6 +35,7 @@ function mapMaterialRow(row) {
   return {
     id: row.id,
     course: row.course,
+    courseId: row.course_id || null,
     session: row.session,
     module: row.module || 1,
     theme: row.theme,
@@ -50,8 +51,8 @@ function mapMaterialRow(row) {
     originalLink: row.original_link,
     adjustedLink: row.adjusted_link,
     reviewStatus: row.review_status,
-    supervisorStatus: row.supervisor_status || 'em_revisao',
-    coordinatorStatus: row.coordinator_status || 'em_revisao',
+    supervisorStatus: row.supervisor_status ?? null,
+    coordinatorStatus: row.coordinator_status ?? null,
     reviewNotes: row.review_notes,
     createdAt: formatDate(row.created_at),
   }
@@ -69,14 +70,14 @@ function parseJsonArray(value) {
 }
 
 function parseTypeField(value) {
-  if (!value) return []
-  if (Array.isArray(value)) return value
+  if (!value) return null
+  if (Array.isArray(value)) return value[0] || null
   if (Buffer.isBuffer(value)) value = value.toString('utf8')
   try {
     const parsed = JSON.parse(value)
-    if (Array.isArray(parsed)) return parsed
+    if (Array.isArray(parsed)) return parsed[0] || null
   } catch {}
-  return [value]
+  return value
 }
 
 function mapCourseRow(row) {
@@ -129,6 +130,20 @@ function mapEmentaRow(row) {
 
 function isCoordinatorUser(user) {
   return user?.role === 'coordenador' || String(user?.function || '').toLowerCase().includes('coordenador')
+}
+
+function materialMatchesCourse(material, course) {
+  if (!material || !course) return false
+  return Number(material.courseId) === Number(course.id) || material.course === course.name
+}
+
+function materialHasResponsible(material, userId) {
+  return Number(material?.responsibleId) === Number(userId)
+    || material?.responsibles?.some((responsible) => Number(responsible.id) === Number(userId))
+}
+
+function materialsCourseJoin(materialAlias = 'm', courseAlias = 'c') {
+  return `${courseAlias}.id = ${materialAlias}.course_id OR (${materialAlias}.course_id IS NULL AND ${courseAlias}.name = ${materialAlias}.course)`
 }
 
 function canSeeAllCourses(user) {
@@ -309,7 +324,7 @@ async function ensureMysqlSchema() {
       'revisao_linguistica',
       'edicao',
       'nao_iniciado'
-    ) NOT NULL DEFAULT 'nao_iniciado'
+    ) NULL DEFAULT NULL
   `)
 
   await pool.execute(`
@@ -333,9 +348,13 @@ async function ensureMysqlSchema() {
   const [newMatColumns] = await pool.execute(
     `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'materials'
-       AND COLUMN_NAME IN ('module', 'supervisor_status', 'coordinator_status', 'responsibles')`
+       AND COLUMN_NAME IN ('course_id', 'module', 'supervisor_status', 'coordinator_status', 'responsibles')`
   )
   const existingNewCols = new Set(newMatColumns.map((c) => c.COLUMN_NAME))
+
+  if (!existingNewCols.has('course_id')) {
+    await pool.execute('ALTER TABLE materials ADD COLUMN course_id INT DEFAULT NULL AFTER course')
+  }
 
   if (!existingNewCols.has('module')) {
     await pool.execute('ALTER TABLE materials ADD COLUMN module INT NOT NULL DEFAULT 1 AFTER session')
@@ -343,19 +362,39 @@ async function ensureMysqlSchema() {
 
   if (!existingNewCols.has('supervisor_status')) {
     await pool.execute(
-      "ALTER TABLE materials ADD COLUMN supervisor_status ENUM('em_revisao','nao_validado','validado_com_ajustes','valido') NOT NULL DEFAULT 'em_revisao' AFTER review_status"
+      "ALTER TABLE materials ADD COLUMN supervisor_status ENUM('em_revisao','nao_validado','validado_com_ajustes','valido') NULL DEFAULT NULL AFTER review_status"
     )
   }
 
   if (!existingNewCols.has('coordinator_status')) {
     await pool.execute(
-      "ALTER TABLE materials ADD COLUMN coordinator_status ENUM('em_revisao','nao_validado','validado_com_ajustes','valido') NOT NULL DEFAULT 'em_revisao' AFTER supervisor_status"
+      "ALTER TABLE materials ADD COLUMN coordinator_status ENUM('em_revisao','nao_validado','validado_com_ajustes','valido') NULL DEFAULT NULL AFTER supervisor_status"
+    )
+  }
+
+  if (existingNewCols.has('supervisor_status')) {
+    await pool.execute(
+      "ALTER TABLE materials MODIFY supervisor_status ENUM('em_revisao','nao_validado','validado_com_ajustes','valido') NULL DEFAULT NULL"
+    )
+  }
+
+  if (existingNewCols.has('coordinator_status')) {
+    await pool.execute(
+      "ALTER TABLE materials MODIFY coordinator_status ENUM('em_revisao','nao_validado','validado_com_ajustes','valido') NULL DEFAULT NULL"
     )
   }
 
   if (!existingNewCols.has('responsibles')) {
     await pool.execute('ALTER TABLE materials ADD COLUMN responsibles TEXT DEFAULT NULL AFTER responsible_role')
   }
+
+  await pool.execute(`
+    UPDATE materials m
+    LEFT JOIN courses c ON c.name = m.course
+    SET m.course_id = c.id
+    WHERE m.course_id IS NULL
+      AND c.id IS NOT NULL
+  `)
 
   await pool.execute(`
     CREATE TABLE IF NOT EXISTS ementas (
@@ -414,11 +453,12 @@ async function seedMysqlIfNeeded() {
   for (const material of materials) {
     await pool.execute(
       `INSERT INTO materials
-       (id, course, session, theme, objective, type, duration, responsible_id, responsible_name, responsible_role, status, delivery_date, original_link, adjusted_link, review_status, review_notes, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, course, course_id, session, theme, objective, type, duration, responsible_id, responsible_name, responsible_role, responsibles, status, delivery_date, original_link, adjusted_link, review_status, supervisor_status, coordinator_status, review_notes, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         material.id,
         material.course,
+        material.courseId || null,
         material.session,
         material.theme,
         material.objective,
@@ -427,11 +467,14 @@ async function seedMysqlIfNeeded() {
         material.responsibleId,
         material.responsibleName,
         material.responsibleRole,
+        material.responsibles?.length ? JSON.stringify(material.responsibles) : null,
         material.status,
         material.deliveryDate,
         material.originalLink,
         material.adjustedLink,
         material.reviewStatus,
+        material.supervisorStatus || 'em_revisao',
+        material.coordinatorStatus || 'em_revisao',
         material.reviewNotes,
         material.createdAt,
       ]
@@ -840,6 +883,7 @@ async function updateCourse(id, payload) {
   if (!isMysqlMode()) {
     const idx = courses.findIndex((course) => course.id === Number(id))
     if (idx === -1) return null
+    const previous = courses[idx]
     courses[idx] = {
       ...courses[idx],
       ...payload,
@@ -847,8 +891,18 @@ async function updateCourse(id, payload) {
       producers: payload.producers || [],
       totalSessions: Number(payload.totalSessions) || 0,
     }
+    materials.forEach((material, materialIndex) => {
+      if (!materialMatchesCourse(material, previous)) return
+      materials[materialIndex] = {
+        ...material,
+        course: payload.name,
+        courseId: Number(id),
+      }
+    })
     return courses[idx]
   }
+
+  const previous = await getCourseById(id)
 
   await pool.execute(
     `UPDATE courses
@@ -871,6 +925,14 @@ async function updateCourse(id, payload) {
   )
 
   await syncCourseProducers(id, payload.producerIds)
+  if (previous) {
+    await pool.execute(
+      `UPDATE materials
+       SET course = ?, course_id = ?
+       WHERE course_id = ? OR (course_id IS NULL AND course = ?)`,
+      [payload.name, id, id, previous.name]
+    )
+  }
 
   return getCourseById(id)
 }
@@ -951,7 +1013,23 @@ async function listMaterialAssignees() {
 async function listMaterials(user) {
   if (!isMysqlMode()) {
     if (user.role === 'professor') {
-      return materials.filter((material) => material.responsibleId === user.id)
+      return materials.filter((material) => {
+        if (materialHasResponsible(material, user.id)) return true
+        const course = courses.find((listedCourse) => materialMatchesCourse(material, listedCourse))
+        return course?.producers?.some((producer) => Number(producer.id) === Number(user.id))
+      })
+    }
+    if (user.role === 'supervisor') {
+      return materials.filter((material) => {
+        const course = courses.find((listedCourse) => materialMatchesCourse(material, listedCourse))
+        return course?.supervisorId === user.id || course?.supervisorName === user.name
+      })
+    }
+    if (isCoordinatorUser(user) && user.role !== 'administrador') {
+      return materials.filter((material) => {
+        const course = courses.find((listedCourse) => materialMatchesCourse(material, listedCourse))
+        return course?.coordinatorId === user.id || course?.coordinatorName === user.name
+      })
     }
     return materials.slice()
   }
@@ -959,18 +1037,19 @@ async function listMaterials(user) {
   const params = []
   let sql = 'SELECT m.* FROM materials m'
   if (user.role === 'professor') {
-    sql += ` LEFT JOIN courses c ON c.name = m.course
+    sql += ` LEFT JOIN courses c ON ${materialsCourseJoin('m', 'c')}
       WHERE m.responsible_id = ?
+        OR JSON_CONTAINS(COALESCE(m.responsibles, JSON_ARRAY()), JSON_OBJECT('id', CAST(? AS UNSIGNED)), '$')
         OR EXISTS (
           SELECT 1 FROM course_producers cp
           WHERE cp.course_id = c.id AND cp.user_id = ?
         )`
-    params.push(user.id, user.id)
+    params.push(user.id, user.id, user.id)
   } else if (user.role === 'supervisor') {
-    sql += ' LEFT JOIN courses c ON c.name = m.course WHERE c.supervisor_id = ? OR c.supervisor_name = ?'
+    sql += ` LEFT JOIN courses c ON ${materialsCourseJoin('m', 'c')} WHERE c.supervisor_id = ? OR c.supervisor_name = ?`
     params.push(user.id, user.name)
   } else if (isCoordinatorUser(user) && user.role !== 'administrador') {
-    sql += ' LEFT JOIN courses c ON c.name = m.course WHERE c.coordinator_id = ? OR c.coordinator_name = ?'
+    sql += ` LEFT JOIN courses c ON ${materialsCourseJoin('m', 'c')} WHERE c.coordinator_id = ? OR c.coordinator_name = ?`
     params.push(user.id, user.name)
   }
   sql += ' ORDER BY m.id'
@@ -996,27 +1075,28 @@ async function createMaterial(payload) {
 
   const [result] = await pool.execute(
     `INSERT INTO materials
-     (course, session, module, theme, objective, type, duration, responsible_id, responsible_name, responsible_role, responsibles, status, delivery_date, original_link, adjusted_link, review_status, supervisor_status, coordinator_status, review_notes, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (course, course_id, session, module, theme, objective, type, duration, responsible_id, responsible_name, responsible_role, responsibles, status, delivery_date, original_link, adjusted_link, review_status, supervisor_status, coordinator_status, review_notes, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       payload.course,
+      payload.courseId || null,
       payload.session,
       payload.module || 1,
       payload.theme,
       payload.objective || null,
-      Array.isArray(payload.type) ? JSON.stringify(payload.type) : (payload.type || null),
+      payload.type || null,
       payload.duration || null,
       payload.responsibleId || null,
       payload.responsibleName || null,
       payload.responsibleRole || null,
       payload.responsibles?.length ? JSON.stringify(payload.responsibles) : null,
-      payload.status,
+      payload.status ?? null,
       payload.deliveryDate || null,
       payload.originalLink || null,
       payload.adjustedLink || null,
       payload.reviewStatus || 'em_execucao',
-      payload.supervisorStatus || 'em_revisao',
-      payload.coordinatorStatus || 'em_revisao',
+      payload.supervisorStatus ?? null,
+      payload.coordinatorStatus ?? null,
       payload.reviewNotes || null,
       new Date().toISOString().slice(0, 10),
     ]
@@ -1035,30 +1115,31 @@ async function updateMaterial(id, payload) {
 
   await pool.execute(
     `UPDATE materials
-     SET course = ?, session = ?, module = ?, theme = ?, objective = ?, type = ?, duration = ?,
+     SET course = ?, course_id = ?, session = ?, module = ?, theme = ?, objective = ?, type = ?, duration = ?,
          responsible_id = ?, responsible_name = ?, responsible_role = ?, responsibles = ?, status = ?,
          delivery_date = ?, original_link = ?, adjusted_link = ?, review_status = ?,
          supervisor_status = ?, coordinator_status = ?, review_notes = ?
      WHERE id = ?`,
     [
       payload.course,
+      payload.courseId || null,
       payload.session,
       payload.module || 1,
       payload.theme,
       payload.objective || null,
-      Array.isArray(payload.type) ? JSON.stringify(payload.type) : (payload.type || null),
+      payload.type || null,
       payload.duration || null,
       payload.responsibleId || null,
       payload.responsibleName || null,
       payload.responsibleRole || null,
       payload.responsibles?.length ? JSON.stringify(payload.responsibles) : null,
-      payload.status,
+      payload.status ?? null,
       payload.deliveryDate || null,
       payload.originalLink || null,
       payload.adjustedLink || null,
       payload.reviewStatus || 'em_execucao',
-      payload.supervisorStatus || 'em_revisao',
-      payload.coordinatorStatus || 'em_revisao',
+      payload.supervisorStatus ?? null,
+      payload.coordinatorStatus ?? null,
       payload.reviewNotes || null,
       id,
     ]

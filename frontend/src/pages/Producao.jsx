@@ -51,9 +51,32 @@ const MATERIAL_TYPE_OPTIONS = [
 
 const TYPE_LABELS = Object.fromEntries(MATERIAL_TYPE_OPTIONS.map((option) => [option.value, option.label]))
 
+function getMaterialResponsibles(material) {
+  if (material?.responsibles?.length) return material.responsibles
+  if (material?.responsibleName) {
+    return [{ id: material.responsibleId, name: material.responsibleName, role: material.responsibleRole }]
+  }
+  return []
+}
+
+function getMaterialResponsibleNames(material) {
+  return [...new Set(getMaterialResponsibles(material).map((responsible) => responsible.name).filter(Boolean))]
+}
+
+function findCourseForMaterial(material, courses = []) {
+  return courses.find((course) => Number(course.id) === Number(material?.courseId))
+    || courses.find((course) => course.name === material?.course)
+    || null
+}
+
+function materialMatchesCourseName(material, courseName, courses = []) {
+  const course = findCourseForMaterial(material, courses)
+  return course ? course.name === courseName : material?.course === courseName
+}
+
 function TypeBadge({ type }) {
   const documentTypes = ['videoaula', 'apresentacao', 'ebook', 'pdf', 'Aula']
-  const types = Array.isArray(type) ? type : (type ? [type] : [])
+  const types = Array.isArray(type) ? type.filter(Boolean).slice(0, 1) : (type ? [type] : [])
   if (!types.length) return <span className="text-gray-300 text-xs">—</span>
   return (
     <div className="flex flex-wrap gap-1">
@@ -355,7 +378,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
       course: defaultCourse && defaultCourse !== 'Todos' ? defaultCourse : '',
       session: '',
       module: 1,
-      type: [],
+      type: '',
       theme: '',
       objective: '',
       duration: '',
@@ -371,7 +394,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
       adjustedLink: '',
       ...(material || {}),
     }
-    base.type = Array.isArray(base.type) ? base.type : (base.type ? [base.type] : [])
+    base.type = Array.isArray(base.type) ? (base.type[0] || '') : (base.type || '')
     base.responsibles = material?.responsibles?.length
       ? material.responsibles
       : (material?.responsibleId ? [{ id: material.responsibleId, name: material.responsibleName, role: material.responsibleRole }] : [])
@@ -415,6 +438,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
     const primary = form.responsibles[0]
     const saved = await onSave({
       ...form,
+      courseId: selectedCourse?.id || form.courseId || null,
       responsibleId: primary.id,
       responsibleName: primary.name,
       responsibleRole: primary.role,
@@ -510,16 +534,14 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
         <div className="col-span-2">
           <div className="flex flex-wrap gap-2">
             {MATERIAL_TYPE_OPTIONS.map(option => {
-              const selected = form.type.includes(option.value)
+              const selected = form.type === option.value
               return (
                 <button
                   key={option.value}
                   type="button"
                   onClick={() => setForm(f => ({
                     ...f,
-                    type: selected
-                      ? f.type.filter(t => t !== option.value)
-                      : [...f.type, option.value]
+                    type: selected ? '' : option.value
                   }))}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
                     selected
@@ -532,7 +554,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
               )
             })}
           </div>
-          {form.type.length === 0 && (
+          {!form.type && (
             <p className="text-xs text-gray-400 mt-1.5">Nenhum tipo selecionado — clique para selecionar</p>
           )}
         </div>
@@ -697,11 +719,11 @@ export default function Producao() {
     if (!user) return false
     if (user.role === 'administrador') return true
     if (isCoordinator) {
-      const course = courses.find(c => c.name === material.course)
+      const course = findCourseForMaterial(material, courses)
       return course?.coordinatorId === user.id || course?.coordinatorName === user.name
     }
     if (user.role === 'supervisor') {
-      const course = courses.find(c => c.name === material.course)
+      const course = findCourseForMaterial(material, courses)
       return course?.supervisorId === user.id || course?.supervisorName === user.name
     }
     if (user.role === 'professor') return (
@@ -715,7 +737,7 @@ export default function Producao() {
     if (!user) return false
     if (user.role === 'administrador') return true
     if (user.role === 'supervisor') {
-      const course = courses.find(c => c.name === material.course)
+      const course = findCourseForMaterial(material, courses)
       return course?.supervisorId === user.id || course?.supervisorName === user.name
     }
     return false
@@ -725,7 +747,7 @@ export default function Producao() {
     if (!user) return false
     if (user.role === 'administrador') return true
     if (isCoordinator) {
-      const course = courses.find(c => c.name === material.course)
+      const course = findCourseForMaterial(material, courses)
       return course?.coordinatorId === user.id || course?.coordinatorName === user.name
     }
     return false
@@ -733,25 +755,26 @@ export default function Producao() {
 
   const filtered = useMemo(() => {
     return materials.filter(m => {
-      if (filters.course !== 'Todos' && m.course !== filters.course) return false
+      if (filters.course !== 'Todos' && !materialMatchesCourseName(m, filters.course, courses)) return false
       if (filters.status && m.status !== filters.status) return false
-      if (filters.responsible !== 'Todos' && m.responsibleName !== filters.responsible) return false
+      if (filters.responsible !== 'Todos' && !getMaterialResponsibleNames(m).includes(filters.responsible)) return false
       if (filters.session && String(m.session) !== filters.session) return false
       if (search) {
         const q = search.toLowerCase()
+        const responsibleNames = getMaterialResponsibleNames(m).join(' ').toLowerCase()
         return m.theme.toLowerCase().includes(q) ||
-          m.responsibleName.toLowerCase().includes(q) ||
-          m.objective.toLowerCase().includes(q)
+          responsibleNames.includes(q) ||
+          (m.objective || '').toLowerCase().includes(q)
       }
       return true
     })
-  }, [materials, filters, search])
+  }, [materials, filters, search, courses])
 
   const paged = filtered.slice((page - 1) * perPage, page * perPage)
   const totalPages = Math.ceil(filtered.length / perPage)
 
   const statsMaterials = filters.course !== 'Todos'
-    ? materials.filter(m => m.course === filters.course)
+    ? materials.filter(m => materialMatchesCourseName(m, filters.course, courses))
     : materials
   const stats = {
     total: statsMaterials.length,
@@ -770,7 +793,7 @@ export default function Producao() {
       setSavingMaterial(true)
       const isNew = !form.id
       if (isNew) {
-        const courseMaterials = materials.filter(m => m.course === form.course)
+        const courseMaterials = materials.filter(m => materialMatchesCourseName(m, form.course, courses))
         form.session = courseMaterials.length + 1
       }
       await saveMaterial(form)
@@ -857,7 +880,7 @@ export default function Producao() {
     setPage(1)
   }
 
-  const responsibleOptions = ['Todos', ...new Set(materials.map(m => m.responsibleName))]
+  const responsibleOptions = ['Todos', ...new Set(materials.flatMap((material) => getMaterialResponsibleNames(material)))]
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -1007,7 +1030,7 @@ export default function Producao() {
                 const canEditThis = getCanEditMaterial(mat)
                 const canEditSupStatus = getCanEditSupervisorStatus(mat)
                 const canEditCoordStatus = getCanEditCoordinatorStatus(mat)
-                const matCourse = courses.find(c => c.name === mat.course)
+                const matCourse = findCourseForMaterial(mat, courses)
                 const supName = matCourse?.supervisorName || null
                 const supAvatar = matCourse?.supervisorAvatar || null
                 const coordName = matCourse?.coordinatorName || null
@@ -1053,11 +1076,7 @@ export default function Producao() {
                   <td className="table-cell">
                     <StackedAvatars
                       assignees={materialAssignees}
-                      responsibles={
-                        mat.responsibles?.length
-                          ? mat.responsibles
-                          : (mat.responsibleName ? [{ id: mat.responsibleId, name: mat.responsibleName, role: mat.responsibleRole }] : [])
-                      }
+                      responsibles={getMaterialResponsibles(mat)}
                     />
                   </td>
                   <td className="table-cell">

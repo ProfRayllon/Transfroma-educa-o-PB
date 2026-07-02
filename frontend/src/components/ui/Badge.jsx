@@ -104,6 +104,14 @@ const dots = {
 }
 
 export default function Badge({ status, showDot = false, className = '' }) {
+  if (status === null || status === undefined || status === '') {
+    return (
+      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200 ${className}`}>
+        —
+      </span>
+    )
+  }
+
   const cls = variants[status] || 'bg-gray-100 text-gray-600 border border-gray-200'
   const label = labels[status] || status
   const dot = dots[status]

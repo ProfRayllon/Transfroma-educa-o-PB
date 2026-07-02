@@ -69,6 +69,11 @@ function getInitials(name) {
     .join('')
 }
 
+function materialMatchesCourse(material, course) {
+  if (!material || !course) return false
+  return Number(material.courseId) === Number(course.id) || material.course === course.name
+}
+
 function PersonAvatar({ name, avatar, size = 'md' }) {
   const cls = size === 'sm' ? 'w-6 h-6 text-[10px]' : 'w-8 h-8 text-xs'
 
@@ -187,7 +192,7 @@ function CourseCard({ course, materials, onEdit, ementaStatus }) {
   const ementaApproved = ementaStatus?.coordinatorStatus === 'valido'
   const alert = deadlineBadge(course.deadline)
 
-  const courseMaterials = materials.filter((material) => material.course === course.name)
+  const courseMaterials = materials.filter((material) => materialMatchesCourse(material, course))
   const totalContents = courseMaterials.length
   const completedSessions = courseMaterials.filter((material) => material.status === 'concluido' && material.supervisorStatus === 'valido' && material.coordinatorStatus === 'valido').length
   const totalModules = new Set(courseMaterials.map(m => m.module || 1)).size

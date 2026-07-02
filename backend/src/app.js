@@ -76,7 +76,9 @@ function isAttendanceManager(role) {
 async function canEditMaterial(user, material) {
   if (!material) return false
   if (user.role === 'administrador') return true
-  const course = await store.getCourseByName(material.course)
+  const course = material.courseId
+    ? await store.getCourseById(material.courseId) || await store.getCourseByName(material.course)
+    : await store.getCourseByName(material.course)
   if (user.role === 'supervisor') {
     return course?.supervisorId === user.id || course?.supervisorName === user.name
   }
@@ -237,25 +239,54 @@ function mysqlUserErrorMessage(error) {
   return 'Erro ao salvar usuario.'
 }
 
+function normalizeOptionalEnum(value) {
+  if (value === undefined) return undefined
+  if (value === null || value === '') return null
+  return value
+}
+
+function normalizeMaterialType(value, currentValue) {
+  if (Array.isArray(value)) {
+    return value[0] || null
+  }
+  if (value === undefined) return currentValue ?? null
+  if (value === null || value === '') return null
+  return value
+}
+
 async function materialPayload(body, actor, currentMaterial) {
+  const requestedCourseId = Number(body.courseId) || currentMaterial?.courseId || null
+  const requestedCourseName = String(body.course || currentMaterial?.course || '').trim()
+  const course = requestedCourseId
+    ? await store.getCourseById(requestedCourseId) || await store.getCourseByName(requestedCourseName)
+    : await store.getCourseByName(requestedCourseName)
+
+  if (!course) {
+    return { error: 'Curso invalido.' }
+  }
+
   const payload = {
-    course: body.course,
-    session: body.session,
+    course: course.name,
+    courseId: course.id,
+    session: body.session || currentMaterial?.session,
     module: Number(body.module) || currentMaterial?.module || 1,
-    theme: body.theme,
-    objective: body.objective,
-    type: Array.isArray(body.type) ? body.type : (body.type ? [body.type] : []),
-    duration: body.duration,
-    deliveryDate: body.deliveryDate,
-    originalLink: body.originalLink,
-    adjustedLink: body.adjustedLink,
+    theme: body.theme ?? currentMaterial?.theme ?? '',
+    objective: body.objective ?? currentMaterial?.objective ?? '',
+    type: normalizeMaterialType(body.type, currentMaterial?.type),
+    duration: body.duration ?? currentMaterial?.duration ?? '',
+    deliveryDate: body.deliveryDate ?? currentMaterial?.deliveryDate ?? null,
+    originalLink: body.originalLink ?? currentMaterial?.originalLink ?? '',
+    adjustedLink: body.adjustedLink ?? currentMaterial?.adjustedLink ?? '',
   }
 
   if (canAssignMaterial(actor)) {
-    payload.status = body.status || currentMaterial?.status || 'nao_iniciado'
+    payload.status = normalizeOptionalEnum(body.status)
+    if (payload.status === undefined) payload.status = currentMaterial?.status ?? null
     payload.reviewStatus = body.reviewStatus || currentMaterial?.reviewStatus || 'em_execucao'
-    payload.supervisorStatus = body.supervisorStatus || currentMaterial?.supervisorStatus || 'em_revisao'
-    payload.coordinatorStatus = body.coordinatorStatus || currentMaterial?.coordinatorStatus || 'em_revisao'
+    payload.supervisorStatus = normalizeOptionalEnum(body.supervisorStatus)
+    if (payload.supervisorStatus === undefined) payload.supervisorStatus = currentMaterial?.supervisorStatus ?? null
+    payload.coordinatorStatus = normalizeOptionalEnum(body.coordinatorStatus)
+    if (payload.coordinatorStatus === undefined) payload.coordinatorStatus = currentMaterial?.coordinatorStatus ?? null
     payload.reviewNotes = body.reviewNotes ?? currentMaterial?.reviewNotes ?? ''
     payload.responsibleId = Number(body.responsibleId) || currentMaterial?.responsibleId
 
@@ -271,21 +302,24 @@ async function materialPayload(body, actor, currentMaterial) {
       payload.responsibles = currentMaterial?.responsibles || null
     }
 
-    return payload
+    return { payload }
   }
 
-  payload.status = currentMaterial?.status || 'nao_iniciado'
+  payload.status = currentMaterial?.status ?? null
   payload.reviewStatus = currentMaterial?.reviewStatus || 'em_execucao'
-  payload.supervisorStatus = currentMaterial?.supervisorStatus || 'em_revisao'
-  payload.coordinatorStatus = currentMaterial?.coordinatorStatus || 'em_revisao'
+  payload.supervisorStatus = currentMaterial?.supervisorStatus ?? null
+  payload.coordinatorStatus = currentMaterial?.coordinatorStatus ?? null
   payload.reviewNotes = currentMaterial?.reviewNotes || ''
-  payload.responsibleId = actor.id
+  payload.responsibleId = currentMaterial?.responsibleId || actor.id
 
   const actorUser = await findUserById(actor.id)
-  payload.responsibleName = actorUser?.name || currentMaterial?.responsibleName || ''
-  payload.responsibleRole = actorUser?.function || currentMaterial?.responsibleRole || ''
+  payload.responsibleName = currentMaterial?.responsibleName || actorUser?.name || ''
+  payload.responsibleRole = currentMaterial?.responsibleRole || actorUser?.function || ''
+  payload.responsibles = currentMaterial?.responsibles?.length
+    ? currentMaterial.responsibles
+    : [{ id: payload.responsibleId, name: payload.responsibleName, role: payload.responsibleRole }]
 
-  return payload
+  return { payload }
 }
 
 function auth(req, res, next) {
@@ -558,7 +592,8 @@ app.post('/api/materials', auth, async (req, res) => {
   const actor = await store.getUserById(req.user.id)
   if (!canManageProduction(actor)) return res.status(403).json({ message: 'Voce nao tem permissao para criar atividades.' })
 
-  const payload = await materialPayload(req.body, actor)
+  const { payload, error } = await materialPayload(req.body, actor)
+  if (error) return res.status(400).json({ message: error })
   const material = await store.createMaterial({
     ...payload,
     createdAt: new Date().toISOString().split('T')[0],
@@ -576,7 +611,8 @@ app.put('/api/materials/:id', auth, async (req, res) => {
     return res.status(403).json({ message: 'Voce nao tem permissao para editar este material.' })
   }
 
-  const payload = await materialPayload(req.body, actor, current)
+  const { payload, error } = await materialPayload(req.body, actor, current)
+  if (error) return res.status(400).json({ message: error })
   const material = await store.updateMaterial(req.params.id, payload)
   res.json(material)
 })
@@ -608,18 +644,18 @@ app.patch('/api/materials/:id/status', auth, async (req, res) => {
 
   const update = { ...current }
   if (actor.role === 'professor') {
-    if (req.body.status) update.status = req.body.status
+    if (Object.prototype.hasOwnProperty.call(req.body, 'status')) update.status = normalizeOptionalEnum(req.body.status)
   } else if (actor.role === 'supervisor') {
-    if (req.body.status) update.status = req.body.status
-    if (req.body.supervisorStatus) update.supervisorStatus = req.body.supervisorStatus
+    if (Object.prototype.hasOwnProperty.call(req.body, 'status')) update.status = normalizeOptionalEnum(req.body.status)
+    if (Object.prototype.hasOwnProperty.call(req.body, 'supervisorStatus')) update.supervisorStatus = normalizeOptionalEnum(req.body.supervisorStatus)
   } else if (isCoordinator(actor)) {
-    if (req.body.status) update.status = req.body.status
-    if (req.body.coordinatorStatus) update.coordinatorStatus = req.body.coordinatorStatus
+    if (Object.prototype.hasOwnProperty.call(req.body, 'status')) update.status = normalizeOptionalEnum(req.body.status)
+    if (Object.prototype.hasOwnProperty.call(req.body, 'coordinatorStatus')) update.coordinatorStatus = normalizeOptionalEnum(req.body.coordinatorStatus)
   } else {
-    if (req.body.status) update.status = req.body.status
+    if (Object.prototype.hasOwnProperty.call(req.body, 'status')) update.status = normalizeOptionalEnum(req.body.status)
     if (req.body.reviewStatus) update.reviewStatus = req.body.reviewStatus
-    if (req.body.supervisorStatus) update.supervisorStatus = req.body.supervisorStatus
-    if (req.body.coordinatorStatus) update.coordinatorStatus = req.body.coordinatorStatus
+    if (Object.prototype.hasOwnProperty.call(req.body, 'supervisorStatus')) update.supervisorStatus = normalizeOptionalEnum(req.body.supervisorStatus)
+    if (Object.prototype.hasOwnProperty.call(req.body, 'coordinatorStatus')) update.coordinatorStatus = normalizeOptionalEnum(req.body.coordinatorStatus)
   }
 
   const material = await store.updateMaterial(req.params.id, update)
