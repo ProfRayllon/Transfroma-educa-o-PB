@@ -4,7 +4,7 @@ import { useTheme } from '../../context/ThemeContext'
 import { useAvatar } from '../../context/AvatarContext'
 import {
   LayoutDashboard, BookOpen, FileText, Users, ShieldCheck,
-  LogOut, ChevronLeft, ChevronRight, Camera, Sun, Moon,
+  LogOut, ChevronLeft, ChevronRight, Camera, Sun, Moon, Globe,
 } from 'lucide-react'
 
 const navItems = [
@@ -13,6 +13,7 @@ const navItems = [
   { to: '/producao', icon: FileText, label: 'Produção' },
   { to: '/gestao-pessoas', icon: Users, label: 'Gestão de Pessoas' },
   { to: '/acessos', icon: ShieldCheck, label: 'Acessos' },
+  { to: '/', icon: Globe, label: 'Site', adminOnly: true },
 ]
 
 const roleLabels = {
@@ -90,6 +91,7 @@ export default function Sidebar({ collapsed, onToggle }) {
           <NavLink
             key={to}
             to={to}
+            end={to === '/'}
             className={({ isActive }) => navClass(isActive)}
           >
             {({ isActive }) => (

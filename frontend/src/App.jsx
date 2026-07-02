@@ -31,6 +31,14 @@ function PublicRoute({ children }) {
   return children
 }
 
+function AdminOnlyRoute({ children }) {
+  const { user, loading } = useAuth()
+  if (loading) return null
+  if (!user) return <Navigate to="/login" replace />
+  if (user.role !== 'administrador') return <Navigate to="/painel" replace />
+  return children
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -40,10 +48,10 @@ export default function App() {
         <BrandingProvider>
         <DataProvider>
         <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/catalogo-cursos" element={<PublicCourses />} />
-          <Route path="/inscricoes" element={<Navigate to="/" replace />} />
-          <Route path="/guia" element={<Navigate to="/" replace />} />
+          <Route path="/" element={<AdminOnlyRoute><Home /></AdminOnlyRoute>} />
+          <Route path="/catalogo-cursos" element={<AdminOnlyRoute><PublicCourses /></AdminOnlyRoute>} />
+          <Route path="/inscricoes" element={<Navigate to="/login" replace />} />
+          <Route path="/guia" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route path="painel" element={<Painel />} />
@@ -55,7 +63,7 @@ export default function App() {
             <Route path="notificacoes" element={<Notificacoes />} />
             <Route path="perfil" element={<Perfil />} />
           </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
         </DataProvider>
         </BrandingProvider>
