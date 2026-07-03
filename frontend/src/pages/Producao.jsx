@@ -404,7 +404,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
   const handleChange = e => {
     const { name, value } = e.target
     setForm(f => ({ ...f, [name]: value }))
-    if (errors[name]) setErrors(prev => ({ ...prev, [name]: null }))
+    if (errors[name] || errors.form) setErrors(prev => ({ ...prev, [name]: null, form: null }))
   }
 
   const addResponsible = (e) => {
@@ -413,7 +413,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
     const u = assignees.find(a => a.id === userId)
     if (!u || form.responsibles.some(r => r.id === u.id)) return
     setForm(f => ({ ...f, responsibles: [...f.responsibles, { id: u.id, name: u.name, role: u.function || '' }] }))
-    setErrors(prev => ({ ...prev, responsibles: null }))
+    setErrors(prev => ({ ...prev, responsibles: null, form: null }))
     e.target.value = ''
   }
 
@@ -427,10 +427,12 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
   const validate = () => {
     const e = {}
     if (!form.course) e.course = 'Selecione um curso'
+    if (!form.type) e.type = 'Selecione o tipo de material'
     if (!form.theme?.trim()) e.theme = 'Informe o título do conteúdo'
     if (!form.responsibles.length) e.responsibles = 'Adicione pelo menos um produtor responsável'
+    if (Object.keys(e).length > 0) e.form = 'Existem campos obrigatórios pendentes. Revise os campos marcados com *.'
     setErrors(e)
-    return Object.keys(e).length === 0
+    return !e.form
   }
 
   const handleSubmit = async () => {
@@ -469,6 +471,15 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
       }
     >
       <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+        {errors.form && (
+          <div className="col-span-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {errors.form}
+          </div>
+        )}
+
+        <div className="col-span-2 text-[11px] font-medium text-gray-400">
+          Campos com <span className="text-red-500">*</span> são obrigatórios.
+        </div>
 
         {/* ── Identificação ── */}
         <SectionLabel>Identificação</SectionLabel>
@@ -532,6 +543,9 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
         <SectionLabel>Tipo de material</SectionLabel>
 
         <div className="col-span-2">
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">
+            Tipo de material <span className="text-red-500">*</span>
+          </label>
           <div className="flex flex-wrap gap-2">
             {MATERIAL_TYPE_OPTIONS.map(option => {
               const selected = form.type === option.value
@@ -560,6 +574,7 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
         </div>
 
         {/* ── Entrega ── */}
+          {errors.type && <p className="col-span-2 text-xs text-red-500 -mt-1">{errors.type}</p>}
         <SectionLabel>Entrega</SectionLabel>
 
         <div>
@@ -698,7 +713,7 @@ export default function Producao() {
   const [dragId, setDragId] = useState(null)
   const [dragOverId, setDragOverId] = useState(null)
   const [page, setPage] = useState(1)
-  const perPage = 5
+  const perPage = 50
   const [visibleCols, setVisibleCols] = useState({
     tema: true,
     objetivo: false,
@@ -799,8 +814,8 @@ export default function Producao() {
       await saveMaterial(form)
       showToast(form.id ? 'Conteúdo atualizado com sucesso!' : 'Conteúdo inserido com sucesso!')
       return true
-    } catch {
-      showToast('Erro ao salvar conteúdo. Tente novamente.', 'error')
+    } catch (error) {
+      showToast(error.message || 'Existem campos obrigatórios pendentes. Revise o formulário.', 'error')
       return false
     } finally {
       setSavingMaterial(false)
