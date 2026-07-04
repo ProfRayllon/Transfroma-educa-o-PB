@@ -736,9 +736,12 @@ app.patch('/api/materials/:id/status', auth, async (req, res) => {
 
   const update = { ...current }
   const isAdmin = actor.role === 'administrador'
-  const isSupervisor = isAdmin || actor.role === 'supervisor'
-  const isCoord = isAdmin || isCoordinator(actor)
-  const isProfessor = isAdmin || actor.role === 'professor'
+  // Admin e coordenacao podem sempre alterar qualquer status de qualquer perfil,
+  // sem passar pelo gate sequencial (que continua valendo para supervisor comum).
+  const isPrivileged = isAdmin || isCoordinator(actor)
+  const isSupervisor = isPrivileged || actor.role === 'supervisor'
+  const isCoord = isPrivileged
+  const isProfessor = isPrivileged || actor.role === 'professor'
   let professorStatusChangedDirectly = false
 
   if (current.moduleId) {
@@ -752,7 +755,7 @@ app.patch('/api/materials/:id/status', auth, async (req, res) => {
 
     if (isSupervisor && Object.prototype.hasOwnProperty.call(req.body, 'supervisorStatus')) {
       const nextSupStatus = normalizeOptionalEnum(req.body.supervisorStatus)
-      if (nextSupStatus === 'aprovado' && update.status !== 'concluido') {
+      if (!isPrivileged && nextSupStatus === 'aprovado' && update.status !== 'concluido') {
         return res.status(400).json({ message: 'O supervisor so pode aprovar conteudos ja concluidos pelo professor.' })
       }
       update.supervisorStatus = nextSupStatus
@@ -761,9 +764,6 @@ app.patch('/api/materials/:id/status', auth, async (req, res) => {
 
     if (isCoord && Object.prototype.hasOwnProperty.call(req.body, 'coordinatorStatus')) {
       const nextCoordStatus = normalizeOptionalEnum(req.body.coordinatorStatus)
-      if (nextCoordStatus === 'aprovado' && update.supervisorStatus !== 'aprovado') {
-        return res.status(400).json({ message: 'A coordenacao so pode aprovar conteudos ja aprovados pelo supervisor.' })
-      }
       update.coordinatorStatus = nextCoordStatus
       if (nextCoordStatus === 'ajustes' || nextCoordStatus === 'reprovado') {
         update.supervisorStatus = 'aguardando'

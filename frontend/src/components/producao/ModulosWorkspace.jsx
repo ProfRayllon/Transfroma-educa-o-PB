@@ -477,6 +477,9 @@ export default function ModulosWorkspace({ course }) {
   const isCourseSupervisor = user?.role === 'supervisor' && (course.supervisorId === user.id || course.supervisorName === user.name)
   const isCourseCoordinator = isCoordinatorUser && (course.coordinatorId === user.id || course.coordinatorName === user.name)
   const canManageModules = isAdmin || isProducer || isCourseSupervisor || isCourseCoordinator
+  // Admin e coordenacao do curso podem sempre alterar qualquer status de qualquer perfil,
+  // sem passar pelo gate sequencial (professor -> supervisor -> coordenacao).
+  const isPrivileged = isAdmin || isCourseCoordinator
 
   const canEditModule = !!activeModule && (isAdmin || (canManageModules && activeModule.stage === 'producao'))
   const canEditContent = isAdmin || isProducer || isCourseSupervisor || isCourseCoordinator
@@ -727,7 +730,7 @@ export default function ModulosWorkspace({ course }) {
 
   const events = activeModule?.events || []
   const lastEvent = events.length ? events[events.length - 1] : null
-  const canPublish = !!activeModule && (isAdmin || isCourseCoordinator) && activeModule.stage === 'supervisao'
+  const canPublish = !!activeModule && isPrivileged && activeModule.stage === 'supervisao'
     && approvalSummary.total > 0 && approvalSummary.coordinatorApproved === approvalSummary.total
   const canDeleteModule = !!activeModule && canManageModules && (isAdmin || activeModule.stage === 'producao')
   const stageIndex = computeDisplayStageIndex(activeModule, moduleContents)
@@ -893,7 +896,7 @@ export default function ModulosWorkspace({ course }) {
                           <td className="table-cell">
                             <div className="flex items-center gap-1.5">
                               <MiniAvatar name={mat.responsibleName} roleLabel="Professor" avatar={responsibleAvatar} />
-                              {(isAdmin || isProducer) ? (
+                              {(isPrivileged || isProducer) ? (
                                 <InlineStatusSelect
                                   value={mat.status || ''}
                                   options={PROFESSOR_STATUS_OPTIONS}
@@ -907,12 +910,12 @@ export default function ModulosWorkspace({ course }) {
                           <td className="table-cell">
                             <div className="flex items-center gap-1.5">
                               <MiniAvatar name={course.supervisorName} roleLabel="Supervisor" avatar={course.supervisorAvatar} />
-                              {(isAdmin || isCourseSupervisor) ? (
+                              {(isPrivileged || isCourseSupervisor) ? (
                                 <InlineStatusSelect
                                   value={mat.supervisorStatus || ''}
                                   options={CONTENT_SUPERVISOR_STATUS_OPTIONS}
                                   onChange={val => {
-                                    if (val === 'aprovado' && mat.status !== 'concluido') {
+                                    if (!isPrivileged && val === 'aprovado' && mat.status !== 'concluido') {
                                       showToast('Só é possível aprovar após o professor concluir este conteúdo.', 'error')
                                       return
                                     }
@@ -927,17 +930,11 @@ export default function ModulosWorkspace({ course }) {
                           <td className="table-cell">
                             <div className="flex items-center gap-1.5">
                               <MiniAvatar name={course.coordinatorName} roleLabel="Coordenador(a)" avatar={course.coordinatorAvatar} />
-                              {(isAdmin || isCourseCoordinator) ? (
+                              {isPrivileged ? (
                                 <InlineStatusSelect
                                   value={mat.coordinatorStatus || ''}
                                   options={CONTENT_COORDINATOR_STATUS_OPTIONS}
-                                  onChange={val => {
-                                    if (val === 'aprovado' && mat.supervisorStatus !== 'aprovado') {
-                                      showToast('Só é possível aprovar após o supervisor aprovar este conteúdo.', 'error')
-                                      return
-                                    }
-                                    handleContentStatusChange(mat, 'coordinatorStatus', val)
-                                  }}
+                                  onChange={val => handleContentStatusChange(mat, 'coordinatorStatus', val)}
                                 />
                               ) : (
                                 <Badge status={mat.coordinatorStatus || ''} />
@@ -1245,7 +1242,7 @@ export default function ModulosWorkspace({ course }) {
           course={course}
           editing={editingContent}
           canReview={canReviewContent}
-          canEditStatus={isAdmin || isProducer}
+          canEditStatus={isPrivileged || isProducer}
         />
       )}
 
