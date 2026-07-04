@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Search, GripVertical, CheckCircle, Send, Rocket, Trash2, Pencil, Eye,
-  Link2, AlertTriangle, ArrowLeft, ChevronsLeft, ChevronsRight,
+  Link2, AlertTriangle, ArrowLeft, ChevronDown, ChevronRight, MoreVertical, Filter, Info,
   Layers, FileText, Clock,
 } from 'lucide-react'
 import Badge from '../ui/Badge'
@@ -35,6 +35,16 @@ const CONTENT_COORDINATOR_STATUS_OPTIONS = [
   { value: 'aprovado', label: 'Aprovado' },
   { value: 'ajustes', label: 'Ajustes' },
   { value: 'reprovado', label: 'Reprovado' },
+]
+
+const MODULE_STATUS_FILTER_OPTIONS = [
+  { value: '', label: 'Todos os status' },
+  { value: 'rascunho', label: 'Rascunho' },
+  { value: 'em_producao', label: 'Em produção' },
+  { value: 'em_validacao', label: 'Em validação' },
+  { value: 'em_revisao', label: 'Em revisão' },
+  { value: 'aprovado', label: 'Aprovado' },
+  { value: 'publicado', label: 'Publicado' },
 ]
 
 const EMPTY_MODULE_FORM = {
@@ -88,6 +98,14 @@ function getModuleStatusKey(m, contents = []) {
   if (summary.anyNeedsAttention) return 'em_revisao'
   if (summary.coordinatorApproved === summary.total) return 'aprovado'
   return 'em_validacao'
+}
+
+function getContentStatusKey(mat) {
+  if (mat.coordinatorStatus === 'aprovado') return 'aprovado'
+  if (mat.coordinatorStatus === 'reprovado') return 'reprovado'
+  if (mat.supervisorStatus === 'ajustes' || mat.coordinatorStatus === 'ajustes') return 'ajustes'
+  if (mat.status === 'concluido') return 'em_validacao'
+  return mat.status || 'nao_iniciado'
 }
 
 /* ─── content modal ─── */
@@ -364,9 +382,11 @@ export default function ModulosWorkspace({ course }) {
 
   const [modules, setModules] = useState([])
   const [loading, setLoading] = useState(true)
-  const [activeModuleId, setActiveModuleId] = useState(null)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [contentSearch, setContentSearch] = useState('')
+  const [collapsedModuleIds, setCollapsedModuleIds] = useState(() => new Set())
+  const [structureSearch, setStructureSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [openMenuKey, setOpenMenuKey] = useState(null)
   const [savingModule, setSavingModule] = useState(false)
   const [busyAction, setBusyAction] = useState(null)
   const [toast, setToast] = useState(null)
@@ -375,6 +395,7 @@ export default function ModulosWorkspace({ course }) {
   const [confirmDeleteModule, setConfirmDeleteModule] = useState(null)
   const [contentModalOpen, setContentModalOpen] = useState(false)
   const [editingContent, setEditingContent] = useState(null)
+  const [contentModalDefaultModuleId, setContentModalDefaultModuleId] = useState(null)
   const [viewContent, setViewContent] = useState(null)
   const [confirmDeleteContent, setConfirmDeleteContent] = useState(null)
   const [savingContent, setSavingContent] = useState(false)
@@ -396,7 +417,6 @@ export default function ModulosWorkspace({ course }) {
         const { data } = await api.get(`/courses/${course.id}/modules`)
         if (!active) return
         setModules(data)
-        setActiveModuleId(current => (current && data.some(m => m.id === current)) ? current : (data[0]?.id ?? null))
         // O backend pode ter acabado de vincular conteudos orfaos a um modulo padrao;
         // recarrega os materiais para refletir esse vinculo sem precisar recarregar a pagina.
         await loadCourses()
@@ -410,8 +430,6 @@ export default function ModulosWorkspace({ course }) {
     return () => { active = false }
   }, [course.id])
 
-  const activeModule = useMemo(() => modules.find(m => m.id === activeModuleId) || null, [modules, activeModuleId])
-
   const isAdmin = user?.role === 'administrador'
   const isCoordinatorUser = user?.role === 'coordenador' || String(user?.function || '').toLowerCase().includes('coordenador')
   const isProducer = user?.role === 'professor' && course.producers?.some(p => Number(p.id) === Number(user.id))
@@ -424,11 +442,11 @@ export default function ModulosWorkspace({ course }) {
 
   const canEditContent = isAdmin || isProducer || isCourseSupervisor || isCourseCoordinator
   const canReviewContent = isAdmin || isCourseSupervisor || isCourseCoordinator
-  const contentLocked = !!activeModule && activeModule.stage !== 'producao' && !isAdmin
 
   // Editar qualquer modulo em producao; excluir e restrito ao supervisor do curso (admin sempre pode).
   const canEditThisModule = (m) => !!m && (isAdmin || (canManageModules && m.stage === 'producao'))
   const canDeleteThisModule = (m) => !!m && (isAdmin || (isCourseSupervisor && m.stage === 'producao'))
+  const canPublishThisModule = (m, summary) => (isAdmin || isCourseCoordinator) && m.stage === 'supervisao' && summary.total > 0 && summary.coordinatorApproved === summary.total
 
   const courseMaterials = useMemo(
     () => materials.filter(m => Number(m.courseId) === Number(course.id) || m.course === course.name),
@@ -451,14 +469,6 @@ export default function ModulosWorkspace({ course }) {
     return counts
   }, [contentsByModuleId])
 
-  const moduleContents = useMemo(() => {
-    if (!activeModule) return []
-    return courseMaterials
-      .filter(m => Number(m.moduleId) === Number(activeModule.id))
-      .filter(m => !contentSearch || m.theme?.toLowerCase().includes(contentSearch.toLowerCase()))
-      .sort((a, b) => Number(a.session) - Number(b.session))
-  }, [courseMaterials, activeModule, contentSearch])
-
   const stats = useMemo(() => ({
     modulos: modules.length,
     conteudos: courseMaterials.length,
@@ -476,6 +486,43 @@ export default function ModulosWorkspace({ course }) {
     }).length,
   }), [modules, courseMaterials, contentsByModuleId])
 
+  const sortedModules = useMemo(() => [...modules].sort((a, b) => (a.order || 0) - (b.order || 0)), [modules])
+
+  const reorderingAllowed = !structureSearch.trim() && !statusFilter
+
+  const structureRows = useMemo(() => {
+    const q = structureSearch.trim().toLowerCase()
+    return sortedModules
+      .map(m => {
+        const allContents = (contentsByModuleId[m.id] || []).slice().sort((a, b) => Number(a.session) - Number(b.session))
+        if (statusFilter && getModuleStatusKey(m, allContents) !== statusFilter) return null
+        if (!q) return { module: m, allContents, visibleContents: allContents, forceExpand: false }
+        const moduleMatches = m.title?.toLowerCase().includes(q)
+        const matchingContents = allContents.filter(c => c.theme?.toLowerCase().includes(q))
+        if (moduleMatches) return { module: m, allContents, visibleContents: allContents, forceExpand: true }
+        if (matchingContents.length > 0) return { module: m, allContents, visibleContents: matchingContents, forceExpand: true }
+        return null
+      })
+      .filter(Boolean)
+  }, [sortedModules, contentsByModuleId, structureSearch, statusFilter])
+
+  const toggleModuleCollapsed = (id) => {
+    setCollapsedModuleIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const expandModule = (id) => {
+    setCollapsedModuleIds(prev => {
+      if (!prev.has(id)) return prev
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
+  }
+
   /* ── module actions ── */
 
   const handleSaveModule = async (payload) => {
@@ -488,7 +535,6 @@ export default function ModulosWorkspace({ course }) {
       } else {
         const { data } = await api.post(`/courses/${course.id}/modules`, payload)
         setModules(prev => [...prev, data])
-        setActiveModuleId(data.id)
         showToast('Módulo criado!')
       }
       setNewModuleOpen(false)
@@ -500,11 +546,11 @@ export default function ModulosWorkspace({ course }) {
     }
   }
 
-  const runAction = async (action) => {
-    if (!activeModule) return
-    setBusyAction(action)
+  const runAction = async (moduleObj, action) => {
+    setOpenMenuKey(null)
+    setBusyAction(`${moduleObj.id}:${action}`)
     try {
-      const { data } = await api.patch(`/modules/${activeModule.id}/status`, { action })
+      const { data } = await api.patch(`/modules/${moduleObj.id}/status`, { action })
       setModules(prev => prev.map(m => m.id === data.id ? data : m))
       showToast('Status do módulo atualizado!')
     } catch (err) {
@@ -519,7 +565,6 @@ export default function ModulosWorkspace({ course }) {
     try {
       await api.delete(`/modules/${confirmDeleteModule.id}`)
       setModules(prev => prev.filter(m => m.id !== confirmDeleteModule.id))
-      setActiveModuleId(prev => (prev === confirmDeleteModule.id ? null : prev))
       // O modulo excluido leva junto os conteudos vinculados; recarrega para tirar os orfaos do estado global.
       await loadCourses()
       showToast('Módulo e conteúdos vinculados excluídos com sucesso!')
@@ -559,6 +604,18 @@ export default function ModulosWorkspace({ course }) {
 
   /* ── content actions ── */
 
+  const openNewContentFor = (moduleId) => {
+    setEditingContent(null)
+    setContentModalDefaultModuleId(moduleId)
+    setContentModalOpen(true)
+  }
+
+  const openEditContent = (mat) => {
+    setEditingContent(mat)
+    setContentModalDefaultModuleId(mat.moduleId)
+    setContentModalOpen(true)
+  }
+
   const handleSaveContent = async (payload) => {
     setSavingContent(true)
     try {
@@ -574,7 +631,7 @@ export default function ModulosWorkspace({ course }) {
         courseId: course.id,
         moduleId: targetModuleId,
       })
-      if (targetModuleId !== activeModuleId) setActiveModuleId(targetModuleId)
+      expandModule(targetModuleId)
       showToast(payload.id ? 'Conteúdo atualizado!' : 'Conteúdo adicionado!')
       setContentModalOpen(false)
     } catch (err) {
@@ -611,8 +668,8 @@ export default function ModulosWorkspace({ course }) {
     e.preventDefault()
     setDragOverContentId(null)
     if (!dragContentId || dragContentId === target.id) { setDragContentId(null); return }
-    const src = moduleContents.find(m => m.id === dragContentId)
-    if (!src) { setDragContentId(null); return }
+    const src = courseMaterials.find(m => m.id === dragContentId)
+    if (!src || Number(src.moduleId) !== Number(target.moduleId)) { setDragContentId(null); return }
     const srcSession = Number(src.session)
     const tgtSession = Number(target.session)
     try {
@@ -633,11 +690,6 @@ export default function ModulosWorkspace({ course }) {
       </div>
     )
   }
-
-  const approvalSummary = getContentApprovalSummary(moduleContents)
-
-  const canPublish = !!activeModule && isPrivileged && activeModule.stage === 'supervisao'
-    && approvalSummary.total > 0 && approvalSummary.coordinatorApproved === approvalSummary.total
 
   return (
     <div className="space-y-5">
@@ -663,7 +715,7 @@ export default function ModulosWorkspace({ course }) {
           )}
           {canEditContent && (
             <button
-              onClick={() => { setEditingContent(null); setContentModalOpen(true) }}
+              onClick={() => openNewContentFor(sortedModules[0]?.id || '')}
               disabled={modules.length === 0}
               title={modules.length === 0 ? 'Crie um módulo antes de adicionar conteúdo.' : undefined}
               className="btn-primary text-sm disabled:opacity-40 disabled:cursor-not-allowed"
@@ -701,248 +753,338 @@ export default function ModulosWorkspace({ course }) {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4 items-start">
-          {/* Sidebar: módulos */}
-          <div className="card p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-800">Estrutura do curso</h3>
-              <button
-                onClick={() => setSidebarCollapsed(v => !v)}
-                title={sidebarCollapsed ? 'Expandir' : 'Recolher'}
-                className="p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 rounded-md transition-colors flex-shrink-0"
-              >
-                {sidebarCollapsed ? <ChevronsRight size={14} /> : <ChevronsLeft size={14} />}
-              </button>
-            </div>
-            <div className="space-y-1.5 max-h-[640px] overflow-y-auto">
-              {modules.map(m => {
-                const isActive = m.id === activeModuleId
-                const isDragOver = dragOverModuleId === m.id
-                return (
-                  <div
-                    key={m.id}
-                    draggable={canManageModules}
-                    onDragStart={canManageModules ? e => handleModuleDragStart(e, m) : undefined}
-                    onDragOver={canManageModules ? e => handleModuleDragOver(e, m) : undefined}
-                    onDrop={canManageModules ? e => handleModuleDrop(e, m) : undefined}
-                    onDragEnd={handleModuleDragEnd}
-                    onClick={() => setActiveModuleId(m.id)}
-                    className={`px-2.5 py-2 rounded-lg border cursor-pointer transition-colors flex items-center gap-1.5
-                      ${isActive ? 'border-brand-400 bg-brand-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}
-                      ${isDragOver ? 'ring-2 ring-brand-300' : ''}
-                    `}
-                  >
-                    {canManageModules && !sidebarCollapsed && (
-                      <GripVertical size={13} className="text-gray-300 cursor-grab active:cursor-grabbing flex-shrink-0" />
-                    )}
-                    <span className={`text-sm font-medium truncate flex-1 min-w-0 ${isActive ? 'text-brand-900' : 'text-gray-700'}`}>{m.title}</span>
-                    {!sidebarCollapsed && (
-                      <div className="flex items-center gap-0.5 flex-shrink-0">
-                        {canEditThisModule(m) && (
-                          <button
-                            onClick={e => { e.stopPropagation(); setEditingModule(m); setNewModuleOpen(true) }}
-                            title="Editar módulo"
-                            className="p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 rounded-md transition-colors"
-                          >
-                            <Pencil size={13} />
-                          </button>
-                        )}
-                        {canDeleteThisModule(m) && (
-                          <button
-                            onClick={e => { e.stopPropagation(); setConfirmDeleteModule(m) }}
-                            title="Excluir módulo"
-                            className="p-1 text-gray-300 hover:bg-red-50 hover:text-red-500 rounded-md transition-colors"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+        <div className="card p-0 overflow-hidden">
+          {/* Estrutura do curso: cabecalho com busca e filtro */}
+          <div className="flex items-center justify-between flex-wrap gap-3 px-5 py-4 border-b border-gray-100">
+            <h3 className="text-sm font-semibold text-gray-800">Estrutura do curso</h3>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  value={structureSearch}
+                  onChange={e => setStructureSearch(e.target.value)}
+                  placeholder="Buscar por módulo ou conteúdo..."
+                  className="input-field pl-8 text-xs py-2 w-64"
+                />
+              </div>
+              <div className="relative">
+                <button onClick={() => setFiltersOpen(v => !v)} className="btn-secondary text-xs py-2">
+                  <Filter size={13} />
+                  Filtros{statusFilter ? ' (1)' : ''}
+                </button>
+                {filtersOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setFiltersOpen(false)} />
+                    <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-xl shadow-lg border border-gray-100 p-3 z-50 text-left">
+                      <label className="block text-xs font-medium text-gray-600 mb-1.5">Status do módulo</label>
+                      <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="select-field text-xs">
+                        {MODULE_STATUS_FILTER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Middle: tabela de conteúdos */}
-          {activeModule ? (
-            <div className="card p-0 overflow-hidden">
-              <div className="flex items-center justify-between flex-wrap gap-3 px-5 py-4 border-b border-gray-100">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-sm font-semibold text-gray-800 truncate">{activeModule.title}</h3>
-                    <Badge status={getModuleStatusKey(activeModule, moduleContents)} />
-                  </div>
-                  <p className="text-xs text-gray-400 mt-0.5">{moduleContents.length} conteúdo{moduleContents.length !== 1 ? 's' : ''}</p>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {activeModule.stage === 'producao' && (isAdmin || isProducer) && (
-                    <button
-                      onClick={() => runAction('enviar_supervisao')}
-                      disabled={busyAction === 'enviar_supervisao' || approvalSummary.total === 0 || approvalSummary.professorConcluded < approvalSummary.total}
-                      className="btn-primary text-xs py-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                      title={
-                        approvalSummary.total === 0
-                          ? 'Adicione ao menos um conteúdo antes de enviar'
-                          : approvalSummary.professorConcluded < approvalSummary.total
-                            ? 'Conclua todos os conteúdos antes de enviar para supervisão'
-                            : undefined
-                      }
-                    >
-                      <Send size={13} />
-                      {busyAction === 'enviar_supervisao' ? 'Enviando...' : 'Enviar para supervisão'}
-                    </button>
-                  )}
-                  {canPublish && (
-                    <button onClick={() => runAction('publicar')} disabled={!!busyAction} className="btn-primary text-xs py-2">
-                      <Rocket size={13} />
-                      {busyAction === 'publicar' ? 'Publicando...' : 'Publicar módulo'}
-                    </button>
-                  )}
-                  <div className="relative">
-                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      value={contentSearch}
-                      onChange={e => setContentSearch(e.target.value)}
-                      placeholder="Buscar conteúdo..."
-                      className="input-field pl-8 text-xs py-2 w-48"
-                    />
-                  </div>
-                </div>
-              </div>
+          <div className="table-container">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="table-header w-16">Ordem</th>
+                  <th className="table-header">Item</th>
+                  <th className="table-header w-24">Tipo</th>
+                  <th className="table-header w-36">Professor</th>
+                  <th className="table-header w-36">Supervisor</th>
+                  <th className="table-header w-36">Coordenação</th>
+                  <th className="table-header w-20">Prazo</th>
+                  <th className="table-header w-28">Status</th>
+                  <th className="table-header w-32">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {structureRows.map(({ module: m, allContents, visibleContents, forceExpand }) => {
+                  const isExpanded = forceExpand || !collapsedModuleIds.has(m.id)
+                  const isDraggingModule = dragModuleId === m.id
+                  const isDragOverModule = dragOverModuleId === m.id
+                  const moduleMenuKey = `module-${m.id}`
+                  const summary = getContentApprovalSummary(allContents)
+                  const canSend = m.stage === 'producao' && (isAdmin || isProducer)
+                  const canPublishModule = canPublishThisModule(m, summary)
+                  const hasMenuActions = canSend || canPublishModule || canDeleteThisModule(m)
 
-              <div className="table-container">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-100">
-                      <th className="table-header w-12">Ordem</th>
-                      <th className="table-header">Conteúdo</th>
-                      <th className="table-header w-24">Tipo</th>
-                      <th className="table-header w-36">Professor</th>
-                      <th className="table-header w-36">Supervisor</th>
-                      <th className="table-header w-36">Coordenação</th>
-                      <th className="table-header w-24">Prazo</th>
-                      <th className="table-header w-28">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {moduleContents.map(mat => {
-                      const isDragging = dragContentId === mat.id
-                      const isDragOver = dragOverContentId === mat.id
-                      const responsibleAvatar = materialAssignees.find(a => Number(a.id) === Number(mat.responsibleId))?.avatar
-                      return (
-                        <tr
-                          key={mat.id}
-                          draggable={canEditContent && !contentLocked}
-                          onDragStart={canEditContent ? e => handleContentDragStart(e, mat) : undefined}
-                          onDragOver={canEditContent ? e => handleContentDragOver(e, mat) : undefined}
-                          onDrop={canEditContent ? e => handleContentDrop(e, mat) : undefined}
-                          onDragEnd={handleContentDragEnd}
-                          className={`border-b border-gray-50 transition-colors
-                            ${isDragging ? 'opacity-40' : ''}
-                            ${isDragOver ? 'bg-brand-50/30 border-t-2 border-t-brand-400' : 'hover:bg-gray-50/50'}
-                          `}
-                        >
-                          <td className="table-cell text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              {canEditContent && !contentLocked && <GripVertical size={13} className="text-gray-300 cursor-grab active:cursor-grabbing flex-shrink-0" />}
-                              <span className="font-semibold text-gray-600">{mat.session}</span>
+                  return (
+                    <Fragment key={m.id}>
+                      <tr
+                        draggable={canManageModules && reorderingAllowed}
+                        onDragStart={canManageModules && reorderingAllowed ? e => handleModuleDragStart(e, m) : undefined}
+                        onDragOver={canManageModules && reorderingAllowed ? e => handleModuleDragOver(e, m) : undefined}
+                        onDrop={canManageModules && reorderingAllowed ? e => handleModuleDrop(e, m) : undefined}
+                        onDragEnd={handleModuleDragEnd}
+                        className={`border-b border-gray-100 bg-gray-50/60 transition-colors
+                          ${isDraggingModule ? 'opacity-40' : ''}
+                          ${isDragOverModule ? 'bg-brand-50/50 border-t-2 border-t-brand-400' : ''}
+                        `}
+                      >
+                        <td className="table-cell text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            {canManageModules && reorderingAllowed && <GripVertical size={13} className="text-gray-300 cursor-grab active:cursor-grabbing flex-shrink-0" />}
+                            <span className="font-semibold text-gray-600">{m.order}</span>
+                          </div>
+                        </td>
+                        <td className="table-cell">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <button onClick={() => toggleModuleCollapsed(m.id)} className="p-0.5 text-gray-400 hover:text-gray-600 flex-shrink-0">
+                              {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                            </button>
+                            <div className="w-7 h-7 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center flex-shrink-0">
+                              <Layers size={14} />
                             </div>
-                          </td>
-                          <td className="table-cell">
-                            <div className="font-medium text-gray-700 truncate max-w-[220px]">{mat.theme}</div>
-                          </td>
-                          <td className="table-cell"><TypeBadge type={mat.type} /></td>
-                          <td className="table-cell">
-                            <div className="flex items-center gap-1.5">
-                              <MiniAvatar name={mat.responsibleName} roleLabel="Professor" avatar={responsibleAvatar} />
-                              {(isPrivileged || isProducer) ? (
-                                <InlineStatusSelect
-                                  value={mat.status || ''}
-                                  options={PROFESSOR_STATUS_OPTIONS}
-                                  onChange={val => handleContentStatusChange(mat, 'status', val)}
-                                />
-                              ) : (
-                                <Badge status={mat.status || ''} />
-                              )}
-                            </div>
-                          </td>
-                          <td className="table-cell">
-                            <div className="flex items-center gap-1.5">
-                              <MiniAvatar name={course.supervisorName} roleLabel="Supervisor" avatar={course.supervisorAvatar} />
-                              {(isPrivileged || isCourseSupervisor) ? (
-                                <InlineStatusSelect
-                                  value={mat.supervisorStatus || ''}
-                                  options={CONTENT_SUPERVISOR_STATUS_OPTIONS}
-                                  onChange={val => {
-                                    if (!isPrivileged && val === 'aprovado' && mat.status !== 'concluido') {
-                                      showToast('Só é possível aprovar após o professor concluir este conteúdo.', 'error')
-                                      return
-                                    }
-                                    handleContentStatusChange(mat, 'supervisorStatus', val)
-                                  }}
-                                />
-                              ) : (
-                                <Badge status={mat.supervisorStatus || ''} />
-                              )}
-                            </div>
-                          </td>
-                          <td className="table-cell">
-                            <div className="flex items-center gap-1.5">
-                              <MiniAvatar name={course.coordinatorName} roleLabel="Coordenador(a)" avatar={course.coordinatorAvatar} />
-                              {isPrivileged ? (
-                                <InlineStatusSelect
-                                  value={mat.coordinatorStatus || ''}
-                                  options={CONTENT_COORDINATOR_STATUS_OPTIONS}
-                                  onChange={val => handleContentStatusChange(mat, 'coordinatorStatus', val)}
-                                />
-                              ) : (
-                                <Badge status={mat.coordinatorStatus || ''} />
-                              )}
-                            </div>
-                          </td>
-                          <td className="table-cell text-gray-500">{formatDateOnly(mat.deliveryDate)}</td>
-                          <td className="table-cell">
-                            <div className="flex items-center gap-0.5">
-                              <button onClick={() => setViewContent(mat)} title="Visualizar" className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
-                                <Eye size={14} />
+                            <span className="font-bold text-gray-900 truncate">{m.title}</span>
+                            <Badge status={getModuleStatusKey(m, allContents)} />
+                            <span className="text-xs text-gray-400 whitespace-nowrap">{allContents.length} conteúdo{allContents.length !== 1 ? 's' : ''}</span>
+                          </div>
+                        </td>
+                        <td className="table-cell" />
+                        <td className="table-cell" />
+                        <td className="table-cell" />
+                        <td className="table-cell" />
+                        <td className="table-cell" />
+                        <td className="table-cell" />
+                        <td className="table-cell">
+                          <div className="flex items-center justify-end gap-1 relative">
+                            {canEditContent && (
+                              <button
+                                onClick={() => openNewContentFor(m.id)}
+                                className="btn-secondary text-xs py-1.5 px-2.5 whitespace-nowrap"
+                              >
+                                <Plus size={12} /> Conteúdo
                               </button>
-                              {canEditContent && (
-                                <button onClick={() => { setEditingContent(mat); setContentModalOpen(true) }} title="Editar" className="p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors">
-                                  <Pencil size={14} />
-                                </button>
-                              )}
-                              {mat.originalLink && (
-                                <a href={mat.originalLink} target="_blank" rel="noopener noreferrer" title="Abrir link original" className="p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-lg transition-colors">
-                                  <Link2 size={14} />
-                                </a>
-                              )}
-                              {canEditContent && (
-                                <button onClick={() => setConfirmDeleteContent(mat)} title="Excluir" className="p-1.5 text-gray-300 hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors">
-                                  <Trash2 size={14} />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                    {moduleContents.length === 0 && (
-                      <tr>
-                        <td colSpan={8} className="table-cell text-center py-10 text-gray-400 text-sm">
-                          Nenhum conteúdo vinculado a este módulo ainda.
+                            )}
+                            {canEditThisModule(m) && (
+                              <button
+                                onClick={() => { setEditingModule(m); setNewModuleOpen(true) }}
+                                title="Editar módulo"
+                                className="p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                            )}
+                            {hasMenuActions && (
+                              <button
+                                onClick={() => setOpenMenuKey(k => k === moduleMenuKey ? null : moduleMenuKey)}
+                                title="Mais ações"
+                                className="p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors"
+                              >
+                                <MoreVertical size={14} />
+                              </button>
+                            )}
+                            {openMenuKey === moduleMenuKey && (
+                              <>
+                                <div className="fixed inset-0 z-40" onClick={() => setOpenMenuKey(null)} />
+                                <div className="absolute right-0 top-full mt-1 w-60 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden z-50 text-left">
+                                  {canSend && (
+                                    <button
+                                      onClick={() => runAction(m, 'enviar_supervisao')}
+                                      disabled={busyAction === `${m.id}:enviar_supervisao` || summary.total === 0 || summary.professorConcluded < summary.total}
+                                      title={summary.total === 0 ? 'Adicione ao menos um conteúdo antes de enviar' : summary.professorConcluded < summary.total ? 'Conclua todos os conteúdos antes de enviar' : undefined}
+                                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                      <Send size={14} /> Enviar para supervisão
+                                    </button>
+                                  )}
+                                  {canPublishModule && (
+                                    <button
+                                      onClick={() => runAction(m, 'publicar')}
+                                      disabled={busyAction === `${m.id}:publicar`}
+                                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                                    >
+                                      <Rocket size={14} /> Publicar módulo
+                                    </button>
+                                  )}
+                                  {canDeleteThisModule(m) && (
+                                    <button
+                                      onClick={() => { setOpenMenuKey(null); setConfirmDeleteModule(m) }}
+                                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                    >
+                                      <Trash2 size={14} /> Excluir módulo
+                                    </button>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : (
-            <div className="card flex items-center justify-center py-14 text-sm text-gray-400">
-              Selecione um módulo para visualizar os conteúdos.
-            </div>
+
+                      {isExpanded && visibleContents.map((mat, idx) => {
+                        const isDragging = dragContentId === mat.id
+                        const isDragOver = dragOverContentId === mat.id
+                        const responsibleAvatar = materialAssignees.find(a => Number(a.id) === Number(mat.responsibleId))?.avatar
+                        const rowLocked = m.stage !== 'producao' && !isAdmin
+                        const contentMenuKey = `content-${mat.id}`
+                        const canDrag = canEditContent && !rowLocked && reorderingAllowed
+                        return (
+                          <tr
+                            key={`content-${mat.id}`}
+                            draggable={canDrag}
+                            onDragStart={canDrag ? e => handleContentDragStart(e, mat) : undefined}
+                            onDragOver={canDrag ? e => handleContentDragOver(e, mat) : undefined}
+                            onDrop={canDrag ? e => handleContentDrop(e, mat) : undefined}
+                            onDragEnd={handleContentDragEnd}
+                            className={`border-b border-gray-50 transition-colors
+                              ${isDragging ? 'opacity-40' : ''}
+                              ${isDragOver ? 'bg-brand-50/30 border-t-2 border-t-brand-400' : 'hover:bg-gray-50/50'}
+                            `}
+                          >
+                            <td className="table-cell text-center text-gray-400">
+                              <div className="flex items-center justify-center gap-1">
+                                {canDrag && <GripVertical size={12} className="text-gray-200 cursor-grab active:cursor-grabbing flex-shrink-0" />}
+                                <span>{m.order}.{idx + 1}</span>
+                              </div>
+                            </td>
+                            <td className="table-cell">
+                              <div className="flex items-center gap-2 pl-7 min-w-0">
+                                <div className="w-6 h-6 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
+                                  <FileText size={12} />
+                                </div>
+                                <span className="text-gray-700 truncate">{mat.theme}</span>
+                              </div>
+                            </td>
+                            <td className="table-cell"><TypeBadge type={mat.type} /></td>
+                            <td className="table-cell">
+                              <div className="flex items-center gap-1.5">
+                                <MiniAvatar name={mat.responsibleName} roleLabel="Professor" avatar={responsibleAvatar} />
+                                {(isPrivileged || isProducer) ? (
+                                  <InlineStatusSelect
+                                    value={mat.status || ''}
+                                    options={PROFESSOR_STATUS_OPTIONS}
+                                    onChange={val => handleContentStatusChange(mat, 'status', val)}
+                                  />
+                                ) : (
+                                  <Badge status={mat.status || ''} />
+                                )}
+                              </div>
+                            </td>
+                            <td className="table-cell">
+                              <div className="flex items-center gap-1.5">
+                                <MiniAvatar name={course.supervisorName} roleLabel="Supervisor" avatar={course.supervisorAvatar} />
+                                {(isPrivileged || isCourseSupervisor) ? (
+                                  <InlineStatusSelect
+                                    value={mat.supervisorStatus || ''}
+                                    options={CONTENT_SUPERVISOR_STATUS_OPTIONS}
+                                    onChange={val => {
+                                      if (!isPrivileged && val === 'aprovado' && mat.status !== 'concluido') {
+                                        showToast('Só é possível aprovar após o professor concluir este conteúdo.', 'error')
+                                        return
+                                      }
+                                      handleContentStatusChange(mat, 'supervisorStatus', val)
+                                    }}
+                                  />
+                                ) : (
+                                  <Badge status={mat.supervisorStatus || ''} />
+                                )}
+                              </div>
+                            </td>
+                            <td className="table-cell">
+                              <div className="flex items-center gap-1.5">
+                                <MiniAvatar name={course.coordinatorName} roleLabel="Coordenador(a)" avatar={course.coordinatorAvatar} />
+                                {isPrivileged ? (
+                                  <InlineStatusSelect
+                                    value={mat.coordinatorStatus || ''}
+                                    options={CONTENT_COORDINATOR_STATUS_OPTIONS}
+                                    onChange={val => handleContentStatusChange(mat, 'coordinatorStatus', val)}
+                                  />
+                                ) : (
+                                  <Badge status={mat.coordinatorStatus || ''} />
+                                )}
+                              </div>
+                            </td>
+                            <td className="table-cell text-gray-500">{formatDateOnly(mat.deliveryDate)}</td>
+                            <td className="table-cell"><Badge status={getContentStatusKey(mat)} /></td>
+                            <td className="table-cell">
+                              <div className="flex items-center justify-end gap-0.5 relative">
+                                <button onClick={() => setViewContent(mat)} title="Visualizar" className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
+                                  <Eye size={14} />
+                                </button>
+                                {canEditContent && (
+                                  <button
+                                    onClick={() => setOpenMenuKey(k => k === contentMenuKey ? null : contentMenuKey)}
+                                    title="Mais ações"
+                                    className="p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors"
+                                  >
+                                    <MoreVertical size={14} />
+                                  </button>
+                                )}
+                                {openMenuKey === contentMenuKey && (
+                                  <>
+                                    <div className="fixed inset-0 z-40" onClick={() => setOpenMenuKey(null)} />
+                                    <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden z-50 text-left">
+                                      <button
+                                        onClick={() => { setOpenMenuKey(null); openEditContent(mat) }}
+                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                                      >
+                                        <Pencil size={14} /> Editar
+                                      </button>
+                                      {mat.originalLink && (
+                                        <a
+                                          href={mat.originalLink}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          onClick={() => setOpenMenuKey(null)}
+                                          className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                                        >
+                                          <Link2 size={14} /> Abrir link original
+                                        </a>
+                                      )}
+                                      <button
+                                        onClick={() => { setOpenMenuKey(null); setConfirmDeleteContent(mat) }}
+                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                      >
+                                        <Trash2 size={14} /> Excluir
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                      {isExpanded && visibleContents.length === 0 && (
+                        <tr>
+                          <td colSpan={9} className="table-cell text-center py-6 text-gray-400 text-xs pl-10">
+                            Nenhum conteúdo vinculado a este módulo ainda.
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+                {structureRows.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="table-cell text-center py-10 text-gray-400 text-sm">
+                      Nenhum módulo encontrado.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {canManageModules && (
+            <button
+              onClick={() => { setEditingModule(null); setNewModuleOpen(true) }}
+              className="w-full flex items-center justify-center gap-1.5 py-3 border-t border-dashed border-gray-200 text-xs font-medium text-gray-500 hover:text-brand-700 hover:bg-gray-50/50 transition-colors"
+            >
+              <Plus size={13} />
+              Adicionar módulo
+            </button>
           )}
+          <div className="px-5 py-2.5 border-t border-gray-100 flex items-center gap-1.5 text-[11px] text-gray-400">
+            <Info size={12} />
+            Dica: arraste os itens para reordenar módulos e conteúdos.
+          </div>
         </div>
       )}
 
@@ -1002,8 +1144,8 @@ export default function ModulosWorkspace({ course }) {
           onClose={() => setContentModalOpen(false)}
           onSave={handleSaveContent}
           saving={savingContent}
-          modules={modules}
-          defaultModuleId={activeModuleId}
+          modules={sortedModules}
+          defaultModuleId={contentModalDefaultModuleId}
           course={course}
           editing={editingContent}
           canReview={canReviewContent}
