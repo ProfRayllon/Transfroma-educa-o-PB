@@ -68,6 +68,8 @@ Campos obrigatorios:
 Usuarios mock iniciais:
 
 - `admin@transforma.pb.gov.br`
+- `marcos.lima@transforma.pb.gov.br`
+- `ana.moura@transforma.pb.gov.br`
 
 As senhas sao definidas no `backend/.env`.
 

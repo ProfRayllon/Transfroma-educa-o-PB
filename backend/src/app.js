@@ -57,6 +57,29 @@ function isCoordinator(user) {
   return user?.role === 'coordenador' || String(user?.function || '').toLowerCase().includes('coordenador')
 }
 
+function isModuleProducer(user, course) {
+  return user?.role === 'professor' && course?.producers?.some((p) => Number(p.id) === Number(user.id))
+}
+
+function isModuleSupervisor(user, module, course) {
+  if (user?.role !== 'supervisor') return false
+  if (module) return module.supervisorId === user.id || module.supervisorName === user.name
+  return course?.supervisorId === user.id || course?.supervisorName === user.name
+}
+
+function isModuleCoordinator(user, module, course) {
+  if (!isCoordinator(user)) return false
+  if (module) return module.coordinatorId === user.id || module.coordinatorName === user.name
+  return course?.coordinatorId === user.id || course?.coordinatorName === user.name
+}
+
+function canManageModule(user, course) {
+  return user?.role === 'administrador'
+    || isModuleSupervisor(user, null, course)
+    || isModuleCoordinator(user, null, course)
+    || isModuleProducer(user, course)
+}
+
 function canManageCourses(user) {
   return user?.role === 'administrador' || user?.role === 'supervisor' || isCoordinator(user)
 }
@@ -265,11 +288,26 @@ async function materialPayload(body, actor, currentMaterial) {
     return { error: 'Curso invalido.' }
   }
 
+  const moduleIdProvided = Object.prototype.hasOwnProperty.call(body, 'moduleId')
+  let moduleId = moduleIdProvided
+    ? (body.moduleId ? Number(body.moduleId) : null)
+    : (currentMaterial?.moduleId ?? null)
+  let legacyModule = Number(body.module) || currentMaterial?.module || 1
+
+  if (moduleId) {
+    const courseModule = await store.getModuleById(moduleId)
+    if (!courseModule || Number(courseModule.courseId) !== Number(course.id)) {
+      return { error: 'Modulo invalido para este curso.' }
+    }
+    legacyModule = courseModule.order || legacyModule
+  }
+
   const payload = {
     course: course.name,
     courseId: course.id,
     session: body.session || currentMaterial?.session,
-    module: Number(body.module) || currentMaterial?.module || 1,
+    module: legacyModule,
+    moduleId,
     theme: body.theme ?? currentMaterial?.theme ?? '',
     objective: body.objective ?? currentMaterial?.objective ?? '',
     type: normalizeMaterialType(body.type, currentMaterial?.type),
@@ -318,6 +356,60 @@ async function materialPayload(body, actor, currentMaterial) {
   payload.responsibles = currentMaterial?.responsibles?.length
     ? currentMaterial.responsibles
     : [{ id: payload.responsibleId, name: payload.responsibleName, role: payload.responsibleRole }]
+
+  return { payload }
+}
+
+async function modulePayload(body, course, currentModule) {
+  const payload = {
+    courseId: course.id,
+    title: String(body.title ?? currentModule?.title ?? '').trim(),
+    description: body.description ?? currentModule?.description ?? '',
+    workload: body.workload ?? currentModule?.workload ?? '',
+    order: Number(body.order) || currentModule?.order || 1,
+    teacherId: Object.prototype.hasOwnProperty.call(body, 'teacherId')
+      ? (body.teacherId ? Number(body.teacherId) : null)
+      : (currentModule?.teacherId ?? null),
+    supervisorId: Object.prototype.hasOwnProperty.call(body, 'supervisorId')
+      ? (body.supervisorId ? Number(body.supervisorId) : null)
+      : (currentModule?.supervisorId ?? course.supervisorId ?? null),
+    coordinatorId: Object.prototype.hasOwnProperty.call(body, 'coordinatorId')
+      ? (body.coordinatorId ? Number(body.coordinatorId) : null)
+      : (currentModule?.coordinatorId ?? course.coordinatorId ?? null),
+    deadline: body.deadline ?? currentModule?.deadline ?? null,
+    stage: currentModule?.stage || 'producao',
+    professorStatus: currentModule?.professorStatus || 'rascunho',
+    supervisorStatus: currentModule?.supervisorStatus || 'aguardando',
+    coordinatorStatus: currentModule?.coordinatorStatus || 'pendente',
+  }
+
+  if (!payload.title) {
+    return { error: 'Informe o titulo do modulo.' }
+  }
+
+  if (payload.teacherId) {
+    const teacher = await findUserById(payload.teacherId)
+    if (!teacher || teacher.role !== 'professor') return { error: 'Professor conteudista invalido.' }
+    payload.teacherName = teacher.name
+  } else {
+    payload.teacherName = null
+  }
+
+  if (payload.supervisorId) {
+    const supervisor = await findUserById(payload.supervisorId)
+    if (!supervisor || !['supervisor', 'administrador'].includes(supervisor.role)) return { error: 'Supervisor invalido.' }
+    payload.supervisorName = supervisor.name
+  } else {
+    payload.supervisorName = null
+  }
+
+  if (payload.coordinatorId) {
+    const coordinator = await findUserById(payload.coordinatorId)
+    if (!coordinator || !(coordinator.role === 'administrador' || isCoordinator(coordinator))) return { error: 'Coordenador(a) invalido.' }
+    payload.coordinatorName = coordinator.name
+  } else {
+    payload.coordinatorName = null
+  }
 
   return { payload }
 }
@@ -691,6 +783,224 @@ app.patch('/api/materials/:id/session', auth, async (req, res) => {
   const material = await store.updateMaterial(req.params.id, { ...current, session })
   if (!material) return res.status(404).json({ message: 'Material nao encontrado.' })
   res.json(material)
+})
+
+app.get('/api/courses/:courseId/modules', auth, async (req, res) => {
+  try {
+    const course = await store.getCourseById(req.params.courseId)
+    if (!course) return res.status(404).json({ message: 'Curso nao encontrado.' })
+    const modules = await store.listModules(course.id)
+    res.json(modules)
+  } catch (err) {
+    console.error('[GET /api/courses/:courseId/modules]', err)
+    res.status(500).json({ message: 'Erro ao carregar modulos.' })
+  }
+})
+
+app.post('/api/courses/:courseId/modules', auth, async (req, res) => {
+  try {
+    const actor = await store.getUserById(req.user.id)
+    const course = await store.getCourseById(req.params.courseId)
+    if (!course) return res.status(404).json({ message: 'Curso nao encontrado.' })
+    if (!canManageModule(actor, course)) return res.status(403).json({ message: 'Voce nao tem permissao para criar modulos neste curso.' })
+
+    const { payload, error } = await modulePayload(req.body, course)
+    if (error) return res.status(400).json({ message: error })
+
+    const existing = await store.listModules(course.id)
+    const module = await store.createModule({ ...payload, order: existing.length + 1, createdBy: actor.id })
+    res.status(201).json(module)
+  } catch (err) {
+    console.error('[POST /api/courses/:courseId/modules]', err)
+    res.status(500).json({ message: 'Erro ao criar modulo.' })
+  }
+})
+
+app.put('/api/modules/:id', auth, async (req, res) => {
+  try {
+    const actor = await store.getUserById(req.user.id)
+    const current = await store.getModuleById(req.params.id)
+    if (!current) return res.status(404).json({ message: 'Modulo nao encontrado.' })
+    const course = await store.getCourseById(current.courseId)
+    if (!canManageModule(actor, course)) return res.status(403).json({ message: 'Voce nao tem permissao para editar este modulo.' })
+    if (actor.role !== 'administrador' && current.stage !== 'producao') {
+      return res.status(400).json({ message: 'O modulo so pode ser editado enquanto estiver em producao.' })
+    }
+
+    const { payload, error } = await modulePayload(req.body, course, current)
+    if (error) return res.status(400).json({ message: error })
+
+    if (payload.stage === 'producao' && payload.professorStatus === 'rascunho') {
+      payload.professorStatus = 'em_producao'
+    }
+
+    const module = await store.updateModule(current.id, { ...current, ...payload })
+    res.json(module)
+  } catch (err) {
+    console.error('[PUT /api/modules/:id]', err)
+    res.status(500).json({ message: 'Erro ao atualizar modulo.' })
+  }
+})
+
+app.patch('/api/modules/:id/order', auth, async (req, res) => {
+  try {
+    const actor = await store.getUserById(req.user.id)
+    const current = await store.getModuleById(req.params.id)
+    if (!current) return res.status(404).json({ message: 'Modulo nao encontrado.' })
+    const course = await store.getCourseById(current.courseId)
+    if (!canManageModule(actor, course)) return res.status(403).json({ message: 'Sem permissao para reordenar modulos.' })
+
+    const order = Number(req.body.order)
+    if (!order || order < 1) return res.status(400).json({ message: 'Ordem invalida.' })
+
+    const module = await store.updateModule(current.id, { ...current, order })
+    res.json(module)
+  } catch (err) {
+    console.error('[PATCH /api/modules/:id/order]', err)
+    res.status(500).json({ message: 'Erro ao reordenar modulo.' })
+  }
+})
+
+app.patch('/api/modules/:id/status', auth, async (req, res) => {
+  try {
+    const actor = await store.getUserById(req.user.id)
+    const current = await store.getModuleById(req.params.id)
+    if (!current) return res.status(404).json({ message: 'Modulo nao encontrado.' })
+    const course = await store.getCourseById(current.courseId)
+
+    const action = String(req.body.action || '')
+    const note = String(req.body.note || '').trim()
+
+    const isAdmin = actor.role === 'administrador'
+    const isProducer = isModuleProducer(actor, course)
+    const isSupervisor = isAdmin || isModuleSupervisor(actor, current, course)
+    const isCoord = isAdmin || isModuleCoordinator(actor, current, course)
+
+    let update = null
+
+    switch (action) {
+      case 'enviar_supervisao': {
+        if (!(isAdmin || isProducer)) return res.status(403).json({ message: 'Apenas o professor responsavel pode enviar o modulo para supervisao.' })
+        if (current.stage !== 'producao') return res.status(400).json({ message: 'O modulo nao esta em producao.' })
+        update = { stage: 'supervisao', professorStatus: 'concluido', supervisorStatus: 'aguardando' }
+        break
+      }
+      case 'aprovar_supervisor': {
+        if (!isSupervisor) return res.status(403).json({ message: 'Apenas o supervisor do modulo pode aprovar.' })
+        if (current.stage !== 'supervisao') return res.status(400).json({ message: 'O modulo nao esta em validacao do supervisor.' })
+        update = { stage: 'coordenacao', supervisorStatus: 'aprovado', coordinatorStatus: 'pendente' }
+        break
+      }
+      case 'ajustes_supervisor': {
+        if (!isSupervisor) return res.status(403).json({ message: 'Apenas o supervisor do modulo pode solicitar ajustes.' })
+        if (current.stage !== 'supervisao') return res.status(400).json({ message: 'O modulo nao esta em validacao do supervisor.' })
+        if (!note) return res.status(400).json({ message: 'Descreva o parecer com os ajustes solicitados.' })
+        update = { stage: 'producao', professorStatus: 'em_producao', supervisorStatus: 'ajustes' }
+        break
+      }
+      case 'aprovar_coordenador': {
+        if (!isCoord) return res.status(403).json({ message: 'Apenas a coordenacao do modulo pode aprovar.' })
+        if (current.stage !== 'coordenacao') return res.status(400).json({ message: 'O modulo nao esta em validacao da coordenacao.' })
+        update = { coordinatorStatus: 'aprovado' }
+        break
+      }
+      case 'ajustes_coordenador': {
+        if (!isCoord) return res.status(403).json({ message: 'Apenas a coordenacao do modulo pode solicitar ajustes.' })
+        if (current.stage !== 'coordenacao') return res.status(400).json({ message: 'O modulo nao esta em validacao da coordenacao.' })
+        if (!note) return res.status(400).json({ message: 'Descreva o parecer com os ajustes solicitados.' })
+        update = { stage: 'producao', professorStatus: 'em_producao', supervisorStatus: 'aguardando', coordinatorStatus: 'ajustes' }
+        break
+      }
+      case 'reprovar_coordenador': {
+        if (!isCoord) return res.status(403).json({ message: 'Apenas a coordenacao do modulo pode reprovar.' })
+        if (current.stage !== 'coordenacao') return res.status(400).json({ message: 'O modulo nao esta em validacao da coordenacao.' })
+        if (!note) return res.status(400).json({ message: 'Descreva o parecer da reprovacao.' })
+        update = { stage: 'producao', professorStatus: 'em_producao', supervisorStatus: 'aguardando', coordinatorStatus: 'reprovado' }
+        break
+      }
+      case 'publicar': {
+        if (!isCoord) return res.status(403).json({ message: 'Apenas a coordenacao do modulo pode publicar.' })
+        if (current.stage !== 'coordenacao' || current.coordinatorStatus !== 'aprovado') {
+          return res.status(400).json({ message: 'O modulo so pode ser publicado apos aprovacao do supervisor e da coordenacao.' })
+        }
+        update = { stage: 'publicado' }
+        break
+      }
+      default:
+        return res.status(400).json({ message: 'Acao invalida.' })
+    }
+
+    const module = await store.updateModule(current.id, { ...current, ...update })
+    await store.createModuleEvent({
+      moduleId: current.id,
+      authorId: actor.id,
+      authorName: actor.name,
+      authorRole: actor.role,
+      type: 'history',
+      action,
+      message: note || null,
+    })
+    const events = await store.listModuleEvents(current.id)
+    res.json({ ...module, events })
+  } catch (err) {
+    console.error('[PATCH /api/modules/:id/status]', err)
+    res.status(500).json({ message: 'Erro ao atualizar status do modulo.' })
+  }
+})
+
+app.post('/api/modules/:id/comments', auth, async (req, res) => {
+  try {
+    const actor = await store.getUserById(req.user.id)
+    const current = await store.getModuleById(req.params.id)
+    if (!current) return res.status(404).json({ message: 'Modulo nao encontrado.' })
+    const course = await store.getCourseById(current.courseId)
+
+    if (actor.role !== 'administrador' && !canManageModule(actor, course)) {
+      return res.status(403).json({ message: 'Voce nao tem permissao para comentar neste modulo.' })
+    }
+
+    const message = String(req.body.message || '').trim()
+    if (!message) return res.status(400).json({ message: 'Escreva um comentario.' })
+
+    const event = await store.createModuleEvent({
+      moduleId: current.id,
+      authorId: actor.id,
+      authorName: actor.name,
+      authorRole: actor.role,
+      type: 'comment',
+      action: null,
+      message,
+    })
+    res.status(201).json(event)
+  } catch (err) {
+    console.error('[POST /api/modules/:id/comments]', err)
+    res.status(500).json({ message: 'Erro ao adicionar comentario.' })
+  }
+})
+
+app.delete('/api/modules/:id', auth, async (req, res) => {
+  try {
+    const actor = await store.getUserById(req.user.id)
+    const current = await store.getModuleById(req.params.id)
+    if (!current) return res.status(404).json({ message: 'Modulo nao encontrado.' })
+    const course = await store.getCourseById(current.courseId)
+    if (!canManageModule(actor, course)) return res.status(403).json({ message: 'Voce nao tem permissao para excluir este modulo.' })
+    if (actor.role !== 'administrador' && current.stage !== 'producao') {
+      return res.status(400).json({ message: 'So e possivel excluir modulos que ainda estao em producao.' })
+    }
+
+    const contentCount = await store.countMaterialsByModule(current.id)
+    if (contentCount > 0) {
+      return res.status(400).json({ message: 'Remova ou mova os conteudos deste modulo antes de exclui-lo.' })
+    }
+
+    const deleted = await store.deleteModule(current.id)
+    if (!deleted) return res.status(404).json({ message: 'Modulo nao encontrado.' })
+    res.status(204).end()
+  } catch (err) {
+    console.error('[DELETE /api/modules/:id]', err)
+    res.status(500).json({ message: 'Erro ao excluir modulo.' })
+  }
 })
 
 app.get('/api/people', auth, async (req, res) => {

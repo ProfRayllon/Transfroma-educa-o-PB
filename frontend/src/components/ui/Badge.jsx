@@ -28,6 +28,12 @@ const variants = {
   ausente: 'bg-red-50 text-red-700 border border-red-200',
   desligado: 'bg-red-50 text-red-700 border border-red-200',
 
+  rascunho: 'bg-gray-100 text-gray-600 border border-gray-200',
+  em_validacao: 'bg-blue-50 text-blue-700 border border-blue-200',
+  aguardando: 'bg-amber-50 text-amber-700 border border-amber-200',
+  ajustes: 'bg-orange-50 text-orange-700 border border-orange-200',
+  publicado: 'bg-teal-50 text-teal-700 border border-teal-200',
+
   inativo: 'bg-gray-100 text-gray-600 border border-gray-200',
   substituido: 'bg-gray-100 text-gray-600 border border-gray-200',
   cancelada: 'bg-gray-100 text-gray-600 border border-gray-200',
@@ -70,6 +76,11 @@ const labels = {
   inativo: 'Inativo',
   substituido: 'Substituído',
   cancelada: 'Cancelada',
+  rascunho: 'Rascunho',
+  em_validacao: 'Em validação',
+  aguardando: 'Aguardando',
+  ajustes: 'Ajustes solicitados',
+  publicado: 'Publicado',
   administrador: 'Administrador',
   coordenador: 'Coordenador',
   supervisor: 'Supervisor',
@@ -101,6 +112,11 @@ const dots = {
   aberta: 'bg-red-500',
   ausente: 'bg-red-500',
   inativo: 'bg-gray-400',
+  rascunho: 'bg-gray-400',
+  em_validacao: 'bg-blue-500',
+  aguardando: 'bg-amber-500',
+  ajustes: 'bg-orange-500',
+  publicado: 'bg-teal-500',
 }
 
 export default function Badge({ status, showDot = false, className = '' }) {

@@ -29,10 +29,14 @@ const courses = []
 
 const materials = []
 
+const modules = []
+
+const moduleEvents = []
+
 const people = []
 
 const occurrences = []
 
 const notifications = []
 
-module.exports = { users, courses, materials, people, occurrences, notifications }
+module.exports = { users, courses, materials, modules, moduleEvents, people, occurrences, notifications }

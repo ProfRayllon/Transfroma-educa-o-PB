@@ -1,6 +1,6 @@
 const mysql = require('mysql2/promise')
 const bcrypt = require('bcryptjs')
-const { users, courses, materials, people, occurrences, notifications } = require('./mockData')
+const { users, courses, materials, modules, moduleEvents, people, occurrences, notifications } = require('./mockData')
 
 const DATA_MODE = process.env.DATA_MODE || 'mock'
 const MYSQL_AUTO_SEED = process.env.MYSQL_AUTO_SEED === 'true'
@@ -38,6 +38,7 @@ function mapMaterialRow(row) {
     courseId: row.course_id || null,
     session: row.session,
     module: row.module || 1,
+    moduleId: row.module_id || null,
     theme: row.theme,
     objective: row.objective,
     type: parseTypeField(row.type),
@@ -98,6 +99,52 @@ function mapCourseRow(row) {
     deadline: formatDate(row.deadline),
     image: row.image,
     createdAt: formatDate(row.created_at, true),
+  }
+}
+
+function mapModuleRow(row) {
+  if (!row) return null
+
+  return {
+    id: row.id,
+    courseId: row.course_id,
+    title: row.title,
+    description: row.description,
+    workload: row.workload,
+    order: row.order_index,
+    teacherId: row.teacher_id,
+    teacherName: row.teacher_name,
+    teacherAvatar: row.teacher_avatar || null,
+    supervisorId: row.supervisor_id,
+    supervisorName: row.supervisor_name,
+    supervisorAvatar: row.supervisor_avatar || null,
+    coordinatorId: row.coordinator_id,
+    coordinatorName: row.coordinator_name,
+    coordinatorAvatar: row.coordinator_avatar || null,
+    deadline: formatDate(row.deadline),
+    stage: row.stage,
+    professorStatus: row.professor_status,
+    supervisorStatus: row.supervisor_status,
+    coordinatorStatus: row.coordinator_status,
+    createdBy: row.created_by,
+    createdAt: formatDate(row.created_at, true),
+    updatedAt: row.updated_at ? formatDate(row.updated_at, true) : null,
+  }
+}
+
+function mapModuleEventRow(row) {
+  if (!row) return null
+
+  return {
+    id: row.id,
+    moduleId: row.module_id,
+    authorId: row.author_id,
+    authorName: row.author_name,
+    authorRole: row.author_role,
+    type: row.type,
+    action: row.action,
+    message: row.message,
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
   }
 }
 
@@ -395,6 +442,63 @@ async function ensureMysqlSchema() {
     WHERE m.course_id IS NULL
       AND c.id IS NOT NULL
   `)
+
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS course_modules (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      course_id INT NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      description TEXT DEFAULT NULL,
+      workload VARCHAR(20) DEFAULT NULL,
+      order_index INT NOT NULL DEFAULT 1,
+      teacher_id INT DEFAULT NULL,
+      teacher_name VARCHAR(150) DEFAULT NULL,
+      supervisor_id INT DEFAULT NULL,
+      supervisor_name VARCHAR(150) DEFAULT NULL,
+      coordinator_id INT DEFAULT NULL,
+      coordinator_name VARCHAR(150) DEFAULT NULL,
+      deadline DATE DEFAULT NULL,
+      stage ENUM('producao','supervisao','coordenacao','publicado') NOT NULL DEFAULT 'producao',
+      professor_status ENUM('rascunho','em_producao','concluido') NOT NULL DEFAULT 'rascunho',
+      supervisor_status ENUM('aguardando','aprovado','ajustes') NOT NULL DEFAULT 'aguardando',
+      coordinator_status ENUM('pendente','aprovado','ajustes','reprovado') NOT NULL DEFAULT 'pendente',
+      created_by INT DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_course_modules_course (course_id),
+      CONSTRAINT fk_course_modules_course
+        FOREIGN KEY (course_id) REFERENCES courses(id)
+        ON DELETE CASCADE
+    ) ENGINE=InnoDB
+  `)
+
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS module_events (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      module_id INT NOT NULL,
+      author_id INT DEFAULT NULL,
+      author_name VARCHAR(150) DEFAULT NULL,
+      author_role VARCHAR(50) DEFAULT NULL,
+      type ENUM('comment','history') NOT NULL DEFAULT 'comment',
+      action VARCHAR(50) DEFAULT NULL,
+      message TEXT DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_module_events_module (module_id),
+      CONSTRAINT fk_module_events_module
+        FOREIGN KEY (module_id) REFERENCES course_modules(id)
+        ON DELETE CASCADE
+    ) ENGINE=InnoDB
+  `)
+
+  const [moduleMatColumns] = await pool.execute(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'materials' AND COLUMN_NAME = 'module_id'`
+  )
+
+  if (moduleMatColumns.length === 0) {
+    await pool.execute('ALTER TABLE materials ADD COLUMN module_id INT DEFAULT NULL AFTER module')
+    await pool.execute('CREATE INDEX idx_materials_module_id ON materials(module_id)')
+  }
 
   await pool.execute(`
     CREATE TABLE IF NOT EXISTS ementas (
@@ -1075,13 +1179,14 @@ async function createMaterial(payload) {
 
   const [result] = await pool.execute(
     `INSERT INTO materials
-     (course, course_id, session, module, theme, objective, type, duration, responsible_id, responsible_name, responsible_role, responsibles, status, delivery_date, original_link, adjusted_link, review_status, supervisor_status, coordinator_status, review_notes, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (course, course_id, session, module, module_id, theme, objective, type, duration, responsible_id, responsible_name, responsible_role, responsibles, status, delivery_date, original_link, adjusted_link, review_status, supervisor_status, coordinator_status, review_notes, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       payload.course,
       payload.courseId || null,
       payload.session,
       payload.module || 1,
+      payload.moduleId || null,
       payload.theme,
       payload.objective || null,
       payload.type || null,
@@ -1115,7 +1220,7 @@ async function updateMaterial(id, payload) {
 
   await pool.execute(
     `UPDATE materials
-     SET course = ?, course_id = ?, session = ?, module = ?, theme = ?, objective = ?, type = ?, duration = ?,
+     SET course = ?, course_id = ?, session = ?, module = ?, module_id = ?, theme = ?, objective = ?, type = ?, duration = ?,
          responsible_id = ?, responsible_name = ?, responsible_role = ?, responsibles = ?, status = ?,
          delivery_date = ?, original_link = ?, adjusted_link = ?, review_status = ?,
          supervisor_status = ?, coordinator_status = ?, review_notes = ?
@@ -1125,6 +1230,7 @@ async function updateMaterial(id, payload) {
       payload.courseId || null,
       payload.session,
       payload.module || 1,
+      payload.moduleId || null,
       payload.theme,
       payload.objective || null,
       payload.type || null,
@@ -1172,6 +1278,218 @@ async function deleteMaterial(id) {
   }
   const [result] = await pool.execute('DELETE FROM materials WHERE id = ?', [id])
   return result.affectedRows > 0
+}
+
+const MODULE_JOIN_SELECT = `
+  SELECT cm.*,
+    t.avatar AS teacher_avatar, COALESCE(t.name, cm.teacher_name) AS teacher_name,
+    s.avatar AS supervisor_avatar, COALESCE(s.name, cm.supervisor_name) AS supervisor_name,
+    co.avatar AS coordinator_avatar, COALESCE(co.name, cm.coordinator_name) AS coordinator_name
+  FROM course_modules cm
+  LEFT JOIN users t ON t.id = cm.teacher_id
+  LEFT JOIN users s ON s.id = cm.supervisor_id
+  LEFT JOIN users co ON co.id = cm.coordinator_id
+`
+
+function sortModuleEventsAsc(list) {
+  return list.slice().sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+}
+
+async function listModuleEvents(moduleId) {
+  if (!isMysqlMode()) {
+    return sortModuleEventsAsc(moduleEvents.filter((e) => Number(e.moduleId) === Number(moduleId)))
+  }
+
+  const [rows] = await pool.execute(
+    'SELECT * FROM module_events WHERE module_id = ? ORDER BY created_at, id',
+    [moduleId]
+  )
+  return rows.map(mapModuleEventRow)
+}
+
+async function listModules(courseId) {
+  if (!isMysqlMode()) {
+    return modules
+      .filter((m) => Number(m.courseId) === Number(courseId))
+      .sort((a, b) => (a.order || 0) - (b.order || 0) || a.id - b.id)
+      .map((m) => ({ ...m, events: sortModuleEventsAsc(moduleEvents.filter((e) => Number(e.moduleId) === Number(m.id))) }))
+  }
+
+  const [rows] = await pool.execute(`${MODULE_JOIN_SELECT} WHERE cm.course_id = ? ORDER BY cm.order_index, cm.id`, [courseId])
+  const mappedModules = rows.map(mapModuleRow)
+  if (mappedModules.length === 0) return []
+
+  const ids = mappedModules.map((m) => m.id)
+  const placeholders = ids.map(() => '?').join(',')
+  const [eventRows] = await pool.execute(
+    `SELECT * FROM module_events WHERE module_id IN (${placeholders}) ORDER BY created_at, id`,
+    ids
+  )
+  const mappedEvents = eventRows.map(mapModuleEventRow)
+  return mappedModules.map((m) => ({
+    ...m,
+    events: mappedEvents.filter((e) => Number(e.moduleId) === Number(m.id)),
+  }))
+}
+
+async function getModuleById(id) {
+  if (!isMysqlMode()) {
+    const module = modules.find((m) => m.id === Number(id))
+    if (!module) return null
+    return { ...module, events: sortModuleEventsAsc(moduleEvents.filter((e) => Number(e.moduleId) === Number(module.id))) }
+  }
+
+  const [rows] = await pool.execute(`${MODULE_JOIN_SELECT} WHERE cm.id = ? LIMIT 1`, [id])
+  const module = rows[0] ? mapModuleRow(rows[0]) : null
+  if (!module) return null
+  const events = await listModuleEvents(module.id)
+  return { ...module, events }
+}
+
+async function createModule(payload) {
+  if (!isMysqlMode()) {
+    const now = new Date().toISOString()
+    const module = {
+      id: Date.now(),
+      courseId: Number(payload.courseId),
+      title: payload.title,
+      description: payload.description || null,
+      workload: payload.workload || null,
+      order: payload.order || 1,
+      teacherId: payload.teacherId || null,
+      teacherName: payload.teacherName || null,
+      supervisorId: payload.supervisorId || null,
+      supervisorName: payload.supervisorName || null,
+      coordinatorId: payload.coordinatorId || null,
+      coordinatorName: payload.coordinatorName || null,
+      deadline: payload.deadline || null,
+      stage: 'producao',
+      professorStatus: 'rascunho',
+      supervisorStatus: 'aguardando',
+      coordinatorStatus: 'pendente',
+      createdBy: payload.createdBy || null,
+      createdAt: now,
+      updatedAt: now,
+    }
+    modules.push(module)
+    return { ...module, events: [] }
+  }
+
+  const [result] = await pool.execute(
+    `INSERT INTO course_modules
+     (course_id, title, description, workload, order_index, teacher_id, teacher_name, supervisor_id, supervisor_name, coordinator_id, coordinator_name, deadline, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      payload.courseId,
+      payload.title,
+      payload.description || null,
+      payload.workload || null,
+      payload.order || 1,
+      payload.teacherId || null,
+      payload.teacherName || null,
+      payload.supervisorId || null,
+      payload.supervisorName || null,
+      payload.coordinatorId || null,
+      payload.coordinatorName || null,
+      payload.deadline || null,
+      payload.createdBy || null,
+    ]
+  )
+  return getModuleById(result.insertId)
+}
+
+async function updateModule(id, payload) {
+  if (!isMysqlMode()) {
+    const idx = modules.findIndex((m) => m.id === Number(id))
+    if (idx === -1) return null
+    modules[idx] = { ...modules[idx], ...payload, id: Number(id), updatedAt: new Date().toISOString() }
+    return { ...modules[idx], events: sortModuleEventsAsc(moduleEvents.filter((e) => Number(e.moduleId) === Number(id))) }
+  }
+
+  await pool.execute(
+    `UPDATE course_modules SET
+      title = ?, description = ?, workload = ?, order_index = ?,
+      teacher_id = ?, teacher_name = ?, supervisor_id = ?, supervisor_name = ?, coordinator_id = ?, coordinator_name = ?,
+      deadline = ?, stage = ?, professor_status = ?, supervisor_status = ?, coordinator_status = ?
+     WHERE id = ?`,
+    [
+      payload.title,
+      payload.description || null,
+      payload.workload || null,
+      payload.order || 1,
+      payload.teacherId || null,
+      payload.teacherName || null,
+      payload.supervisorId || null,
+      payload.supervisorName || null,
+      payload.coordinatorId || null,
+      payload.coordinatorName || null,
+      payload.deadline || null,
+      payload.stage,
+      payload.professorStatus,
+      payload.supervisorStatus,
+      payload.coordinatorStatus,
+      id,
+    ]
+  )
+  return getModuleById(id)
+}
+
+async function deleteModule(id) {
+  if (!isMysqlMode()) {
+    const idx = modules.findIndex((m) => m.id === Number(id))
+    if (idx === -1) return false
+    modules.splice(idx, 1)
+    for (let i = moduleEvents.length - 1; i >= 0; i -= 1) {
+      if (Number(moduleEvents[i].moduleId) === Number(id)) moduleEvents.splice(i, 1)
+    }
+    return true
+  }
+
+  const [result] = await pool.execute('DELETE FROM course_modules WHERE id = ?', [id])
+  return result.affectedRows > 0
+}
+
+async function countMaterialsByModule(moduleId) {
+  if (!isMysqlMode()) {
+    return materials.filter((m) => Number(m.moduleId) === Number(moduleId)).length
+  }
+
+  const [[result]] = await pool.execute('SELECT COUNT(*) AS total FROM materials WHERE module_id = ?', [moduleId])
+  return result.total
+}
+
+async function createModuleEvent(payload) {
+  if (!isMysqlMode()) {
+    const event = {
+      id: Date.now(),
+      moduleId: Number(payload.moduleId),
+      authorId: payload.authorId || null,
+      authorName: payload.authorName || null,
+      authorRole: payload.authorRole || null,
+      type: payload.type,
+      action: payload.action || null,
+      message: payload.message || null,
+      createdAt: new Date().toISOString(),
+    }
+    moduleEvents.push(event)
+    return event
+  }
+
+  const [result] = await pool.execute(
+    `INSERT INTO module_events (module_id, author_id, author_name, author_role, type, action, message)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      payload.moduleId,
+      payload.authorId || null,
+      payload.authorName || null,
+      payload.authorRole || null,
+      payload.type,
+      payload.action || null,
+      payload.message || null,
+    ]
+  )
+  const [rows] = await pool.execute('SELECT * FROM module_events WHERE id = ?', [result.insertId])
+  return mapModuleEventRow(rows[0])
 }
 
 async function getEmentaByCourseId(courseId) {
@@ -1548,6 +1866,14 @@ module.exports = {
   updateMaterial,
   approveMaterial,
   deleteMaterial,
+  listModules,
+  getModuleById,
+  createModule,
+  updateModule,
+  deleteModule,
+  countMaterialsByModule,
+  listModuleEvents,
+  createModuleEvent,
   getAllEmentas,
   getEmentaByCourseId,
   saveEmenta,
