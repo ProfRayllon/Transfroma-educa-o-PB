@@ -1563,6 +1563,17 @@ async function countMaterialsByModule(moduleId) {
   return result.total
 }
 
+async function deleteMaterialsByModule(moduleId) {
+  if (!isMysqlMode()) {
+    for (let i = materials.length - 1; i >= 0; i -= 1) {
+      if (Number(materials[i].moduleId) === Number(moduleId)) materials.splice(i, 1)
+    }
+    return
+  }
+
+  await pool.execute('DELETE FROM materials WHERE module_id = ?', [moduleId])
+}
+
 async function getModuleApprovalSummary(moduleId) {
   if (!isMysqlMode()) {
     const contents = materials.filter((m) => Number(m.moduleId) === Number(moduleId))
@@ -2005,6 +2016,7 @@ module.exports = {
   updateModule,
   deleteModule,
   countMaterialsByModule,
+  deleteMaterialsByModule,
   getModuleApprovalSummary,
   listModuleEvents,
   createModuleEvent,

@@ -1056,16 +1056,15 @@ app.delete('/api/modules/:id', auth, async (req, res) => {
     const current = await store.getModuleById(req.params.id)
     if (!current) return res.status(404).json({ message: 'Modulo nao encontrado.' })
     const course = await store.getCourseById(current.courseId)
-    if (!canManageModule(actor, course)) return res.status(403).json({ message: 'Voce nao tem permissao para excluir este modulo.' })
+    // Exclusao de modulo e restrita ao supervisor do curso (admin sempre pode).
+    const canDelete = actor.role === 'administrador' || isModuleSupervisor(actor, current, course)
+    if (!canDelete) return res.status(403).json({ message: 'Apenas o supervisor do curso pode excluir modulos.' })
     if (actor.role !== 'administrador' && current.stage !== 'producao') {
       return res.status(400).json({ message: 'So e possivel excluir modulos que ainda estao em producao.' })
     }
 
-    const contentCount = await store.countMaterialsByModule(current.id)
-    if (contentCount > 0) {
-      return res.status(400).json({ message: 'Remova ou mova os conteudos deste modulo antes de exclui-lo.' })
-    }
-
+    // Excluir o modulo leva junto todos os conteudos vinculados (o frontend avisa isso antes de confirmar).
+    await store.deleteMaterialsByModule(current.id)
     const deleted = await store.deleteModule(current.id)
     if (!deleted) return res.status(404).json({ message: 'Modulo nao encontrado.' })
     res.status(204).end()
