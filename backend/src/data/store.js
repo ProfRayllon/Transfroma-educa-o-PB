@@ -463,6 +463,7 @@ async function ensureMysqlSchema() {
       supervisor_status ENUM('aguardando','aprovado','ajustes') NOT NULL DEFAULT 'aguardando',
       coordinator_status ENUM('pendente','aprovado','ajustes','reprovado') NOT NULL DEFAULT 'pendente',
       created_by INT DEFAULT NULL,
+      is_default TINYINT(1) NOT NULL DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_course_modules_course (course_id),
@@ -471,6 +472,14 @@ async function ensureMysqlSchema() {
         ON DELETE CASCADE
     ) ENGINE=InnoDB
   `)
+
+  const [moduleExtraColumns] = await pool.execute(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'course_modules' AND COLUMN_NAME = 'is_default'`
+  )
+  if (moduleExtraColumns.length === 0) {
+    await pool.execute('ALTER TABLE course_modules ADD COLUMN is_default TINYINT(1) NOT NULL DEFAULT 0')
+  }
 
   await pool.execute(`
     CREATE TABLE IF NOT EXISTS module_events (
@@ -1307,7 +1316,103 @@ async function listModuleEvents(moduleId) {
   return rows.map(mapModuleEventRow)
 }
 
+const DEFAULT_MODULE_DESCRIPTION = 'Conteudos migrados automaticamente da producao anterior. Edite este modulo para organizar as informacoes.'
+
+async function ensureDefaultModuleIfNeeded(courseId) {
+  if (!isMysqlMode()) {
+    const course = courses.find((c) => c.id === Number(courseId))
+    const orphans = materials.filter((m) => !m.moduleId && (
+      Number(m.courseId) === Number(courseId) || (!m.courseId && course && m.course === course.name)
+    ))
+    if (orphans.length === 0) return
+
+    let defaultModule = modules.find((m) => Number(m.courseId) === Number(courseId) && m.isDefault)
+    if (!defaultModule) {
+      const now = new Date().toISOString()
+      defaultModule = {
+        id: Date.now(),
+        courseId: Number(courseId),
+        title: 'Módulo 1',
+        description: DEFAULT_MODULE_DESCRIPTION,
+        workload: null,
+        order: modules.filter((m) => Number(m.courseId) === Number(courseId)).length + 1,
+        teacherId: null,
+        teacherName: null,
+        supervisorId: course?.supervisorId || null,
+        supervisorName: course?.supervisorName || null,
+        coordinatorId: course?.coordinatorId || null,
+        coordinatorName: course?.coordinatorName || null,
+        deadline: null,
+        stage: 'producao',
+        professorStatus: 'rascunho',
+        supervisorStatus: 'aguardando',
+        coordinatorStatus: 'pendente',
+        isDefault: true,
+        createdBy: null,
+        createdAt: now,
+        updatedAt: now,
+      }
+      modules.push(defaultModule)
+    }
+
+    orphans.forEach((m) => {
+      m.moduleId = defaultModule.id
+      m.module = defaultModule.order
+    })
+    return
+  }
+
+  const [[orphanCount]] = await pool.execute(
+    'SELECT COUNT(*) AS total FROM materials WHERE module_id IS NULL AND course_id = ?',
+    [courseId]
+  )
+  if (!orphanCount.total) return
+
+  const [[existing]] = await pool.execute(
+    'SELECT id, order_index FROM course_modules WHERE course_id = ? AND is_default = 1 LIMIT 1',
+    [courseId]
+  )
+
+  let moduleId = existing?.id
+  let orderIndex = existing?.order_index || 1
+
+  if (!moduleId) {
+    const [[course]] = await pool.execute(
+      'SELECT supervisor_id, supervisor_name, coordinator_id, coordinator_name FROM courses WHERE id = ?',
+      [courseId]
+    )
+    const [[countRow]] = await pool.execute(
+      'SELECT COUNT(*) AS total FROM course_modules WHERE course_id = ?',
+      [courseId]
+    )
+    orderIndex = countRow.total + 1
+
+    const [result] = await pool.execute(
+      `INSERT INTO course_modules
+       (course_id, title, description, order_index, supervisor_id, supervisor_name, coordinator_id, coordinator_name, is_default)
+       VALUES (?, 'Módulo 1', ?, ?, ?, ?, ?, ?, 1)`,
+      [
+        courseId,
+        DEFAULT_MODULE_DESCRIPTION,
+        orderIndex,
+        course?.supervisor_id || null,
+        course?.supervisor_name || null,
+        course?.coordinator_id || null,
+        course?.coordinator_name || null,
+      ]
+    )
+    moduleId = result.insertId
+  }
+
+  await pool.execute(
+    'UPDATE materials SET module_id = ?, module = ? WHERE course_id = ? AND module_id IS NULL',
+    [moduleId, orderIndex, courseId]
+  )
+}
+
 async function listModules(courseId) {
+  await ensureDefaultModuleIfNeeded(courseId)
+
   if (!isMysqlMode()) {
     return modules
       .filter((m) => Number(m.courseId) === Number(courseId))

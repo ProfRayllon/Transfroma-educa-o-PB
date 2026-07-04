@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS course_modules (
   supervisor_status ENUM('aguardando','aprovado','ajustes') NOT NULL DEFAULT 'aguardando',
   coordinator_status ENUM('pendente','aprovado','ajustes','reprovado') NOT NULL DEFAULT 'pendente',
   created_by INT DEFAULT NULL,
+  is_default TINYINT(1) NOT NULL DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_course_modules_course (course_id),

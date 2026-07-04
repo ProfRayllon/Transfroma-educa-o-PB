@@ -289,7 +289,7 @@ function NewModuleModal({ open, onClose, onCreate, saving }) {
 
 export default function ModulosWorkspace({ course }) {
   const { user } = useAuth()
-  const { materials, materialAssignees, courseParticipants, saveMaterial, deleteMaterial, updateMaterialStatus, updateMaterialSession } = useData()
+  const { materials, materialAssignees, courseParticipants, saveMaterial, deleteMaterial, updateMaterialStatus, updateMaterialSession, loadCourses } = useData()
 
   const [modules, setModules] = useState([])
   const [loading, setLoading] = useState(true)
@@ -330,6 +330,9 @@ export default function ModulosWorkspace({ course }) {
         if (!active) return
         setModules(data)
         setActiveModuleId(current => (current && data.some(m => m.id === current)) ? current : (data[0]?.id ?? null))
+        // O backend pode ter acabado de vincular conteudos orfaos a um modulo padrao;
+        // recarrega os materiais para refletir esse vinculo sem precisar recarregar a pagina.
+        await loadCourses()
       } catch (err) {
         if (active) showToast(getApiErrorMessage(err, 'Erro ao carregar módulos.'), 'error')
       } finally {
@@ -367,10 +370,10 @@ export default function ModulosWorkspace({ course }) {
   const isModuleSupervisor = (m) => user?.role === 'supervisor' && (m?.supervisorId === user.id || m?.supervisorName === user.name)
   const isModuleCoordinator = (m) => isCoordinatorUser && (m?.coordinatorId === user.id || m?.coordinatorName === user.name)
 
-  const canEditCore = !!activeModule && (isAdmin || (isProducer && activeModule.stage === 'producao'))
+  const canEditCore = !!activeModule && (isAdmin || ((isProducer || isCourseSupervisor || isCourseCoordinator) && activeModule.stage === 'producao'))
   const canActSupervisor = !!activeModule && (isAdmin || isModuleSupervisor(activeModule))
   const canActCoordinator = !!activeModule && (isAdmin || isModuleCoordinator(activeModule))
-  const canEditContent = isAdmin || isProducer
+  const canEditContent = isAdmin || isProducer || isCourseSupervisor || isCourseCoordinator
   const contentLocked = !!activeModule && activeModule.stage !== 'producao' && !isAdmin
 
   const courseMaterials = useMemo(
