@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Plus, Search, GripVertical, CheckCircle, Circle, Send, Rocket, Trash2, Pencil, Eye,
-  Link2, ChevronRight, ThumbsUp, ThumbsDown, AlertTriangle, MessageSquare,
+  Link2, ChevronRight, AlertTriangle, MessageSquare,
   Layers, FileText, Clock,
 } from 'lucide-react'
 import Badge from '../ui/Badge'
@@ -30,14 +30,29 @@ const STAGE_STEPS = [
 ]
 
 const ACTION_LABELS = {
-  enviar_supervisao: 'enviou o módulo para supervisão',
-  aprovar_supervisor: 'aprovou o módulo na supervisão',
-  ajustes_supervisor: 'solicitou ajustes na supervisão',
-  aprovar_coordenador: 'aprovou o módulo na coordenação',
-  ajustes_coordenador: 'solicitou ajustes na coordenação',
-  reprovar_coordenador: 'reprovou o módulo na coordenação',
-  publicar: 'publicou o módulo',
+  enviar_supervisao: 'Enviou o módulo para supervisão',
+  publicar: 'Publicou o módulo',
+  aprovar_conteudo_supervisor: 'Aprovou um conteúdo (supervisão)',
+  ajustes_conteudo_supervisor: 'Solicitou ajustes em um conteúdo (supervisão)',
+  aprovar_conteudo_coordenador: 'Aprovou um conteúdo (coordenação)',
+  ajustes_conteudo_coordenador: 'Solicitou ajustes em um conteúdo (coordenação)',
+  reprovar_conteudo_coordenador: 'Reprovou um conteúdo (coordenação)',
 }
+
+const CONTENT_SUPERVISOR_STATUS_OPTIONS = [
+  { value: '', label: '—' },
+  { value: 'aguardando', label: 'Aguardando' },
+  { value: 'aprovado', label: 'Aprovado' },
+  { value: 'ajustes', label: 'Ajustes' },
+]
+
+const CONTENT_COORDINATOR_STATUS_OPTIONS = [
+  { value: '', label: '—' },
+  { value: 'pendente', label: 'Pendente' },
+  { value: 'aprovado', label: 'Aprovado' },
+  { value: 'ajustes', label: 'Ajustes' },
+  { value: 'reprovado', label: 'Reprovado' },
+]
 
 const ROLE_LABELS = {
   administrador: 'Administrador',
@@ -68,6 +83,7 @@ const EMPTY_CONTENT_FORM = {
   originalLink: '',
   adjustedLink: '',
   status: 'nao_iniciado',
+  reviewNotes: '',
 }
 
 function roleLabel(role) {
@@ -88,18 +104,37 @@ function formatDateTime(value) {
   return `${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
 }
 
-function getModuleStatusKey(m) {
+function getContentApprovalSummary(contents) {
+  return {
+    total: contents.length,
+    supervisorApproved: contents.filter(c => c.supervisorStatus === 'aprovado').length,
+    coordinatorApproved: contents.filter(c => c.coordinatorStatus === 'aprovado').length,
+    anyNeedsAttention: contents.some(c => c.supervisorStatus === 'ajustes' || c.coordinatorStatus === 'ajustes' || c.coordinatorStatus === 'reprovado'),
+  }
+}
+
+function getModuleStatusKey(m, contents = []) {
   if (!m) return 'rascunho'
   if (m.stage === 'publicado') return 'publicado'
   if (m.stage === 'producao') {
-    if (m.coordinatorStatus === 'reprovado') return 'reprovado'
-    if (m.supervisorStatus === 'ajustes' || m.coordinatorStatus === 'ajustes') return 'em_revisao'
     if (m.professorStatus === 'em_producao') return 'em_producao'
     return 'rascunho'
   }
-  if (m.stage === 'supervisao') return 'em_validacao'
-  if (m.stage === 'coordenacao') return m.coordinatorStatus === 'aprovado' ? 'aprovado' : 'em_validacao'
-  return 'rascunho'
+  // stage === 'supervisao': aprovacao agora e por conteudo
+  const summary = getContentApprovalSummary(contents)
+  if (summary.total === 0) return 'em_validacao'
+  if (summary.anyNeedsAttention) return 'em_revisao'
+  if (summary.coordinatorApproved === summary.total) return 'aprovado'
+  return 'em_validacao'
+}
+
+function computeDisplayStageIndex(m, contents = []) {
+  if (!m) return 0
+  if (m.stage === 'publicado') return 3
+  if (m.stage === 'producao') return 0
+  const summary = getContentApprovalSummary(contents)
+  if (summary.total > 0 && summary.supervisorApproved === summary.total) return 2
+  return 1
 }
 
 function professorStatusBadgeKey(status) {
@@ -110,7 +145,7 @@ function professorStatusBadgeKey(status) {
 
 /* ─── content modal ─── */
 
-function ContentModal({ open, onClose, onSave, saving, module, course, editing }) {
+function ContentModal({ open, onClose, onSave, saving, module, course, editing, canReview }) {
   const [form, setForm] = useState(EMPTY_CONTENT_FORM)
   const [error, setError] = useState('')
 
@@ -128,6 +163,7 @@ function ContentModal({ open, onClose, onSave, saving, module, course, editing }
         originalLink: editing.originalLink || '',
         adjustedLink: editing.adjustedLink || '',
         status: editing.status || 'nao_iniciado',
+        reviewNotes: editing.reviewNotes || '',
       })
     } else {
       setForm({ ...EMPTY_CONTENT_FORM, responsibleId: module?.teacherId || '' })
@@ -244,6 +280,20 @@ function ContentModal({ open, onClose, onSave, saving, module, course, editing }
             {PROFESSOR_STATUS_OPTIONS.filter(o => o.value).map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
         </div>
+
+        {(canReview || form.reviewNotes) && (
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Parecer / observações da revisão</label>
+            <textarea
+              value={form.reviewNotes}
+              onChange={e => setForm(f => ({ ...f, reviewNotes: e.target.value }))}
+              disabled={!canReview}
+              className={`input-field resize-none ${!canReview ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''}`}
+              rows={2}
+              placeholder="Observações do supervisor/coordenação para o produtor..."
+            />
+          </div>
+        )}
       </div>
     </Modal>
   )
@@ -299,7 +349,6 @@ export default function ModulosWorkspace({ course }) {
   const [form, setForm] = useState(null)
   const [savingModule, setSavingModule] = useState(false)
   const [busyAction, setBusyAction] = useState(null)
-  const [noteDrafts, setNoteDrafts] = useState({ supervisor: '', coordenador: '' })
   const [commentDraft, setCommentDraft] = useState('')
   const [postingComment, setPostingComment] = useState(false)
   const [toast, setToast] = useState(null)
@@ -356,7 +405,6 @@ export default function ModulosWorkspace({ course }) {
       coordinatorId: activeModule.coordinatorId || '',
       deadline: activeModule.deadline || '',
     })
-    setNoteDrafts({ supervisor: '', coordenador: '' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeModuleId])
 
@@ -367,13 +415,9 @@ export default function ModulosWorkspace({ course }) {
   const isCourseCoordinator = isCoordinatorUser && (course.coordinatorId === user.id || course.coordinatorName === user.name)
   const canManageModules = isAdmin || isProducer || isCourseSupervisor || isCourseCoordinator
 
-  const isModuleSupervisor = (m) => user?.role === 'supervisor' && (m?.supervisorId === user.id || m?.supervisorName === user.name)
-  const isModuleCoordinator = (m) => isCoordinatorUser && (m?.coordinatorId === user.id || m?.coordinatorName === user.name)
-
   const canEditCore = !!activeModule && (isAdmin || ((isProducer || isCourseSupervisor || isCourseCoordinator) && activeModule.stage === 'producao'))
-  const canActSupervisor = !!activeModule && (isAdmin || isModuleSupervisor(activeModule))
-  const canActCoordinator = !!activeModule && (isAdmin || isModuleCoordinator(activeModule))
   const canEditContent = isAdmin || isProducer || isCourseSupervisor || isCourseCoordinator
+  const canReviewContent = isAdmin || isCourseSupervisor || isCourseCoordinator
   const contentLocked = !!activeModule && activeModule.stage !== 'producao' && !isAdmin
 
   const courseMaterials = useMemo(
@@ -381,14 +425,21 @@ export default function ModulosWorkspace({ course }) {
     [materials, course.id, course.name]
   )
 
-  const moduleContentCounts = useMemo(() => {
-    const counts = {}
+  const contentsByModuleId = useMemo(() => {
+    const map = {}
     courseMaterials.forEach(m => {
       if (!m.moduleId) return
-      counts[m.moduleId] = (counts[m.moduleId] || 0) + 1
+      map[m.moduleId] = map[m.moduleId] || []
+      map[m.moduleId].push(m)
     })
-    return counts
+    return map
   }, [courseMaterials])
+
+  const moduleContentCounts = useMemo(() => {
+    const counts = {}
+    Object.entries(contentsByModuleId).forEach(([moduleId, list]) => { counts[moduleId] = list.length })
+    return counts
+  }, [contentsByModuleId])
 
   const moduleContents = useMemo(() => {
     if (!activeModule) return []
@@ -402,9 +453,18 @@ export default function ModulosWorkspace({ course }) {
     modulos: modules.length,
     conteudos: courseMaterials.length,
     emProducao: modules.filter(m => m.stage === 'producao').length,
-    aguardando: modules.filter(m => m.stage === 'supervisao' || (m.stage === 'coordenacao' && m.coordinatorStatus !== 'aprovado')).length,
-    aprovados: modules.filter(m => (m.stage === 'coordenacao' && m.coordinatorStatus === 'aprovado') || m.stage === 'publicado').length,
-  }), [modules, courseMaterials])
+    aguardando: modules.filter(m => {
+      if (m.stage !== 'supervisao') return false
+      const summary = getContentApprovalSummary(contentsByModuleId[m.id] || [])
+      return summary.total === 0 || summary.coordinatorApproved < summary.total
+    }).length,
+    aprovados: modules.filter(m => {
+      if (m.stage === 'publicado') return true
+      if (m.stage !== 'supervisao') return false
+      const summary = getContentApprovalSummary(contentsByModuleId[m.id] || [])
+      return summary.total > 0 && summary.coordinatorApproved === summary.total
+    }).length,
+  }), [modules, courseMaterials, contentsByModuleId])
 
   const filteredModules = useMemo(() => {
     if (!moduleSearch) return modules
@@ -444,18 +504,12 @@ export default function ModulosWorkspace({ course }) {
     }
   }
 
-  const runAction = async (action, noteKey) => {
+  const runAction = async (action) => {
     if (!activeModule) return
-    const note = noteKey ? (noteDrafts[noteKey] || '').trim() : ''
-    if (['ajustes_supervisor', 'ajustes_coordenador', 'reprovar_coordenador'].includes(action) && !note) {
-      showToast('Escreva um parecer antes de continuar.', 'error')
-      return
-    }
     setBusyAction(action)
     try {
-      const { data } = await api.patch(`/modules/${activeModule.id}/status`, { action, note })
+      const { data } = await api.patch(`/modules/${activeModule.id}/status`, { action })
       setModules(prev => prev.map(m => m.id === data.id ? data : m))
-      if (noteKey) setNoteDrafts(prev => ({ ...prev, [noteKey]: '' }))
       showToast('Status do módulo atualizado!')
     } catch (err) {
       showToast(getApiErrorMessage(err, 'Erro ao atualizar módulo.'), 'error')
@@ -545,9 +599,9 @@ export default function ModulosWorkspace({ course }) {
     }
   }
 
-  const handleContentStatusChange = async (mat, value) => {
+  const handleContentStatusChange = async (mat, field, value) => {
     try {
-      await updateMaterialStatus(mat.id, { status: value })
+      await updateMaterialStatus(mat.id, { [field]: value })
     } catch (err) {
       showToast(getApiErrorMessage(err, 'Erro ao atualizar status.'), 'error')
     }
@@ -595,21 +649,24 @@ export default function ModulosWorkspace({ course }) {
     )
   }
 
+  const approvalSummary = getContentApprovalSummary(moduleContents)
+
   const checklist = activeModule ? [
     { label: 'Título preenchido', done: !!activeModule.title },
     { label: 'Descrição adicionada', done: !!activeModule.description },
     { label: 'Responsáveis definidos', done: !!(activeModule.teacherId && activeModule.supervisorId && activeModule.coordinatorId) },
     { label: 'Conteúdos vinculados', done: moduleContents.length > 0 },
-    { label: 'Revisão do supervisor', done: activeModule.supervisorStatus === 'aprovado' },
-    { label: 'Aprovação da coordenação', done: activeModule.coordinatorStatus === 'aprovado' },
+    { label: 'Revisão do supervisor', done: approvalSummary.total > 0 && approvalSummary.supervisorApproved === approvalSummary.total },
+    { label: 'Aprovação da coordenação', done: approvalSummary.total > 0 && approvalSummary.coordinatorApproved === approvalSummary.total },
   ] : []
 
   const events = activeModule?.events || []
   const lastEvent = events.length ? events[events.length - 1] : null
   const lastSendEvent = [...events].reverse().find(ev => ev.action === 'enviar_supervisao')
-  const canPublish = !!activeModule && (isAdmin || canActCoordinator) && activeModule.stage === 'coordenacao' && activeModule.coordinatorStatus === 'aprovado'
+  const canPublish = !!activeModule && (isAdmin || isCourseCoordinator) && activeModule.stage === 'supervisao'
+    && approvalSummary.total > 0 && approvalSummary.coordinatorApproved === approvalSummary.total
   const canDeleteModule = !!activeModule && canManageModules && (isAdmin || activeModule.stage === 'producao')
-  const stageIndex = activeModule ? STAGE_STEPS.findIndex(s => s.key === activeModule.stage) : 0
+  const stageIndex = computeDisplayStageIndex(activeModule, moduleContents)
 
   return (
     <div className="space-y-5">
@@ -682,7 +739,7 @@ export default function ModulosWorkspace({ course }) {
                       <div className="min-w-0 flex-1">
                         <div className={`text-sm font-medium truncate ${isActive ? 'text-brand-900' : 'text-gray-700'}`}>{m.title}</div>
                         <div className="text-[11px] text-gray-400 mt-0.5">{moduleContentCounts[m.id] || 0} conteúdos</div>
-                        <div className="mt-1.5"><Badge status={getModuleStatusKey(m)} /></div>
+                        <div className="mt-1.5"><Badge status={getModuleStatusKey(m, contentsByModuleId[m.id] || [])} /></div>
                       </div>
                       <ChevronRight size={14} className={isActive ? 'text-brand-500' : 'text-gray-300'} />
                     </div>
@@ -808,7 +865,7 @@ export default function ModulosWorkspace({ course }) {
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1.5">Status do módulo</label>
                     <div className="input-field bg-gray-50 flex items-center">
-                      <Badge status={getModuleStatusKey(activeModule)} />
+                      <Badge status={getModuleStatusKey(activeModule, moduleContents)} />
                     </div>
                   </div>
                 </div>
@@ -849,105 +906,48 @@ export default function ModulosWorkspace({ course }) {
                       )}
                     </div>
 
-                    {/* Card 2: supervisor */}
+                    {/* Card 2: supervisor — aprovação agora e por conteudo, aqui so o resumo */}
                     <div className="rounded-xl border border-gray-200 p-3.5 space-y-3">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-bold text-gray-500 flex items-center gap-1.5">
                           <span className="w-5 h-5 rounded-full bg-brand-800 text-white text-[10px] flex items-center justify-center flex-shrink-0">2</span>
                           Validação do supervisor
                         </span>
-                        <Badge status={activeModule.supervisorStatus} />
+                        <span className="text-xs font-semibold text-gray-600">{approvalSummary.supervisorApproved}/{approvalSummary.total || 0}</span>
                       </div>
                       <MiniAvatar name={activeModule.supervisorName} roleLabel="Supervisor" avatar={activeModule.supervisorAvatar} />
-                      {activeModule.stage === 'supervisao' && canActSupervisor ? (
-                        <>
-                          <div>
-                            <textarea
-                              value={noteDrafts.supervisor}
-                              onChange={e => setNoteDrafts(d => ({ ...d, supervisor: e.target.value.slice(0, 250) }))}
-                              placeholder="Digite seu parecer..."
-                              rows={2}
-                              maxLength={250}
-                              className="input-field resize-none text-xs"
-                            />
-                            <div className="text-[10px] text-gray-400 text-right mt-0.5">{noteDrafts.supervisor.length}/250</div>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => runAction('aprovar_supervisor', 'supervisor')}
-                              disabled={!!busyAction}
-                              className="flex-1 flex items-center justify-center gap-1 bg-green-600 hover:bg-green-700 text-white text-xs font-medium py-2 rounded-lg transition-colors disabled:opacity-50"
-                            >
-                              <ThumbsUp size={12} /> Aprovar
-                            </button>
-                            <button
-                              onClick={() => runAction('ajustes_supervisor', 'supervisor')}
-                              disabled={!!busyAction}
-                              className="flex-1 flex items-center justify-center gap-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium py-2 rounded-lg transition-colors disabled:opacity-50"
-                            >
-                              Solicitar ajustes
-                            </button>
-                          </div>
-                        </>
-                      ) : (
-                        <p className="text-xs text-gray-400">
-                          {activeModule.stage === 'producao' ? 'Aguardando envio do professor.' : 'Aguardando ação do supervisor.'}
-                        </p>
-                      )}
+                      <div className="progress-bar h-1.5">
+                        <div className="progress-fill bg-brand-600" style={{ width: `${approvalSummary.total ? (approvalSummary.supervisorApproved / approvalSummary.total) * 100 : 0}%` }} />
+                      </div>
+                      <p className="text-[11px] text-gray-400">
+                        {activeModule.stage === 'producao'
+                          ? 'Aguardando envio do professor.'
+                          : approvalSummary.total === 0
+                            ? 'Sem conteúdos para revisar ainda.'
+                            : 'Aprove cada conteúdo na tabela abaixo.'}
+                      </p>
                     </div>
 
-                    {/* Card 3: coordenacao */}
+                    {/* Card 3: coordenacao — idem, resumo por conteudo */}
                     <div className="rounded-xl border border-gray-200 p-3.5 space-y-3">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-bold text-gray-500 flex items-center gap-1.5">
                           <span className="w-5 h-5 rounded-full bg-brand-800 text-white text-[10px] flex items-center justify-center flex-shrink-0">3</span>
                           Validação da coordenação
                         </span>
-                        <Badge status={activeModule.coordinatorStatus} />
+                        <span className="text-xs font-semibold text-gray-600">{approvalSummary.coordinatorApproved}/{approvalSummary.total || 0}</span>
                       </div>
                       <MiniAvatar name={activeModule.coordinatorName} roleLabel="Coordenador(a)" avatar={activeModule.coordinatorAvatar} />
-                      {activeModule.stage === 'coordenacao' && canActCoordinator ? (
-                        <>
-                          <div>
-                            <textarea
-                              value={noteDrafts.coordenador}
-                              onChange={e => setNoteDrafts(d => ({ ...d, coordenador: e.target.value.slice(0, 250) }))}
-                              placeholder="Digite seu parecer..."
-                              rows={2}
-                              maxLength={250}
-                              className="input-field resize-none text-xs"
-                            />
-                            <div className="text-[10px] text-gray-400 text-right mt-0.5">{noteDrafts.coordenador.length}/250</div>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => runAction('aprovar_coordenador', 'coordenador')}
-                              disabled={!!busyAction || activeModule.coordinatorStatus === 'aprovado'}
-                              className="flex-1 flex items-center justify-center gap-1 bg-green-600 hover:bg-green-700 text-white text-xs font-medium py-2 rounded-lg transition-colors disabled:opacity-50"
-                            >
-                              <ThumbsUp size={12} /> Aprovar
-                            </button>
-                            <button
-                              onClick={() => runAction('reprovar_coordenador', 'coordenador')}
-                              disabled={!!busyAction}
-                              className="flex-1 flex items-center justify-center gap-1 bg-red-600 hover:bg-red-700 text-white text-xs font-medium py-2 rounded-lg transition-colors disabled:opacity-50"
-                            >
-                              <ThumbsDown size={12} /> Reprovar
-                            </button>
-                          </div>
-                          <button
-                            onClick={() => runAction('ajustes_coordenador', 'coordenador')}
-                            disabled={!!busyAction}
-                            className="w-full flex items-center justify-center gap-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium py-2 rounded-lg transition-colors disabled:opacity-50"
-                          >
-                            Solicitar ajustes
-                          </button>
-                        </>
-                      ) : (
-                        <p className="text-xs text-gray-400">
-                          {activeModule.stage === 'publicado' ? 'Módulo publicado.' : activeModule.stage === 'coordenacao' ? 'Aguardando ação da coordenação.' : 'Aguardando aprovação do supervisor.'}
-                        </p>
-                      )}
+                      <div className="progress-bar h-1.5">
+                        <div className="progress-fill bg-brand-600" style={{ width: `${approvalSummary.total ? (approvalSummary.coordinatorApproved / approvalSummary.total) * 100 : 0}%` }} />
+                      </div>
+                      <p className="text-[11px] text-gray-400">
+                        {activeModule.stage === 'producao'
+                          ? 'Aguardando envio do professor.'
+                          : approvalSummary.total === 0
+                            ? 'Sem conteúdos para revisar ainda.'
+                            : 'Aprove cada conteúdo na tabela abaixo (após o supervisor aprovar).'}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1029,10 +1029,19 @@ export default function ModulosWorkspace({ course }) {
               <>
                 <div className="card p-4 space-y-3">
                   <h3 className="text-sm font-semibold text-gray-800">Resumo de validação</h3>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <MiniAvatar name={activeModule.teacherName || 'Professor'} roleLabel="Professor" avatar={activeModule.teacherAvatar} />
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium text-gray-700 truncate">{activeModule.teacherName || '—'}</div>
+                        <div className="text-[10px] text-gray-400">Professor</div>
+                      </div>
+                    </div>
+                    <Badge status={professorStatusBadgeKey(activeModule.professorStatus)} />
+                  </div>
                   {[
-                    { label: 'Professor', name: activeModule.teacherName, avatar: activeModule.teacherAvatar, status: professorStatusBadgeKey(activeModule.professorStatus) },
-                    { label: 'Supervisor', name: activeModule.supervisorName, avatar: activeModule.supervisorAvatar, status: activeModule.supervisorStatus },
-                    { label: 'Coordenador(a)', name: activeModule.coordinatorName, avatar: activeModule.coordinatorAvatar, status: activeModule.coordinatorStatus },
+                    { label: 'Supervisor', name: activeModule.supervisorName, avatar: activeModule.supervisorAvatar, approved: approvalSummary.supervisorApproved },
+                    { label: 'Coordenador(a)', name: activeModule.coordinatorName, avatar: activeModule.coordinatorAvatar, approved: approvalSummary.coordinatorApproved },
                   ].map(row => (
                     <div key={row.label} className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
@@ -1042,7 +1051,7 @@ export default function ModulosWorkspace({ course }) {
                           <div className="text-[10px] text-gray-400">{row.label}</div>
                         </div>
                       </div>
-                      <Badge status={row.status} />
+                      <span className="text-xs font-semibold text-gray-600 flex-shrink-0">{row.approved}/{approvalSummary.total || 0} aprovados</span>
                     </div>
                   ))}
                   {lastEvent && (
@@ -1119,8 +1128,8 @@ export default function ModulosWorkspace({ course }) {
                   <th className="table-header">Conteúdo</th>
                   <th className="table-header w-24">Tipo</th>
                   <th className="table-header w-12">Resp.</th>
-                  <th className="table-header w-12">Sup.</th>
-                  <th className="table-header w-12">Coord.</th>
+                  <th className="table-header w-36">Supervisor</th>
+                  <th className="table-header w-36">Coordenação</th>
                   <th className="table-header w-24">Prazo</th>
                   <th className="table-header">Status</th>
                   <th className="table-header w-28">Ações</th>
@@ -1156,12 +1165,44 @@ export default function ModulosWorkspace({ course }) {
                       <td className="table-cell">
                         <StackedAvatars assignees={materialAssignees} responsibles={getMaterialResponsibles(mat)} />
                       </td>
-                      <td className="table-cell"><MiniAvatar name={activeModule.supervisorName} roleLabel="Supervisor" avatar={activeModule.supervisorAvatar} /></td>
-                      <td className="table-cell"><MiniAvatar name={activeModule.coordinatorName} roleLabel="Coordenador(a)" avatar={activeModule.coordinatorAvatar} /></td>
+                      <td className="table-cell">
+                        <div className="flex items-center gap-1.5">
+                          <MiniAvatar name={activeModule.supervisorName} roleLabel="Supervisor" avatar={activeModule.supervisorAvatar} />
+                          {(isAdmin || isCourseSupervisor) ? (
+                            <InlineStatusSelect
+                              value={mat.supervisorStatus || ''}
+                              options={CONTENT_SUPERVISOR_STATUS_OPTIONS}
+                              onChange={val => handleContentStatusChange(mat, 'supervisorStatus', val)}
+                            />
+                          ) : (
+                            <Badge status={mat.supervisorStatus || ''} />
+                          )}
+                        </div>
+                      </td>
+                      <td className="table-cell">
+                        <div className="flex items-center gap-1.5">
+                          <MiniAvatar name={activeModule.coordinatorName} roleLabel="Coordenador(a)" avatar={activeModule.coordinatorAvatar} />
+                          {(isAdmin || isCourseCoordinator) ? (
+                            <InlineStatusSelect
+                              value={mat.coordinatorStatus || ''}
+                              options={CONTENT_COORDINATOR_STATUS_OPTIONS}
+                              onChange={val => {
+                                if (val === 'aprovado' && mat.supervisorStatus !== 'aprovado') {
+                                  showToast('Só é possível aprovar após o supervisor aprovar este conteúdo.', 'error')
+                                  return
+                                }
+                                handleContentStatusChange(mat, 'coordinatorStatus', val)
+                              }}
+                            />
+                          ) : (
+                            <Badge status={mat.coordinatorStatus || ''} />
+                          )}
+                        </div>
+                      </td>
                       <td className="table-cell text-gray-500">{formatDateOnly(mat.deliveryDate)}</td>
                       <td className="table-cell">
                         {canEditContent ? (
-                          <InlineStatusSelect value={mat.status || ''} options={PROFESSOR_STATUS_OPTIONS} onChange={val => handleContentStatusChange(mat, val)} />
+                          <InlineStatusSelect value={mat.status || ''} options={PROFESSOR_STATUS_OPTIONS} onChange={val => handleContentStatusChange(mat, 'status', val)} />
                         ) : (
                           <Badge status={mat.status || ''} />
                         )}
@@ -1236,6 +1277,20 @@ export default function ModulosWorkspace({ course }) {
               <div className="text-xs font-medium text-gray-500 mb-1">Link ajustado</div>
               <LinkChip url={viewContent.adjustedLink} />
             </div>
+            <div>
+              <div className="text-xs font-medium text-gray-500 mb-1">Supervisor</div>
+              <Badge status={viewContent.supervisorStatus || ''} />
+            </div>
+            <div>
+              <div className="text-xs font-medium text-gray-500 mb-1">Coordenação</div>
+              <Badge status={viewContent.coordinatorStatus || ''} />
+            </div>
+            {viewContent.reviewNotes && (
+              <div className="col-span-2">
+                <div className="text-xs font-medium text-gray-500 mb-1">Parecer / observações da revisão</div>
+                <div className="text-sm text-gray-800 bg-amber-50 border border-amber-100 rounded-lg p-3">{viewContent.reviewNotes}</div>
+              </div>
+            )}
           </div>
         </Modal>
       )}
@@ -1249,6 +1304,7 @@ export default function ModulosWorkspace({ course }) {
           module={activeModule}
           course={course}
           editing={editingContent}
+          canReview={canReviewContent}
         />
       )}
 

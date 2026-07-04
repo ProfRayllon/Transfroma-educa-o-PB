@@ -409,26 +409,26 @@ async function ensureMysqlSchema() {
 
   if (!existingNewCols.has('supervisor_status')) {
     await pool.execute(
-      "ALTER TABLE materials ADD COLUMN supervisor_status ENUM('em_revisao','nao_validado','validado_com_ajustes','valido') NULL DEFAULT NULL AFTER review_status"
+      'ALTER TABLE materials ADD COLUMN supervisor_status VARCHAR(20) NULL DEFAULT NULL AFTER review_status'
     )
   }
 
   if (!existingNewCols.has('coordinator_status')) {
     await pool.execute(
-      "ALTER TABLE materials ADD COLUMN coordinator_status ENUM('em_revisao','nao_validado','validado_com_ajustes','valido') NULL DEFAULT NULL AFTER supervisor_status"
+      'ALTER TABLE materials ADD COLUMN coordinator_status VARCHAR(20) NULL DEFAULT NULL AFTER supervisor_status'
     )
   }
 
+  // Valores antigos (em_revisao/nao_validado/validado_com_ajustes/valido) davam status por
+  // conteudo mas sem fluxo real; convertido para VARCHAR para suportar o novo vocabulario
+  // (aguardando/aprovado/ajustes e pendente/aprovado/ajustes/reprovado) usado na aprovacao por
+  // conteudo dentro de um modulo.
   if (existingNewCols.has('supervisor_status')) {
-    await pool.execute(
-      "ALTER TABLE materials MODIFY supervisor_status ENUM('em_revisao','nao_validado','validado_com_ajustes','valido') NULL DEFAULT NULL"
-    )
+    await pool.execute('ALTER TABLE materials MODIFY supervisor_status VARCHAR(20) NULL DEFAULT NULL')
   }
 
   if (existingNewCols.has('coordinator_status')) {
-    await pool.execute(
-      "ALTER TABLE materials MODIFY coordinator_status ENUM('em_revisao','nao_validado','validado_com_ajustes','valido') NULL DEFAULT NULL"
-    )
+    await pool.execute('ALTER TABLE materials MODIFY coordinator_status VARCHAR(20) NULL DEFAULT NULL')
   }
 
   if (!existingNewCols.has('responsibles')) {
@@ -1563,6 +1563,31 @@ async function countMaterialsByModule(moduleId) {
   return result.total
 }
 
+async function getModuleApprovalSummary(moduleId) {
+  if (!isMysqlMode()) {
+    const contents = materials.filter((m) => Number(m.moduleId) === Number(moduleId))
+    return {
+      total: contents.length,
+      supervisorApproved: contents.filter((m) => m.supervisorStatus === 'aprovado').length,
+      coordinatorApproved: contents.filter((m) => m.coordinatorStatus === 'aprovado').length,
+    }
+  }
+
+  const [[row]] = await pool.execute(
+    `SELECT
+      COUNT(*) AS total,
+      SUM(CASE WHEN supervisor_status = 'aprovado' THEN 1 ELSE 0 END) AS supervisor_approved,
+      SUM(CASE WHEN coordinator_status = 'aprovado' THEN 1 ELSE 0 END) AS coordinator_approved
+     FROM materials WHERE module_id = ?`,
+    [moduleId]
+  )
+  return {
+    total: row.total,
+    supervisorApproved: Number(row.supervisor_approved) || 0,
+    coordinatorApproved: Number(row.coordinator_approved) || 0,
+  }
+}
+
 async function createModuleEvent(payload) {
   if (!isMysqlMode()) {
     const event = {
@@ -1977,6 +2002,7 @@ module.exports = {
   updateModule,
   deleteModule,
   countMaterialsByModule,
+  getModuleApprovalSummary,
   listModuleEvents,
   createModuleEvent,
   getAllEmentas,
