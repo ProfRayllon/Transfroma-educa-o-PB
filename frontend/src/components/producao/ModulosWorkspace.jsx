@@ -75,7 +75,15 @@ const FLUXO_SUGERIDO = [
   'Módulo é publicado e disponível para o curso.',
 ]
 
+const EMPTY_MODULE_FORM = {
+  title: '',
+  description: '',
+  workload: '',
+  deadline: '',
+}
+
 const EMPTY_CONTENT_FORM = {
+  moduleId: '',
   type: '',
   theme: '',
   objective: '',
@@ -142,7 +150,7 @@ function computeDisplayStageIndex(m, contents = []) {
 
 /* ─── content modal ─── */
 
-function ContentModal({ open, onClose, onSave, saving, module, course, editing, canReview, canEditStatus }) {
+function ContentModal({ open, onClose, onSave, saving, modules, defaultModuleId, course, editing, canReview, canEditStatus }) {
   const [form, setForm] = useState(EMPTY_CONTENT_FORM)
   const [error, setError] = useState('')
 
@@ -151,6 +159,7 @@ function ContentModal({ open, onClose, onSave, saving, module, course, editing, 
     if (editing) {
       const responsibles = getMaterialResponsibles(editing)
       setForm({
+        moduleId: editing.moduleId || '',
         type: Array.isArray(editing.type) ? (editing.type[0] || '') : (editing.type || ''),
         theme: editing.theme || '',
         objective: editing.objective || '',
@@ -163,14 +172,15 @@ function ContentModal({ open, onClose, onSave, saving, module, course, editing, 
         reviewNotes: editing.reviewNotes || '',
       })
     } else {
-      setForm({ ...EMPTY_CONTENT_FORM, responsibleId: module?.teacherId || '' })
+      setForm({ ...EMPTY_CONTENT_FORM, moduleId: defaultModuleId || '' })
     }
     setError('')
-  }, [open, editing, module?.teacherId])
+  }, [open, editing, defaultModuleId])
 
   const producers = course.producers || []
 
   const handleSubmit = () => {
+    if (!form.moduleId) { setError('Selecione o módulo.'); return }
     if (!form.type) { setError('Selecione o tipo de material.'); return }
     if (!form.theme.trim()) { setError('Informe o título do conteúdo.'); return }
     if (!form.responsibleId) { setError('Selecione o responsável pelo conteúdo.'); return }
@@ -206,6 +216,14 @@ function ContentModal({ open, onClose, onSave, saving, module, course, editing, 
         {error && (
           <div className="col-span-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
         )}
+
+        <div className="col-span-2">
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Módulo <span className="text-red-500">*</span></label>
+          <select value={form.moduleId} onChange={e => setForm(f => ({ ...f, moduleId: e.target.value }))} className="select-field">
+            <option value="">Selecionar módulo...</option>
+            {modules.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
+          </select>
+        </div>
 
         <div className="col-span-2">
           <label className="block text-xs font-medium text-gray-600 mb-1.5">Tipo de material <span className="text-red-500">*</span></label>
@@ -301,38 +319,96 @@ function ContentModal({ open, onClose, onSave, saving, module, course, editing, 
   )
 }
 
-/* ─── new module modal ─── */
+/* ─── module modal (cria e edita) ─── */
 
-function NewModuleModal({ open, onClose, onCreate, saving }) {
-  const [title, setTitle] = useState('')
+function ModuleModal({ open, onClose, onSave, saving, editing }) {
+  const [form, setForm] = useState(EMPTY_MODULE_FORM)
+  const [error, setError] = useState('')
 
-  useEffect(() => { if (open) setTitle('') }, [open])
+  useEffect(() => {
+    if (!open) return
+    if (editing) {
+      setForm({
+        title: editing.title || '',
+        description: editing.description || '',
+        workload: editing.workload || '',
+        deadline: editing.deadline || '',
+      })
+    } else {
+      setForm(EMPTY_MODULE_FORM)
+    }
+    setError('')
+  }, [open, editing])
+
+  const handleSubmit = () => {
+    if (!form.title.trim()) { setError('Informe o título do módulo.'); return }
+    onSave({ ...(editing ? { id: editing.id } : {}), ...form })
+  }
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="Novo módulo"
-      size="sm"
+      title={editing ? 'Editar módulo' : 'Novo módulo'}
+      size="md"
       footer={
         <>
           <button onClick={onClose} className="btn-secondary" disabled={saving}>Cancelar</button>
-          <button onClick={() => onCreate(title)} className="btn-primary" disabled={saving || !title.trim()}>
-            {saving ? 'Criando...' : 'Criar módulo'}
+          <button onClick={handleSubmit} className="btn-primary" disabled={saving}>
+            {saving ? 'Salvando...' : editing ? 'Salvar alterações' : 'Criar módulo'}
           </button>
         </>
       }
     >
-      <label className="block text-xs font-medium text-gray-600 mb-1.5">Título do módulo <span className="text-red-500">*</span></label>
-      <input
-        value={title}
-        onChange={e => setTitle(e.target.value)}
-        className="input-field"
-        placeholder="Ex: Módulo 1 - Comunicação e Rotina Digital"
-        autoFocus
-        onKeyDown={e => { if (e.key === 'Enter' && title.trim()) onCreate(title) }}
-      />
-      <p className="text-xs text-gray-400 mt-2">Você poderá completar descrição, responsáveis e prazo em seguida.</p>
+      <div className="space-y-3">
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        )}
+
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Título do módulo <span className="text-red-500">*</span></label>
+          <input
+            value={form.title}
+            onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+            className="input-field"
+            placeholder="Ex: Módulo 1 - Comunicação e Rotina Digital"
+            autoFocus
+            onKeyDown={e => { if (e.key === 'Enter' && form.title.trim()) handleSubmit() }}
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Descrição do módulo</label>
+          <textarea
+            value={form.description}
+            onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+            className="input-field resize-none"
+            rows={3}
+            placeholder="Descreva o conteúdo e os objetivos deste módulo..."
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Carga horária</label>
+            <input
+              value={form.workload}
+              onChange={e => setForm(f => ({ ...f, workload: e.target.value }))}
+              className="input-field"
+              placeholder="Ex: 10h"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Prazo de entrega</label>
+            <input
+              type="date"
+              value={form.deadline || ''}
+              onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))}
+              className="input-field"
+            />
+          </div>
+        </div>
+      </div>
     </Modal>
   )
 }
@@ -341,21 +417,20 @@ function NewModuleModal({ open, onClose, onCreate, saving }) {
 
 export default function ModulosWorkspace({ course }) {
   const { user } = useAuth()
-  const { materials, materialAssignees, courseParticipants, saveMaterial, deleteMaterial, updateMaterialStatus, updateMaterialSession, loadCourses } = useData()
+  const { materials, materialAssignees, saveMaterial, deleteMaterial, updateMaterialStatus, updateMaterialSession, loadCourses } = useData()
 
   const [modules, setModules] = useState([])
   const [loading, setLoading] = useState(true)
   const [activeModuleId, setActiveModuleId] = useState(null)
   const [moduleSearch, setModuleSearch] = useState('')
   const [contentSearch, setContentSearch] = useState('')
-  const [form, setForm] = useState(null)
   const [savingModule, setSavingModule] = useState(false)
   const [busyAction, setBusyAction] = useState(null)
   const [commentDraft, setCommentDraft] = useState('')
   const [postingComment, setPostingComment] = useState(false)
   const [toast, setToast] = useState(null)
   const [newModuleOpen, setNewModuleOpen] = useState(false)
-  const [creatingModule, setCreatingModule] = useState(false)
+  const [editingModule, setEditingModule] = useState(null)
   const [confirmDeleteModule, setConfirmDeleteModule] = useState(null)
   const [contentModalOpen, setContentModalOpen] = useState(false)
   const [editingContent, setEditingContent] = useState(null)
@@ -396,20 +471,6 @@ export default function ModulosWorkspace({ course }) {
 
   const activeModule = useMemo(() => modules.find(m => m.id === activeModuleId) || null, [modules, activeModuleId])
 
-  useEffect(() => {
-    if (!activeModule) { setForm(null); return }
-    setForm({
-      title: activeModule.title || '',
-      description: activeModule.description || '',
-      workload: activeModule.workload || '',
-      teacherId: activeModule.teacherId || '',
-      supervisorId: activeModule.supervisorId || '',
-      coordinatorId: activeModule.coordinatorId || '',
-      deadline: activeModule.deadline || '',
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeModuleId])
-
   const isAdmin = user?.role === 'administrador'
   const isCoordinatorUser = user?.role === 'coordenador' || String(user?.function || '').toLowerCase().includes('coordenador')
   const isProducer = user?.role === 'professor' && course.producers?.some(p => Number(p.id) === Number(user.id))
@@ -417,7 +478,7 @@ export default function ModulosWorkspace({ course }) {
   const isCourseCoordinator = isCoordinatorUser && (course.coordinatorId === user.id || course.coordinatorName === user.name)
   const canManageModules = isAdmin || isProducer || isCourseSupervisor || isCourseCoordinator
 
-  const canEditCore = !!activeModule && (isAdmin || ((isProducer || isCourseSupervisor || isCourseCoordinator) && activeModule.stage === 'producao'))
+  const canEditModule = !!activeModule && (isAdmin || (canManageModules && activeModule.stage === 'producao'))
   const canEditContent = isAdmin || isProducer || isCourseSupervisor || isCourseCoordinator
   const canReviewContent = isAdmin || isCourseSupervisor || isCourseCoordinator
   const contentLocked = !!activeModule && activeModule.stage !== 'producao' && !isAdmin
@@ -451,6 +512,14 @@ export default function ModulosWorkspace({ course }) {
       .sort((a, b) => Number(a.session) - Number(b.session))
   }, [courseMaterials, activeModule, contentSearch])
 
+  const moduleResponsibles = useMemo(() => {
+    const map = new Map()
+    moduleContents.forEach(mat => {
+      getMaterialResponsibles(mat).forEach(r => { if (r?.id != null) map.set(r.id, r) })
+    })
+    return Array.from(map.values())
+  }, [moduleContents])
+
   const stats = useMemo(() => ({
     modulos: modules.length,
     conteudos: courseMaterials.length,
@@ -476,29 +545,21 @@ export default function ModulosWorkspace({ course }) {
 
   /* ── module actions ── */
 
-  const handleCreateModule = async (title) => {
-    setCreatingModule(true)
-    try {
-      const { data } = await api.post(`/courses/${course.id}/modules`, { title: title.trim() })
-      setModules(prev => [...prev, data])
-      setActiveModuleId(data.id)
-      setNewModuleOpen(false)
-      showToast('Módulo criado! Complete os dados abaixo.')
-    } catch (err) {
-      showToast(getApiErrorMessage(err, 'Erro ao criar módulo.'), 'error')
-    } finally {
-      setCreatingModule(false)
-    }
-  }
-
-  const handleSaveCore = async () => {
-    if (!activeModule || !form) return
-    if (!form.title.trim()) { showToast('Informe o título do módulo.', 'error'); return }
+  const handleSaveModule = async (payload) => {
     setSavingModule(true)
     try {
-      const { data } = await api.put(`/modules/${activeModule.id}`, form)
-      setModules(prev => prev.map(m => m.id === data.id ? data : m))
-      showToast('Módulo atualizado!')
+      if (payload.id) {
+        const { data } = await api.put(`/modules/${payload.id}`, payload)
+        setModules(prev => prev.map(m => m.id === data.id ? data : m))
+        showToast('Módulo atualizado!')
+      } else {
+        const { data } = await api.post(`/courses/${course.id}/modules`, payload)
+        setModules(prev => [...prev, data])
+        setActiveModuleId(data.id)
+        showToast('Módulo criado!')
+      }
+      setNewModuleOpen(false)
+      setEditingModule(null)
     } catch (err) {
       showToast(getApiErrorMessage(err, 'Erro ao salvar módulo.'), 'error')
     } finally {
@@ -579,19 +640,21 @@ export default function ModulosWorkspace({ course }) {
   /* ── content actions ── */
 
   const handleSaveContent = async (payload) => {
-    if (!activeModule) return
     setSavingContent(true)
     try {
+      const targetModuleId = Number(payload.moduleId)
       const isNew = !payload.id
-      if (isNew) {
-        payload.session = moduleContents.length + 1
+      const prevModuleId = editingContent?.moduleId ? Number(editingContent.moduleId) : null
+      if (isNew || prevModuleId !== targetModuleId) {
+        payload.session = (contentsByModuleId[targetModuleId]?.length || 0) + 1
       }
       await saveMaterial({
         ...payload,
         course: course.name,
         courseId: course.id,
-        moduleId: activeModule.id,
+        moduleId: targetModuleId,
       })
+      if (targetModuleId !== activeModuleId) setActiveModuleId(targetModuleId)
       showToast(payload.id ? 'Conteúdo atualizado!' : 'Conteúdo adicionado!')
       setContentModalOpen(false)
     } catch (err) {
@@ -656,7 +719,6 @@ export default function ModulosWorkspace({ course }) {
   const checklist = activeModule ? [
     { label: 'Título preenchido', done: !!activeModule.title },
     { label: 'Descrição adicionada', done: !!activeModule.description },
-    { label: 'Responsáveis definidos', done: !!(activeModule.teacherId && activeModule.supervisorId && activeModule.coordinatorId) },
     { label: 'Conteúdos vinculados', done: moduleContents.length > 0 },
     { label: 'Produção concluída pelo professor', done: approvalSummary.total > 0 && approvalSummary.professorConcluded === approvalSummary.total },
     { label: 'Revisão do supervisor', done: approvalSummary.total > 0 && approvalSummary.supervisorApproved === approvalSummary.total },
@@ -665,7 +727,6 @@ export default function ModulosWorkspace({ course }) {
 
   const events = activeModule?.events || []
   const lastEvent = events.length ? events[events.length - 1] : null
-  const lastSendEvent = [...events].reverse().find(ev => ev.action === 'enviar_supervisao')
   const canPublish = !!activeModule && (isAdmin || isCourseCoordinator) && activeModule.stage === 'supervisao'
     && approvalSummary.total > 0 && approvalSummary.coordinatorApproved === approvalSummary.total
   const canDeleteModule = !!activeModule && canManageModules && (isAdmin || activeModule.stage === 'producao')
@@ -682,11 +743,24 @@ export default function ModulosWorkspace({ course }) {
         <StatCard icon={CheckCircle} iconBg="bg-green-100" iconColor="text-green-600" value={stats.aprovados} label="Aprovados" />
       </div>
 
-      <div className="flex items-center justify-end">
-        <button onClick={() => setNewModuleOpen(true)} className="btn-secondary text-sm">
-          <Plus size={14} />
-          Novo módulo
-        </button>
+      <div className="flex items-center justify-end gap-2">
+        {canManageModules && (
+          <button onClick={() => { setEditingModule(null); setNewModuleOpen(true) }} className="btn-secondary text-sm">
+            <Plus size={14} />
+            Novo módulo
+          </button>
+        )}
+        {canEditContent && (
+          <button
+            onClick={() => { setEditingContent(null); setContentModalOpen(true) }}
+            disabled={modules.length === 0}
+            title={modules.length === 0 ? 'Crie um módulo antes de adicionar conteúdo.' : undefined}
+            className="btn-primary text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Plus size={14} />
+            Novo conteúdo
+          </button>
+        )}
       </div>
 
       {modules.length === 0 ? (
@@ -699,15 +773,15 @@ export default function ModulosWorkspace({ course }) {
             <p className="text-sm text-gray-500 mt-1">Crie o primeiro módulo para começar a estruturar o curso.</p>
           </div>
           {canManageModules && (
-            <button onClick={() => setNewModuleOpen(true)} className="btn-primary mt-2">
+            <button onClick={() => { setEditingModule(null); setNewModuleOpen(true) }} className="btn-primary mt-2">
               <Plus size={14} />
               Criar primeiro módulo
             </button>
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr_300px] gap-4 items-start">
-          {/* Sidebar */}
+        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr_320px] gap-4 items-start">
+          {/* Sidebar: módulos */}
           <div className="card p-4 space-y-3">
             <h3 className="text-sm font-semibold text-gray-800">Estrutura do curso</h3>
             <div className="relative">
@@ -719,7 +793,7 @@ export default function ModulosWorkspace({ course }) {
                 className="input-field pl-8 text-xs py-2"
               />
             </div>
-            <div className="space-y-2 max-h-[520px] overflow-y-auto">
+            <div className="space-y-2 max-h-[640px] overflow-y-auto">
               {filteredModules.map(m => {
                 const isActive = m.id === activeModuleId
                 const isDragOver = dragOverModuleId === m.id
@@ -753,224 +827,314 @@ export default function ModulosWorkspace({ course }) {
                 <p className="text-xs text-gray-400 text-center py-4">Nenhum módulo encontrado.</p>
               )}
             </div>
-            {canManageModules && (
-              <button
-                onClick={() => setNewModuleOpen(true)}
-                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border border-dashed border-gray-300 text-xs font-medium text-gray-500 hover:border-brand-400 hover:text-brand-700 transition-colors"
-              >
-                <Plus size={13} />
-                Adicionar módulo
-              </button>
-            )}
           </div>
 
-          {/* Center: cadastro e validação */}
-          {activeModule && form ? (
+          {/* Middle: tabela de conteúdos */}
+          {activeModule ? (
             <div className="card p-0 overflow-hidden">
-              <div className="px-6 pt-5 pb-4 border-b border-gray-100">
-                <h3 className="text-sm font-semibold text-gray-800 mb-4">Cadastro e validação do módulo</h3>
-                <div className="flex items-center">
-                  {STAGE_STEPS.map((s, i) => (
-                    <div key={s.key} className="flex items-center flex-1 last:flex-none">
-                      <div className="flex flex-col items-center gap-1.5">
-                        <div className={`w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0
-                          ${i < stageIndex ? 'bg-brand-100 text-brand-700' : i === stageIndex ? 'bg-brand-800 text-white ring-2 ring-brand-200' : 'bg-gray-100 text-gray-400'}`}>
-                          {i < stageIndex ? <CheckCircle size={14} /> : i + 1}
-                        </div>
-                        <span className={`text-[11px] font-medium whitespace-nowrap ${i <= stageIndex ? 'text-gray-700' : 'text-gray-400'}`}>{s.label}</span>
-                      </div>
-                      {i < STAGE_STEPS.length - 1 && (
-                        <div className={`flex-1 h-0.5 mx-1 mb-4 ${i < stageIndex ? 'bg-brand-300' : 'bg-gray-100'}`} />
-                      )}
-                    </div>
-                  ))}
+              <div className="flex items-center justify-between flex-wrap gap-3 px-5 py-4 border-b border-gray-100">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-800">Conteúdos do módulo</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">{moduleContents.length} conteúdo{moduleContents.length !== 1 ? 's' : ''} em {activeModule.title}</p>
+                </div>
+                <div className="relative">
+                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    value={contentSearch}
+                    onChange={e => setContentSearch(e.target.value)}
+                    placeholder="Buscar conteúdo..."
+                    className="input-field pl-8 text-xs py-2 w-48"
+                  />
                 </div>
               </div>
 
-              <div className="p-6 space-y-5">
-                {/* Form fields */}
-                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                  <div className="col-span-2">
-                    <label className="block text-xs font-medium text-gray-600 mb-1.5">Título do módulo <span className="text-red-500">*</span></label>
-                    <input
-                      value={form.title}
-                      onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                      disabled={!canEditCore}
-                      className={`input-field ${!canEditCore ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''}`}
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs font-medium text-gray-600 mb-1.5">Descrição do módulo</label>
-                    <textarea
-                      value={form.description}
-                      onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                      disabled={!canEditCore}
-                      rows={2}
-                      className={`input-field resize-none ${!canEditCore ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''}`}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1.5">Professor conteudista <span className="text-red-500">*</span></label>
-                    <select
-                      value={form.teacherId}
-                      onChange={e => setForm(f => ({ ...f, teacherId: e.target.value }))}
-                      disabled={!canEditCore}
-                      className={`select-field ${!canEditCore ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''}`}
-                    >
-                      <option value="">Selecionar...</option>
-                      {(course.producers || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1.5">Supervisor <span className="text-red-500">*</span></label>
-                    <select
-                      value={form.supervisorId}
-                      onChange={e => setForm(f => ({ ...f, supervisorId: e.target.value }))}
-                      disabled={!canEditCore}
-                      className={`select-field ${!canEditCore ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''}`}
-                    >
-                      <option value="">Selecionar...</option>
-                      {(courseParticipants.supervisors || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1.5">Coordenador(a) <span className="text-red-500">*</span></label>
-                    <select
-                      value={form.coordinatorId}
-                      onChange={e => setForm(f => ({ ...f, coordinatorId: e.target.value }))}
-                      disabled={!canEditCore}
-                      className={`select-field ${!canEditCore ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''}`}
-                    >
-                      <option value="">Selecionar...</option>
-                      {(courseParticipants.coordinators || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1.5">Carga horária</label>
-                    <input
-                      value={form.workload}
-                      onChange={e => setForm(f => ({ ...f, workload: e.target.value }))}
-                      disabled={!canEditCore}
-                      placeholder="Ex: 10h"
-                      className={`input-field ${!canEditCore ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''}`}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1.5">Prazo de entrega</label>
-                    <input
-                      type="date"
-                      value={form.deadline || ''}
-                      onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))}
-                      disabled={!canEditCore}
-                      className={`input-field ${!canEditCore ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''}`}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1.5">Status do módulo</label>
-                    <div className="input-field bg-gray-50 flex items-center">
-                      <Badge status={getModuleStatusKey(activeModule, moduleContents)} />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Validação do fluxo */}
-                <div>
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Validação do fluxo</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {/* Card 1: professor */}
-                    <div className="rounded-xl border border-gray-200 p-3.5 space-y-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-bold text-gray-500 flex items-center gap-1.5">
-                          <span className="w-5 h-5 rounded-full bg-brand-800 text-white text-[10px] flex items-center justify-center flex-shrink-0">1</span>
-                          Produção do professor
-                        </span>
-                        <span className="text-xs font-semibold text-gray-600">{approvalSummary.professorConcluded}/{approvalSummary.total || 0}</span>
-                      </div>
-                      <MiniAvatar name={activeModule.teacherName} roleLabel="Professor" avatar={activeModule.teacherAvatar} />
-                      <div className="progress-bar h-1.5">
-                        <div className="progress-fill bg-brand-600" style={{ width: `${approvalSummary.total ? (approvalSummary.professorConcluded / approvalSummary.total) * 100 : 0}%` }} />
-                      </div>
-                      {activeModule.professorStatus === 'concluido' && lastSendEvent && (
-                        <p className="text-[11px] text-gray-500">
-                          Concluído em {formatDateTime(lastSendEvent.createdAt)} por {lastSendEvent.authorName}
-                        </p>
-                      )}
-                      {activeModule.stage === 'producao' && (isAdmin || isProducer) ? (
-                        <button
-                          onClick={() => runAction('enviar_supervisao')}
-                          disabled={busyAction === 'enviar_supervisao' || !form.teacherId || !form.supervisorId || !form.coordinatorId || approvalSummary.total === 0 || approvalSummary.professorConcluded < approvalSummary.total}
-                          className="btn-primary w-full justify-center text-xs py-2"
-                          title={
-                            (!form.teacherId || !form.supervisorId || !form.coordinatorId)
-                              ? 'Defina professor, supervisor e coordenador antes de enviar'
-                              : approvalSummary.total === 0
-                                ? 'Adicione ao menos um conteúdo antes de enviar'
-                                : approvalSummary.professorConcluded < approvalSummary.total
-                                  ? 'Conclua todos os conteúdos antes de enviar para supervisão'
-                                  : undefined
-                          }
+              <div className="table-container">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      <th className="table-header w-12">Ordem</th>
+                      <th className="table-header">Conteúdo</th>
+                      <th className="table-header w-24">Tipo</th>
+                      <th className="table-header w-36">Professor</th>
+                      <th className="table-header w-36">Supervisor</th>
+                      <th className="table-header w-36">Coordenação</th>
+                      <th className="table-header w-24">Prazo</th>
+                      <th className="table-header w-28">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {moduleContents.map(mat => {
+                      const isDragging = dragContentId === mat.id
+                      const isDragOver = dragOverContentId === mat.id
+                      const responsibleAvatar = materialAssignees.find(a => Number(a.id) === Number(mat.responsibleId))?.avatar
+                      return (
+                        <tr
+                          key={mat.id}
+                          draggable={canEditContent && !contentLocked}
+                          onDragStart={canEditContent ? e => handleContentDragStart(e, mat) : undefined}
+                          onDragOver={canEditContent ? e => handleContentDragOver(e, mat) : undefined}
+                          onDrop={canEditContent ? e => handleContentDrop(e, mat) : undefined}
+                          onDragEnd={handleContentDragEnd}
+                          className={`border-b border-gray-50 transition-colors
+                            ${isDragging ? 'opacity-40' : ''}
+                            ${isDragOver ? 'bg-brand-50/30 border-t-2 border-t-brand-400' : 'hover:bg-gray-50/50'}
+                          `}
                         >
-                          <Send size={13} />
-                          {busyAction === 'enviar_supervisao' ? 'Enviando...' : 'Finalizar e enviar para supervisão'}
-                        </button>
-                      ) : activeModule.stage !== 'producao' ? (
-                        <p className="text-xs text-green-700 flex items-center gap-1.5"><CheckCircle size={13} /> Enviado para supervisão</p>
-                      ) : (
-                        <p className="text-xs text-gray-400">Aguardando o professor concluir os conteúdos.</p>
-                      )}
-                    </div>
+                          <td className="table-cell text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              {canEditContent && !contentLocked && <GripVertical size={13} className="text-gray-300 cursor-grab active:cursor-grabbing flex-shrink-0" />}
+                              <span className="font-semibold text-gray-600">{mat.session}</span>
+                            </div>
+                          </td>
+                          <td className="table-cell">
+                            <div className="font-medium text-gray-700 truncate max-w-[220px]">{mat.theme}</div>
+                          </td>
+                          <td className="table-cell"><TypeBadge type={mat.type} /></td>
+                          <td className="table-cell">
+                            <div className="flex items-center gap-1.5">
+                              <MiniAvatar name={mat.responsibleName} roleLabel="Professor" avatar={responsibleAvatar} />
+                              {(isAdmin || isProducer) ? (
+                                <InlineStatusSelect
+                                  value={mat.status || ''}
+                                  options={PROFESSOR_STATUS_OPTIONS}
+                                  onChange={val => handleContentStatusChange(mat, 'status', val)}
+                                />
+                              ) : (
+                                <Badge status={mat.status || ''} />
+                              )}
+                            </div>
+                          </td>
+                          <td className="table-cell">
+                            <div className="flex items-center gap-1.5">
+                              <MiniAvatar name={course.supervisorName} roleLabel="Supervisor" avatar={course.supervisorAvatar} />
+                              {(isAdmin || isCourseSupervisor) ? (
+                                <InlineStatusSelect
+                                  value={mat.supervisorStatus || ''}
+                                  options={CONTENT_SUPERVISOR_STATUS_OPTIONS}
+                                  onChange={val => {
+                                    if (val === 'aprovado' && mat.status !== 'concluido') {
+                                      showToast('Só é possível aprovar após o professor concluir este conteúdo.', 'error')
+                                      return
+                                    }
+                                    handleContentStatusChange(mat, 'supervisorStatus', val)
+                                  }}
+                                />
+                              ) : (
+                                <Badge status={mat.supervisorStatus || ''} />
+                              )}
+                            </div>
+                          </td>
+                          <td className="table-cell">
+                            <div className="flex items-center gap-1.5">
+                              <MiniAvatar name={course.coordinatorName} roleLabel="Coordenador(a)" avatar={course.coordinatorAvatar} />
+                              {(isAdmin || isCourseCoordinator) ? (
+                                <InlineStatusSelect
+                                  value={mat.coordinatorStatus || ''}
+                                  options={CONTENT_COORDINATOR_STATUS_OPTIONS}
+                                  onChange={val => {
+                                    if (val === 'aprovado' && mat.supervisorStatus !== 'aprovado') {
+                                      showToast('Só é possível aprovar após o supervisor aprovar este conteúdo.', 'error')
+                                      return
+                                    }
+                                    handleContentStatusChange(mat, 'coordinatorStatus', val)
+                                  }}
+                                />
+                              ) : (
+                                <Badge status={mat.coordinatorStatus || ''} />
+                              )}
+                            </div>
+                          </td>
+                          <td className="table-cell text-gray-500">{formatDateOnly(mat.deliveryDate)}</td>
+                          <td className="table-cell">
+                            <div className="flex items-center gap-0.5">
+                              <button onClick={() => setViewContent(mat)} title="Visualizar" className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
+                                <Eye size={14} />
+                              </button>
+                              {canEditContent && (
+                                <button onClick={() => { setEditingContent(mat); setContentModalOpen(true) }} title="Editar" className="p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors">
+                                  <Pencil size={14} />
+                                </button>
+                              )}
+                              {mat.originalLink && (
+                                <a href={mat.originalLink} target="_blank" rel="noopener noreferrer" title="Abrir link original" className="p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-lg transition-colors">
+                                  <Link2 size={14} />
+                                </a>
+                              )}
+                              {canEditContent && (
+                                <button onClick={() => setConfirmDeleteContent(mat)} title="Excluir" className="p-1.5 text-gray-300 hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors">
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {moduleContents.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="table-cell text-center py-10 text-gray-400 text-sm">
+                          Nenhum conteúdo vinculado a este módulo ainda.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="card flex items-center justify-center py-14 text-sm text-gray-400">
+              Selecione um módulo para visualizar os conteúdos.
+            </div>
+          )}
 
-                    {/* Card 2: supervisor — aprovação agora e por conteudo, aqui so o resumo */}
-                    <div className="rounded-xl border border-gray-200 p-3.5 space-y-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-bold text-gray-500 flex items-center gap-1.5">
-                          <span className="w-5 h-5 rounded-full bg-brand-800 text-white text-[10px] flex items-center justify-center flex-shrink-0">2</span>
-                          Validação do supervisor
-                        </span>
-                        <span className="text-xs font-semibold text-gray-600">{approvalSummary.supervisorApproved}/{approvalSummary.total || 0}</span>
-                      </div>
-                      <MiniAvatar name={activeModule.supervisorName} roleLabel="Supervisor" avatar={activeModule.supervisorAvatar} />
-                      <div className="progress-bar h-1.5">
-                        <div className="progress-fill bg-brand-600" style={{ width: `${approvalSummary.total ? (approvalSummary.supervisorApproved / approvalSummary.total) * 100 : 0}%` }} />
-                      </div>
-                      <p className="text-[11px] text-gray-400">
-                        {activeModule.stage === 'producao'
-                          ? 'Aguardando envio do professor.'
-                          : approvalSummary.total === 0
-                            ? 'Sem conteúdos para revisar ainda.'
-                            : 'Aprove cada conteúdo na tabela abaixo.'}
-                      </p>
+          {/* Right: fluxo de validação */}
+          <div className="space-y-4">
+            {activeModule && (
+              <>
+                <div className="card p-4 space-y-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold text-gray-800 truncate">{activeModule.title}</h3>
+                      <div className="mt-1"><Badge status={getModuleStatusKey(activeModule, moduleContents)} /></div>
                     </div>
+                    {canEditModule && (
+                      <button
+                        onClick={() => { setEditingModule(activeModule); setNewModuleOpen(true) }}
+                        title="Editar módulo"
+                        className="p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors flex-shrink-0"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                    )}
+                  </div>
 
-                    {/* Card 3: coordenacao — idem, resumo por conteudo */}
-                    <div className="rounded-xl border border-gray-200 p-3.5 space-y-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-bold text-gray-500 flex items-center gap-1.5">
-                          <span className="w-5 h-5 rounded-full bg-brand-800 text-white text-[10px] flex items-center justify-center flex-shrink-0">3</span>
-                          Validação da coordenação
-                        </span>
-                        <span className="text-xs font-semibold text-gray-600">{approvalSummary.coordinatorApproved}/{approvalSummary.total || 0}</span>
-                      </div>
-                      <MiniAvatar name={activeModule.coordinatorName} roleLabel="Coordenador(a)" avatar={activeModule.coordinatorAvatar} />
-                      <div className="progress-bar h-1.5">
-                        <div className="progress-fill bg-brand-600" style={{ width: `${approvalSummary.total ? (approvalSummary.coordinatorApproved / approvalSummary.total) * 100 : 0}%` }} />
-                      </div>
-                      <p className="text-[11px] text-gray-400">
-                        {activeModule.stage === 'producao'
-                          ? 'Aguardando envio do professor.'
-                          : approvalSummary.total === 0
-                            ? 'Sem conteúdos para revisar ainda.'
-                            : 'Aprove cada conteúdo na tabela abaixo (após o supervisor aprovar).'}
-                      </p>
+                  {activeModule.description && (
+                    <p className="text-xs text-gray-500 leading-relaxed">{activeModule.description}</p>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <div className="text-gray-400">Carga horária</div>
+                      <div className="text-gray-700 font-medium">{activeModule.workload || '—'}</div>
                     </div>
+                    <div>
+                      <div className="text-gray-400">Prazo de entrega</div>
+                      <div className="text-gray-700 font-medium">{formatDateOnly(activeModule.deadline)}</div>
+                    </div>
+                  </div>
+
+                  {/* Stage stepper */}
+                  <div className="flex items-center pt-1">
+                    {STAGE_STEPS.map((s, i) => (
+                      <div key={s.key} className="flex items-center flex-1 last:flex-none">
+                        <div className="flex flex-col items-center gap-1">
+                          <div className={`w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0
+                            ${i < stageIndex ? 'bg-brand-100 text-brand-700' : i === stageIndex ? 'bg-brand-800 text-white ring-2 ring-brand-200' : 'bg-gray-100 text-gray-400'}`}>
+                            {i < stageIndex ? <CheckCircle size={12} /> : i + 1}
+                          </div>
+                          <span className={`text-[10px] font-medium whitespace-nowrap ${i <= stageIndex ? 'text-gray-700' : 'text-gray-400'}`}>{s.label}</span>
+                        </div>
+                        {i < STAGE_STEPS.length - 1 && (
+                          <div className={`flex-1 h-0.5 mx-1 mb-4 ${i < stageIndex ? 'bg-brand-300' : 'bg-gray-100'}`} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Resumo de validação */}
+                  <div className="space-y-2.5 pt-3 border-t border-gray-100">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <StackedAvatars responsibles={moduleResponsibles} assignees={materialAssignees} />
+                        <div className="text-xs font-medium text-gray-700">Professor</div>
+                      </div>
+                      <span className="text-xs font-semibold text-gray-600 flex-shrink-0">{approvalSummary.professorConcluded}/{approvalSummary.total || 0} concluídos</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <MiniAvatar name={course.supervisorName || 'Supervisor'} roleLabel="Supervisor" avatar={course.supervisorAvatar} />
+                        <div className="min-w-0">
+                          <div className="text-xs font-medium text-gray-700 truncate">{course.supervisorName || '—'}</div>
+                          <div className="text-[10px] text-gray-400">Supervisor</div>
+                        </div>
+                      </div>
+                      <span className="text-xs font-semibold text-gray-600 flex-shrink-0">{approvalSummary.supervisorApproved}/{approvalSummary.total || 0} aprovados</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <MiniAvatar name={course.coordinatorName || 'Coordenador(a)'} roleLabel="Coordenador(a)" avatar={course.coordinatorAvatar} />
+                        <div className="min-w-0">
+                          <div className="text-xs font-medium text-gray-700 truncate">{course.coordinatorName || '—'}</div>
+                          <div className="text-[10px] text-gray-400">Coordenador(a)</div>
+                        </div>
+                      </div>
+                      <span className="text-xs font-semibold text-gray-600 flex-shrink-0">{approvalSummary.coordinatorApproved}/{approvalSummary.total || 0} aprovados</span>
+                    </div>
+                    {lastEvent && (
+                      <div className="pt-1 text-[11px] text-gray-400">
+                        Última atualização: {formatDateTime(lastEvent.createdAt)} por {lastEvent.authorName}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Ações */}
+                  <div className="space-y-2 pt-3 border-t border-gray-100">
+                    {activeModule.stage === 'producao' && (isAdmin || isProducer) && (
+                      <button
+                        onClick={() => runAction('enviar_supervisao')}
+                        disabled={busyAction === 'enviar_supervisao' || approvalSummary.total === 0 || approvalSummary.professorConcluded < approvalSummary.total}
+                        className="btn-primary w-full justify-center text-xs py-2"
+                        title={
+                          approvalSummary.total === 0
+                            ? 'Adicione ao menos um conteúdo antes de enviar'
+                            : approvalSummary.professorConcluded < approvalSummary.total
+                              ? 'Conclua todos os conteúdos antes de enviar para supervisão'
+                              : undefined
+                        }
+                      >
+                        <Send size={13} />
+                        {busyAction === 'enviar_supervisao' ? 'Enviando...' : 'Finalizar e enviar para supervisão'}
+                      </button>
+                    )}
+                    {activeModule.stage !== 'producao' && activeModule.stage !== 'publicado' && (
+                      <p className="text-xs text-green-700 flex items-center gap-1.5"><CheckCircle size={13} /> Enviado para supervisão</p>
+                    )}
+                    {canPublish && (
+                      <button onClick={() => runAction('publicar')} disabled={!!busyAction} className="btn-primary w-full justify-center text-xs py-2">
+                        <Rocket size={14} />
+                        {busyAction === 'publicar' ? 'Publicando...' : 'Publicar módulo'}
+                      </button>
+                    )}
+                    {activeModule.stage === 'publicado' && (
+                      <p className="text-xs text-brand-700 flex items-center gap-1.5"><CheckCircle size={13} /> Módulo publicado</p>
+                    )}
+                    {canDeleteModule && (
+                      <button
+                        onClick={() => setConfirmDeleteModule(activeModule)}
+                        className="w-full flex items-center justify-center gap-1.5 text-xs text-gray-400 hover:text-red-600 transition-colors pt-1"
+                      >
+                        <Trash2 size={13} /> Excluir módulo
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                {/* Comentários e histórico */}
-                <div>
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                <div className="card p-4 space-y-2.5">
+                  <h3 className="text-sm font-semibold text-gray-800">Checklist do módulo</h3>
+                  {checklist.map(item => (
+                    <div key={item.label} className="flex items-center gap-2">
+                      {item.done
+                        ? <CheckCircle size={15} className="text-green-500 flex-shrink-0" />
+                        : <Circle size={15} className="text-gray-300 flex-shrink-0" />}
+                      <span className={`text-xs ${item.done ? 'text-gray-700' : 'text-gray-400'}`}>{item.label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="card p-4 space-y-3">
+                  <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
                     <MessageSquare size={13} /> Observações e comentários
-                  </h4>
+                  </h3>
                   <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
                     {events.length === 0 && <p className="text-xs text-gray-400">Nenhum comentário ou atualização ainda.</p>}
                     {events.map(ev => (
@@ -990,7 +1154,7 @@ export default function ModulosWorkspace({ course }) {
                       </div>
                     ))}
                   </div>
-                  <div className="flex items-center gap-2 pt-3 mt-3 border-t border-gray-100">
+                  <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
                     <input
                       value={commentDraft}
                       onChange={e => setCommentDraft(e.target.value)}
@@ -1004,79 +1168,6 @@ export default function ModulosWorkspace({ course }) {
                     </button>
                   </div>
                 </div>
-              </div>
-
-              {/* Footer */}
-              <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50/50">
-                {canDeleteModule ? (
-                  <button
-                    onClick={() => setConfirmDeleteModule(activeModule)}
-                    className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-600 transition-colors"
-                  >
-                    <Trash2 size={13} /> Excluir módulo
-                  </button>
-                ) : <span />}
-                <div className="flex items-center gap-2">
-                  {canEditCore && (
-                    <button onClick={handleSaveCore} disabled={savingModule} className="btn-secondary">
-                      {savingModule ? 'Salvando...' : 'Salvar alterações'}
-                    </button>
-                  )}
-                  {canPublish && (
-                    <button onClick={() => runAction('publicar')} disabled={!!busyAction} className="btn-primary">
-                      <Rocket size={14} />
-                      {busyAction === 'publicar' ? 'Publicando...' : 'Publicar módulo'}
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="card flex items-center justify-center py-14 text-sm text-gray-400">
-              Selecione um módulo para visualizar os detalhes.
-            </div>
-          )}
-
-          {/* Right column */}
-          <div className="space-y-4">
-            {activeModule && (
-              <>
-                <div className="card p-4 space-y-3">
-                  <h3 className="text-sm font-semibold text-gray-800">Resumo de validação</h3>
-                  {[
-                    { label: 'Professor', name: activeModule.teacherName, avatar: activeModule.teacherAvatar, count: approvalSummary.professorConcluded, suffix: 'concluídos' },
-                    { label: 'Supervisor', name: activeModule.supervisorName, avatar: activeModule.supervisorAvatar, count: approvalSummary.supervisorApproved, suffix: 'aprovados' },
-                    { label: 'Coordenador(a)', name: activeModule.coordinatorName, avatar: activeModule.coordinatorAvatar, count: approvalSummary.coordinatorApproved, suffix: 'aprovados' },
-                  ].map(row => (
-                    <div key={row.label} className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <MiniAvatar name={row.name || row.label} roleLabel={row.label} avatar={row.avatar} />
-                        <div className="min-w-0">
-                          <div className="text-xs font-medium text-gray-700 truncate">{row.name || '—'}</div>
-                          <div className="text-[10px] text-gray-400">{row.label}</div>
-                        </div>
-                      </div>
-                      <span className="text-xs font-semibold text-gray-600 flex-shrink-0">{row.count}/{approvalSummary.total || 0} {row.suffix}</span>
-                    </div>
-                  ))}
-                  {lastEvent && (
-                    <div className="pt-2 border-t border-gray-100 text-[11px] text-gray-500">
-                      Última atualização: {formatDateTime(lastEvent.createdAt)} por {lastEvent.authorName}
-                    </div>
-                  )}
-                </div>
-
-                <div className="card p-4 space-y-2.5">
-                  <h3 className="text-sm font-semibold text-gray-800">Checklist do módulo</h3>
-                  {checklist.map(item => (
-                    <div key={item.label} className="flex items-center gap-2">
-                      {item.done
-                        ? <CheckCircle size={15} className="text-green-500 flex-shrink-0" />
-                        : <Circle size={15} className="text-gray-300 flex-shrink-0" />}
-                      <span className={`text-xs ${item.done ? 'text-gray-700' : 'text-gray-400'}`}>{item.label}</span>
-                    </div>
-                  ))}
-                </div>
               </>
             )}
 
@@ -1089,176 +1180,6 @@ export default function ModulosWorkspace({ course }) {
                 </div>
               ))}
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Conteúdos do módulo */}
-      {activeModule && (
-        <div className="card p-0 overflow-hidden">
-          <div className="flex items-center justify-between flex-wrap gap-3 px-5 py-4 border-b border-gray-100">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-800">Conteúdos do módulo</h3>
-              <p className="text-xs text-gray-400 mt-0.5">{moduleContents.length} conteúdo{moduleContents.length !== 1 ? 's' : ''} em {activeModule.title}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  value={contentSearch}
-                  onChange={e => setContentSearch(e.target.value)}
-                  placeholder="Buscar conteúdo..."
-                  className="input-field pl-8 text-xs py-2 w-48"
-                />
-              </div>
-              {canEditContent && (
-                <button
-                  onClick={() => { setEditingContent(null); setContentModalOpen(true) }}
-                  disabled={contentLocked}
-                  title={contentLocked ? 'O módulo não está em produção.' : undefined}
-                  className="btn-primary text-xs py-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <Plus size={13} />
-                  Novo conteúdo
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="table-container">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="table-header w-12">Ordem</th>
-                  <th className="table-header">Conteúdo</th>
-                  <th className="table-header w-24">Tipo</th>
-                  <th className="table-header w-12">Resp.</th>
-                  <th className="table-header w-36">Professor</th>
-                  <th className="table-header w-36">Supervisor</th>
-                  <th className="table-header w-36">Coordenação</th>
-                  <th className="table-header w-24">Prazo</th>
-                  <th className="table-header w-28">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {moduleContents.map(mat => {
-                  const isDragging = dragContentId === mat.id
-                  const isDragOver = dragOverContentId === mat.id
-                  return (
-                    <tr
-                      key={mat.id}
-                      draggable={canEditContent && !contentLocked}
-                      onDragStart={canEditContent ? e => handleContentDragStart(e, mat) : undefined}
-                      onDragOver={canEditContent ? e => handleContentDragOver(e, mat) : undefined}
-                      onDrop={canEditContent ? e => handleContentDrop(e, mat) : undefined}
-                      onDragEnd={handleContentDragEnd}
-                      className={`border-b border-gray-50 transition-colors
-                        ${isDragging ? 'opacity-40' : ''}
-                        ${isDragOver ? 'bg-brand-50/30 border-t-2 border-t-brand-400' : 'hover:bg-gray-50/50'}
-                      `}
-                    >
-                      <td className="table-cell text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          {canEditContent && !contentLocked && <GripVertical size={13} className="text-gray-300 cursor-grab active:cursor-grabbing flex-shrink-0" />}
-                          <span className="font-semibold text-gray-600">{mat.session}</span>
-                        </div>
-                      </td>
-                      <td className="table-cell">
-                        <div className="font-medium text-gray-700 truncate max-w-[220px]">{mat.theme}</div>
-                      </td>
-                      <td className="table-cell"><TypeBadge type={mat.type} /></td>
-                      <td className="table-cell">
-                        <StackedAvatars assignees={materialAssignees} responsibles={getMaterialResponsibles(mat)} />
-                      </td>
-                      <td className="table-cell">
-                        <div className="flex items-center gap-1.5">
-                          <MiniAvatar name={activeModule.teacherName} roleLabel="Professor" avatar={activeModule.teacherAvatar} />
-                          {(isAdmin || isProducer) ? (
-                            <InlineStatusSelect
-                              value={mat.status || ''}
-                              options={PROFESSOR_STATUS_OPTIONS}
-                              onChange={val => handleContentStatusChange(mat, 'status', val)}
-                            />
-                          ) : (
-                            <Badge status={mat.status || ''} />
-                          )}
-                        </div>
-                      </td>
-                      <td className="table-cell">
-                        <div className="flex items-center gap-1.5">
-                          <MiniAvatar name={activeModule.supervisorName} roleLabel="Supervisor" avatar={activeModule.supervisorAvatar} />
-                          {(isAdmin || isCourseSupervisor) ? (
-                            <InlineStatusSelect
-                              value={mat.supervisorStatus || ''}
-                              options={CONTENT_SUPERVISOR_STATUS_OPTIONS}
-                              onChange={val => {
-                                if (val === 'aprovado' && mat.status !== 'concluido') {
-                                  showToast('Só é possível aprovar após o professor concluir este conteúdo.', 'error')
-                                  return
-                                }
-                                handleContentStatusChange(mat, 'supervisorStatus', val)
-                              }}
-                            />
-                          ) : (
-                            <Badge status={mat.supervisorStatus || ''} />
-                          )}
-                        </div>
-                      </td>
-                      <td className="table-cell">
-                        <div className="flex items-center gap-1.5">
-                          <MiniAvatar name={activeModule.coordinatorName} roleLabel="Coordenador(a)" avatar={activeModule.coordinatorAvatar} />
-                          {(isAdmin || isCourseCoordinator) ? (
-                            <InlineStatusSelect
-                              value={mat.coordinatorStatus || ''}
-                              options={CONTENT_COORDINATOR_STATUS_OPTIONS}
-                              onChange={val => {
-                                if (val === 'aprovado' && mat.supervisorStatus !== 'aprovado') {
-                                  showToast('Só é possível aprovar após o supervisor aprovar este conteúdo.', 'error')
-                                  return
-                                }
-                                handleContentStatusChange(mat, 'coordinatorStatus', val)
-                              }}
-                            />
-                          ) : (
-                            <Badge status={mat.coordinatorStatus || ''} />
-                          )}
-                        </div>
-                      </td>
-                      <td className="table-cell text-gray-500">{formatDateOnly(mat.deliveryDate)}</td>
-                      <td className="table-cell">
-                        <div className="flex items-center gap-0.5">
-                          <button onClick={() => setViewContent(mat)} title="Visualizar" className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
-                            <Eye size={14} />
-                          </button>
-                          {canEditContent && (
-                            <button onClick={() => { setEditingContent(mat); setContentModalOpen(true) }} title="Editar" className="p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors">
-                              <Pencil size={14} />
-                            </button>
-                          )}
-                          {mat.originalLink && (
-                            <a href={mat.originalLink} target="_blank" rel="noopener noreferrer" title="Abrir link original" className="p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-lg transition-colors">
-                              <Link2 size={14} />
-                            </a>
-                          )}
-                          {canEditContent && (
-                            <button onClick={() => setConfirmDeleteContent(mat)} title="Excluir" className="p-1.5 text-gray-300 hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors">
-                              <Trash2 size={14} />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-                {moduleContents.length === 0 && (
-                  <tr>
-                    <td colSpan={9} className="table-cell text-center py-10 text-gray-400 text-sm">
-                      Nenhum conteúdo vinculado a este módulo ainda.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
           </div>
         </div>
       )}
@@ -1313,13 +1234,14 @@ export default function ModulosWorkspace({ course }) {
         </Modal>
       )}
 
-      {contentModalOpen && activeModule && (
+      {contentModalOpen && (
         <ContentModal
           open={contentModalOpen}
           onClose={() => setContentModalOpen(false)}
           onSave={handleSaveContent}
           saving={savingContent}
-          module={activeModule}
+          modules={modules}
+          defaultModuleId={activeModuleId}
           course={course}
           editing={editingContent}
           canReview={canReviewContent}
@@ -1327,7 +1249,13 @@ export default function ModulosWorkspace({ course }) {
         />
       )}
 
-      <NewModuleModal open={newModuleOpen} onClose={() => setNewModuleOpen(false)} onCreate={handleCreateModule} saving={creatingModule} />
+      <ModuleModal
+        open={newModuleOpen}
+        onClose={() => { setNewModuleOpen(false); setEditingModule(null) }}
+        onSave={handleSaveModule}
+        saving={savingModule}
+        editing={editingModule}
+      />
 
       <ConfirmDialog
         open={!!confirmDeleteModule}
