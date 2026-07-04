@@ -738,8 +738,43 @@ app.patch('/api/materials/:id/status', auth, async (req, res) => {
   const isAdmin = actor.role === 'administrador'
   const isSupervisor = isAdmin || actor.role === 'supervisor'
   const isCoord = isAdmin || isCoordinator(actor)
+  const isProfessor = isAdmin || actor.role === 'professor'
+  let professorStatusChangedDirectly = false
 
-  if (actor.role === 'professor' && !isAdmin) {
+  if (current.moduleId) {
+    // Conteudo vinculado a um modulo: cada papel só mexe no proprio campo,
+    // com o mesmo gate sequencial usado entre supervisor e coordenacao
+    // (professor conclui -> supervisor aprova -> coordenacao aprova).
+    if (isProfessor && Object.prototype.hasOwnProperty.call(req.body, 'status')) {
+      update.status = normalizeOptionalEnum(req.body.status)
+      professorStatusChangedDirectly = true
+    }
+
+    if (isSupervisor && Object.prototype.hasOwnProperty.call(req.body, 'supervisorStatus')) {
+      const nextSupStatus = normalizeOptionalEnum(req.body.supervisorStatus)
+      if (nextSupStatus === 'aprovado' && update.status !== 'concluido') {
+        return res.status(400).json({ message: 'O supervisor so pode aprovar conteudos ja concluidos pelo professor.' })
+      }
+      update.supervisorStatus = nextSupStatus
+      if (update.supervisorStatus === 'ajustes') update.status = 'em_ajustes'
+    }
+
+    if (isCoord && Object.prototype.hasOwnProperty.call(req.body, 'coordinatorStatus')) {
+      const nextCoordStatus = normalizeOptionalEnum(req.body.coordinatorStatus)
+      if (nextCoordStatus === 'aprovado' && update.supervisorStatus !== 'aprovado') {
+        return res.status(400).json({ message: 'A coordenacao so pode aprovar conteudos ja aprovados pelo supervisor.' })
+      }
+      update.coordinatorStatus = nextCoordStatus
+      if (nextCoordStatus === 'ajustes' || nextCoordStatus === 'reprovado') {
+        update.supervisorStatus = 'aguardando'
+        update.status = 'em_ajustes'
+      }
+    }
+
+    if ((isSupervisor || isCoord) && Object.prototype.hasOwnProperty.call(req.body, 'reviewNotes')) {
+      update.reviewNotes = req.body.reviewNotes
+    }
+  } else if (actor.role === 'professor' && !isAdmin) {
     if (Object.prototype.hasOwnProperty.call(req.body, 'status')) update.status = normalizeOptionalEnum(req.body.status)
   } else {
     if (Object.prototype.hasOwnProperty.call(req.body, 'status')) update.status = normalizeOptionalEnum(req.body.status)
@@ -772,10 +807,23 @@ app.patch('/api/materials/:id/status', auth, async (req, res) => {
 
   if (material.moduleId) {
     const CONTENT_ACTION_BY_STATUS = {
+      status: { concluido: 'concluir_conteudo_professor', em_ajustes: 'ajustes_conteudo_professor' },
       supervisorStatus: { aprovado: 'aprovar_conteudo_supervisor', ajustes: 'ajustes_conteudo_supervisor' },
       coordinatorStatus: { aprovado: 'aprovar_conteudo_coordenador', ajustes: 'ajustes_conteudo_coordenador', reprovado: 'reprovar_conteudo_coordenador' },
     }
     const note = String(req.body.reviewNotes || '').trim()
+
+    if (professorStatusChangedDirectly && update.status !== current.status && CONTENT_ACTION_BY_STATUS.status[update.status]) {
+      await store.createModuleEvent({
+        moduleId: material.moduleId,
+        authorId: actor.id,
+        authorName: actor.name,
+        authorRole: actor.role,
+        type: 'history',
+        action: CONTENT_ACTION_BY_STATUS.status[update.status],
+        message: [material.theme, note].filter(Boolean).join(' — ') || material.theme,
+      })
+    }
 
     if (update.supervisorStatus !== current.supervisorStatus && CONTENT_ACTION_BY_STATUS.supervisorStatus[update.supervisorStatus]) {
       await store.createModuleEvent({
@@ -931,6 +979,10 @@ app.patch('/api/modules/:id/status', auth, async (req, res) => {
       case 'enviar_supervisao': {
         if (!(isAdmin || isProducer)) return res.status(403).json({ message: 'Apenas o professor responsavel pode enviar o modulo para supervisao.' })
         if (current.stage !== 'producao') return res.status(400).json({ message: 'O modulo nao esta em producao.' })
+        const summary = await store.getModuleApprovalSummary(current.id)
+        if (summary.total === 0 || summary.professorConcluded < summary.total) {
+          return res.status(400).json({ message: 'Conclua todos os conteudos do modulo antes de enviar para supervisao.' })
+        }
         update = { stage: 'supervisao', professorStatus: 'concluido' }
         break
       }

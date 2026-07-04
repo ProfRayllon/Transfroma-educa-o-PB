@@ -32,6 +32,8 @@ const STAGE_STEPS = [
 const ACTION_LABELS = {
   enviar_supervisao: 'Enviou o módulo para supervisão',
   publicar: 'Publicou o módulo',
+  concluir_conteudo_professor: 'Concluiu um conteúdo (produção)',
+  ajustes_conteudo_professor: 'Colocou um conteúdo em ajustes (produção)',
   aprovar_conteudo_supervisor: 'Aprovou um conteúdo (supervisão)',
   ajustes_conteudo_supervisor: 'Solicitou ajustes em um conteúdo (supervisão)',
   aprovar_conteudo_coordenador: 'Aprovou um conteúdo (coordenação)',
@@ -107,6 +109,7 @@ function formatDateTime(value) {
 function getContentApprovalSummary(contents) {
   return {
     total: contents.length,
+    professorConcluded: contents.filter(c => c.status === 'concluido').length,
     supervisorApproved: contents.filter(c => c.supervisorStatus === 'aprovado').length,
     coordinatorApproved: contents.filter(c => c.coordinatorStatus === 'aprovado').length,
     anyNeedsAttention: contents.some(c => c.supervisorStatus === 'ajustes' || c.coordinatorStatus === 'ajustes' || c.coordinatorStatus === 'reprovado'),
@@ -137,15 +140,9 @@ function computeDisplayStageIndex(m, contents = []) {
   return 1
 }
 
-function professorStatusBadgeKey(status) {
-  if (status === 'concluido') return 'concluido'
-  if (status === 'em_producao') return 'em_producao'
-  return 'rascunho'
-}
-
 /* ─── content modal ─── */
 
-function ContentModal({ open, onClose, onSave, saving, module, course, editing, canReview }) {
+function ContentModal({ open, onClose, onSave, saving, module, course, editing, canReview, canEditStatus }) {
   const [form, setForm] = useState(EMPTY_CONTENT_FORM)
   const [error, setError] = useState('')
 
@@ -275,8 +272,13 @@ function ContentModal({ open, onClose, onSave, saving, module, course, editing, 
         </div>
 
         <div className="col-span-2">
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">Status</label>
-          <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className="select-field">
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Status do professor</label>
+          <select
+            value={form.status}
+            onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+            disabled={!canEditStatus}
+            className={`select-field ${!canEditStatus ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''}`}
+          >
             {PROFESSOR_STATUS_OPTIONS.filter(o => o.value).map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
         </div>
@@ -656,6 +658,7 @@ export default function ModulosWorkspace({ course }) {
     { label: 'Descrição adicionada', done: !!activeModule.description },
     { label: 'Responsáveis definidos', done: !!(activeModule.teacherId && activeModule.supervisorId && activeModule.coordinatorId) },
     { label: 'Conteúdos vinculados', done: moduleContents.length > 0 },
+    { label: 'Produção concluída pelo professor', done: approvalSummary.total > 0 && approvalSummary.professorConcluded === approvalSummary.total },
     { label: 'Revisão do supervisor', done: approvalSummary.total > 0 && approvalSummary.supervisorApproved === approvalSummary.total },
     { label: 'Aprovação da coordenação', done: approvalSummary.total > 0 && approvalSummary.coordinatorApproved === approvalSummary.total },
   ] : []
@@ -881,9 +884,12 @@ export default function ModulosWorkspace({ course }) {
                           <span className="w-5 h-5 rounded-full bg-brand-800 text-white text-[10px] flex items-center justify-center flex-shrink-0">1</span>
                           Produção do professor
                         </span>
-                        <Badge status={professorStatusBadgeKey(activeModule.professorStatus)} />
+                        <span className="text-xs font-semibold text-gray-600">{approvalSummary.professorConcluded}/{approvalSummary.total || 0}</span>
                       </div>
                       <MiniAvatar name={activeModule.teacherName} roleLabel="Professor" avatar={activeModule.teacherAvatar} />
+                      <div className="progress-bar h-1.5">
+                        <div className="progress-fill bg-brand-600" style={{ width: `${approvalSummary.total ? (approvalSummary.professorConcluded / approvalSummary.total) * 100 : 0}%` }} />
+                      </div>
                       {activeModule.professorStatus === 'concluido' && lastSendEvent && (
                         <p className="text-[11px] text-gray-500">
                           Concluído em {formatDateTime(lastSendEvent.createdAt)} por {lastSendEvent.authorName}
@@ -892,9 +898,17 @@ export default function ModulosWorkspace({ course }) {
                       {activeModule.stage === 'producao' && (isAdmin || isProducer) ? (
                         <button
                           onClick={() => runAction('enviar_supervisao')}
-                          disabled={busyAction === 'enviar_supervisao' || !form.teacherId || !form.supervisorId || !form.coordinatorId}
+                          disabled={busyAction === 'enviar_supervisao' || !form.teacherId || !form.supervisorId || !form.coordinatorId || approvalSummary.total === 0 || approvalSummary.professorConcluded < approvalSummary.total}
                           className="btn-primary w-full justify-center text-xs py-2"
-                          title={(!form.teacherId || !form.supervisorId || !form.coordinatorId) ? 'Defina professor, supervisor e coordenador antes de enviar' : undefined}
+                          title={
+                            (!form.teacherId || !form.supervisorId || !form.coordinatorId)
+                              ? 'Defina professor, supervisor e coordenador antes de enviar'
+                              : approvalSummary.total === 0
+                                ? 'Adicione ao menos um conteúdo antes de enviar'
+                                : approvalSummary.professorConcluded < approvalSummary.total
+                                  ? 'Conclua todos os conteúdos antes de enviar para supervisão'
+                                  : undefined
+                          }
                         >
                           <Send size={13} />
                           {busyAction === 'enviar_supervisao' ? 'Enviando...' : 'Finalizar e enviar para supervisão'}
@@ -902,7 +916,7 @@ export default function ModulosWorkspace({ course }) {
                       ) : activeModule.stage !== 'producao' ? (
                         <p className="text-xs text-green-700 flex items-center gap-1.5"><CheckCircle size={13} /> Enviado para supervisão</p>
                       ) : (
-                        <p className="text-xs text-gray-400">Aguardando o professor finalizar a produção.</p>
+                        <p className="text-xs text-gray-400">Aguardando o professor concluir os conteúdos.</p>
                       )}
                     </div>
 
@@ -1029,19 +1043,10 @@ export default function ModulosWorkspace({ course }) {
               <>
                 <div className="card p-4 space-y-3">
                   <h3 className="text-sm font-semibold text-gray-800">Resumo de validação</h3>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <MiniAvatar name={activeModule.teacherName || 'Professor'} roleLabel="Professor" avatar={activeModule.teacherAvatar} />
-                      <div className="min-w-0">
-                        <div className="text-xs font-medium text-gray-700 truncate">{activeModule.teacherName || '—'}</div>
-                        <div className="text-[10px] text-gray-400">Professor</div>
-                      </div>
-                    </div>
-                    <Badge status={professorStatusBadgeKey(activeModule.professorStatus)} />
-                  </div>
                   {[
-                    { label: 'Supervisor', name: activeModule.supervisorName, avatar: activeModule.supervisorAvatar, approved: approvalSummary.supervisorApproved },
-                    { label: 'Coordenador(a)', name: activeModule.coordinatorName, avatar: activeModule.coordinatorAvatar, approved: approvalSummary.coordinatorApproved },
+                    { label: 'Professor', name: activeModule.teacherName, avatar: activeModule.teacherAvatar, count: approvalSummary.professorConcluded, suffix: 'concluídos' },
+                    { label: 'Supervisor', name: activeModule.supervisorName, avatar: activeModule.supervisorAvatar, count: approvalSummary.supervisorApproved, suffix: 'aprovados' },
+                    { label: 'Coordenador(a)', name: activeModule.coordinatorName, avatar: activeModule.coordinatorAvatar, count: approvalSummary.coordinatorApproved, suffix: 'aprovados' },
                   ].map(row => (
                     <div key={row.label} className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
@@ -1051,7 +1056,7 @@ export default function ModulosWorkspace({ course }) {
                           <div className="text-[10px] text-gray-400">{row.label}</div>
                         </div>
                       </div>
-                      <span className="text-xs font-semibold text-gray-600 flex-shrink-0">{row.approved}/{approvalSummary.total || 0} aprovados</span>
+                      <span className="text-xs font-semibold text-gray-600 flex-shrink-0">{row.count}/{approvalSummary.total || 0} {row.suffix}</span>
                     </div>
                   ))}
                   {lastEvent && (
@@ -1128,10 +1133,10 @@ export default function ModulosWorkspace({ course }) {
                   <th className="table-header">Conteúdo</th>
                   <th className="table-header w-24">Tipo</th>
                   <th className="table-header w-12">Resp.</th>
+                  <th className="table-header w-36">Professor</th>
                   <th className="table-header w-36">Supervisor</th>
                   <th className="table-header w-36">Coordenação</th>
                   <th className="table-header w-24">Prazo</th>
-                  <th className="table-header">Status</th>
                   <th className="table-header w-28">Ações</th>
                 </tr>
               </thead>
@@ -1167,12 +1172,32 @@ export default function ModulosWorkspace({ course }) {
                       </td>
                       <td className="table-cell">
                         <div className="flex items-center gap-1.5">
+                          <MiniAvatar name={activeModule.teacherName} roleLabel="Professor" avatar={activeModule.teacherAvatar} />
+                          {(isAdmin || isProducer) ? (
+                            <InlineStatusSelect
+                              value={mat.status || ''}
+                              options={PROFESSOR_STATUS_OPTIONS}
+                              onChange={val => handleContentStatusChange(mat, 'status', val)}
+                            />
+                          ) : (
+                            <Badge status={mat.status || ''} />
+                          )}
+                        </div>
+                      </td>
+                      <td className="table-cell">
+                        <div className="flex items-center gap-1.5">
                           <MiniAvatar name={activeModule.supervisorName} roleLabel="Supervisor" avatar={activeModule.supervisorAvatar} />
                           {(isAdmin || isCourseSupervisor) ? (
                             <InlineStatusSelect
                               value={mat.supervisorStatus || ''}
                               options={CONTENT_SUPERVISOR_STATUS_OPTIONS}
-                              onChange={val => handleContentStatusChange(mat, 'supervisorStatus', val)}
+                              onChange={val => {
+                                if (val === 'aprovado' && mat.status !== 'concluido') {
+                                  showToast('Só é possível aprovar após o professor concluir este conteúdo.', 'error')
+                                  return
+                                }
+                                handleContentStatusChange(mat, 'supervisorStatus', val)
+                              }}
                             />
                           ) : (
                             <Badge status={mat.supervisorStatus || ''} />
@@ -1200,13 +1225,6 @@ export default function ModulosWorkspace({ course }) {
                         </div>
                       </td>
                       <td className="table-cell text-gray-500">{formatDateOnly(mat.deliveryDate)}</td>
-                      <td className="table-cell">
-                        {canEditContent ? (
-                          <InlineStatusSelect value={mat.status || ''} options={PROFESSOR_STATUS_OPTIONS} onChange={val => handleContentStatusChange(mat, 'status', val)} />
-                        ) : (
-                          <Badge status={mat.status || ''} />
-                        )}
-                      </td>
                       <td className="table-cell">
                         <div className="flex items-center gap-0.5">
                           <button onClick={() => setViewContent(mat)} title="Visualizar" className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
@@ -1254,7 +1272,7 @@ export default function ModulosWorkspace({ course }) {
               <TypeBadge type={viewContent.type} />
             </div>
             <div>
-              <div className="text-xs font-medium text-gray-500 mb-1">Status</div>
+              <div className="text-xs font-medium text-gray-500 mb-1">Professor</div>
               <Badge status={viewContent.status || ''} />
             </div>
             <div className="col-span-2">
@@ -1305,6 +1323,7 @@ export default function ModulosWorkspace({ course }) {
           course={course}
           editing={editingContent}
           canReview={canReviewContent}
+          canEditStatus={isAdmin || isProducer}
         />
       )}
 

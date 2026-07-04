@@ -1568,6 +1568,7 @@ async function getModuleApprovalSummary(moduleId) {
     const contents = materials.filter((m) => Number(m.moduleId) === Number(moduleId))
     return {
       total: contents.length,
+      professorConcluded: contents.filter((m) => m.status === 'concluido').length,
       supervisorApproved: contents.filter((m) => m.supervisorStatus === 'aprovado').length,
       coordinatorApproved: contents.filter((m) => m.coordinatorStatus === 'aprovado').length,
     }
@@ -1576,6 +1577,7 @@ async function getModuleApprovalSummary(moduleId) {
   const [[row]] = await pool.execute(
     `SELECT
       COUNT(*) AS total,
+      SUM(CASE WHEN status = 'concluido' THEN 1 ELSE 0 END) AS professor_concluded,
       SUM(CASE WHEN supervisor_status = 'aprovado' THEN 1 ELSE 0 END) AS supervisor_approved,
       SUM(CASE WHEN coordinator_status = 'aprovado' THEN 1 ELSE 0 END) AS coordinator_approved
      FROM materials WHERE module_id = ?`,
@@ -1583,6 +1585,7 @@ async function getModuleApprovalSummary(moduleId) {
   )
   return {
     total: row.total,
+    professorConcluded: Number(row.professor_concluded) || 0,
     supervisorApproved: Number(row.supervisor_approved) || 0,
     coordinatorApproved: Number(row.coordinator_approved) || 0,
   }
