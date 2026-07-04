@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
-import { Plus, CheckCircle, FileText, Clock, Eye, Search, Filter, X, ExternalLink, ArrowLeft, Link2, Pencil, SlidersHorizontal, GripVertical, Trash2 } from 'lucide-react'
+import { useLocation } from 'react-router-dom'
+import { Plus, CheckCircle, FileText, Clock, Eye, Search, Filter, X, ExternalLink, Link2, Pencil, SlidersHorizontal, GripVertical, Trash2 } from 'lucide-react'
 import Badge from '../components/ui/Badge'
 import StatCard from '../components/ui/StatCard'
 import Modal from '../components/ui/Modal'
@@ -549,7 +549,6 @@ export default function Producao() {
   const { user, can } = useAuth()
   const { materials, setMaterials, courses, materialAssignees, saveMaterial, approveMaterial, updateMaterialStatus, updateMaterialSession, deleteMaterial } = useData()
   const location = useLocation()
-  const navigate = useNavigate()
   const initialCourse = location.state?.course || 'Todos'
   const [filters, setFilters] = useState({ course: initialCourse, session: '', responsible: 'Todos', status: '' })
   const [search, setSearch] = useState('')
@@ -749,29 +748,16 @@ export default function Producao() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          {activeCourse && (
-            <button
-              onClick={() => navigate('/cursos')}
-              className="flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-800 font-medium mb-1.5 group"
-            >
-              <ArrowLeft size={13} className="group-hover:-translate-x-0.5 transition-transform" />
-              Voltar para Cursos
-            </button>
-          )}
-          <h1 className="page-title">{activeCourse ? 'Produção do curso' : 'Produção'}</h1>
-          <p className="page-subtitle">
-            {activeCourse
-              ? `Curso: ${activeCourse.name}`
-              : 'Acompanhe os materiais produzidos pelos professores/produtores.'}
-          </p>
-          {!activeCourse && filters.course === 'Todos' && courses.length > 0 && (
-            <p className="text-xs text-gray-400 mt-0.5">Selecione um curso no filtro abaixo para abrir a produção por módulos.</p>
-          )}
-        </div>
-        {!activeCourse && (
+      {/* Header (a view por modulos renderiza seu proprio cabecalho) */}
+      {!activeCourse && (
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="page-title">Produção</h1>
+            <p className="page-subtitle">Acompanhe os materiais produzidos pelos professores/produtores.</p>
+            {filters.course === 'Todos' && courses.length > 0 && (
+              <p className="text-xs text-gray-400 mt-0.5">Selecione um curso no filtro abaixo para abrir a produção por módulos.</p>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             {canEdit && (
               <button
@@ -783,8 +769,8 @@ export default function Producao() {
               </button>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {activeCourse ? (
         <ModulosWorkspace course={activeCourse} />

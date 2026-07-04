@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Plus, Search, GripVertical, CheckCircle, Send, Rocket, Trash2, Pencil, Eye,
-  Link2, ChevronRight, AlertTriangle,
+  Link2, AlertTriangle, ArrowLeft, ChevronsLeft, ChevronsRight,
   Layers, FileText, Clock,
 } from 'lucide-react'
 import Badge from '../ui/Badge'
@@ -358,12 +359,13 @@ function ModuleModal({ open, onClose, onSave, saving, editing }) {
 
 export default function ModulosWorkspace({ course }) {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const { materials, materialAssignees, saveMaterial, deleteMaterial, updateMaterialStatus, updateMaterialSession, loadCourses } = useData()
 
   const [modules, setModules] = useState([])
   const [loading, setLoading] = useState(true)
   const [activeModuleId, setActiveModuleId] = useState(null)
-  const [moduleSearch, setModuleSearch] = useState('')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [contentSearch, setContentSearch] = useState('')
   const [savingModule, setSavingModule] = useState(false)
   const [busyAction, setBusyAction] = useState(null)
@@ -420,10 +422,13 @@ export default function ModulosWorkspace({ course }) {
   // sem passar pelo gate sequencial (professor -> supervisor -> coordenacao).
   const isPrivileged = isAdmin || isCourseCoordinator
 
-  const canEditModule = !!activeModule && (isAdmin || (canManageModules && activeModule.stage === 'producao'))
   const canEditContent = isAdmin || isProducer || isCourseSupervisor || isCourseCoordinator
   const canReviewContent = isAdmin || isCourseSupervisor || isCourseCoordinator
   const contentLocked = !!activeModule && activeModule.stage !== 'producao' && !isAdmin
+
+  // Editar qualquer modulo em producao; excluir e restrito ao supervisor do curso (admin sempre pode).
+  const canEditThisModule = (m) => !!m && (isAdmin || (canManageModules && m.stage === 'producao'))
+  const canDeleteThisModule = (m) => !!m && (isAdmin || (isCourseSupervisor && m.stage === 'producao'))
 
   const courseMaterials = useMemo(
     () => materials.filter(m => Number(m.courseId) === Number(course.id) || m.course === course.name),
@@ -470,12 +475,6 @@ export default function ModulosWorkspace({ course }) {
       return summary.total > 0 && summary.coordinatorApproved === summary.total
     }).length,
   }), [modules, courseMaterials, contentsByModuleId])
-
-  const filteredModules = useMemo(() => {
-    if (!moduleSearch) return modules
-    const q = moduleSearch.toLowerCase()
-    return modules.filter(m => m.title?.toLowerCase().includes(q))
-  }, [modules, moduleSearch])
 
   /* ── module actions ── */
 
@@ -639,11 +638,43 @@ export default function ModulosWorkspace({ course }) {
 
   const canPublish = !!activeModule && isPrivileged && activeModule.stage === 'supervisao'
     && approvalSummary.total > 0 && approvalSummary.coordinatorApproved === approvalSummary.total
-  // Exclusao de modulo e restrita ao supervisor do curso (admin sempre pode).
-  const canDeleteModule = !!activeModule && (isAdmin || (isCourseSupervisor && activeModule.stage === 'producao'))
 
   return (
     <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <button
+            onClick={() => navigate('/cursos')}
+            className="flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-800 font-medium mb-1.5 group"
+          >
+            <ArrowLeft size={13} className="group-hover:-translate-x-0.5 transition-transform" />
+            Voltar para Cursos
+          </button>
+          <h1 className="page-title">Produção do curso</h1>
+          <p className="page-subtitle">Curso: {course.name}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {canManageModules && (
+            <button onClick={() => { setEditingModule(null); setNewModuleOpen(true) }} className="btn-secondary text-sm">
+              <Plus size={14} />
+              Novo módulo
+            </button>
+          )}
+          {canEditContent && (
+            <button
+              onClick={() => { setEditingContent(null); setContentModalOpen(true) }}
+              disabled={modules.length === 0}
+              title={modules.length === 0 ? 'Crie um módulo antes de adicionar conteúdo.' : undefined}
+              className="btn-primary text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Plus size={14} />
+              Novo conteúdo
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard icon={Layers} iconBg="bg-brand-100" iconColor="text-brand-700" value={stats.modulos} label="Módulos" />
@@ -651,26 +682,6 @@ export default function ModulosWorkspace({ course }) {
         <StatCard icon={Clock} iconBg="bg-amber-100" iconColor="text-amber-600" value={stats.emProducao} label="Em produção" />
         <StatCard icon={Eye} iconBg="bg-purple-100" iconColor="text-purple-700" value={stats.aguardando} label="Aguardando validação" />
         <StatCard icon={CheckCircle} iconBg="bg-green-100" iconColor="text-green-600" value={stats.aprovados} label="Aprovados" />
-      </div>
-
-      <div className="flex items-center justify-end gap-2">
-        {canManageModules && (
-          <button onClick={() => { setEditingModule(null); setNewModuleOpen(true) }} className="btn-secondary text-sm">
-            <Plus size={14} />
-            Novo módulo
-          </button>
-        )}
-        {canEditContent && (
-          <button
-            onClick={() => { setEditingContent(null); setContentModalOpen(true) }}
-            disabled={modules.length === 0}
-            title={modules.length === 0 ? 'Crie um módulo antes de adicionar conteúdo.' : undefined}
-            className="btn-primary text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <Plus size={14} />
-            Novo conteúdo
-          </button>
-        )}
       </div>
 
       {modules.length === 0 ? (
@@ -690,21 +701,21 @@ export default function ModulosWorkspace({ course }) {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr_320px] gap-4 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4 items-start">
           {/* Sidebar: módulos */}
           <div className="card p-4 space-y-3">
-            <h3 className="text-sm font-semibold text-gray-800">Estrutura do curso</h3>
-            <div className="relative">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                value={moduleSearch}
-                onChange={e => setModuleSearch(e.target.value)}
-                placeholder="Buscar módulo..."
-                className="input-field pl-8 text-xs py-2"
-              />
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-800">Estrutura do curso</h3>
+              <button
+                onClick={() => setSidebarCollapsed(v => !v)}
+                title={sidebarCollapsed ? 'Expandir' : 'Recolher'}
+                className="p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 rounded-md transition-colors flex-shrink-0"
+              >
+                {sidebarCollapsed ? <ChevronsRight size={14} /> : <ChevronsLeft size={14} />}
+              </button>
             </div>
-            <div className="space-y-2 max-h-[640px] overflow-y-auto">
-              {filteredModules.map(m => {
+            <div className="space-y-1.5 max-h-[640px] overflow-y-auto">
+              {modules.map(m => {
                 const isActive = m.id === activeModuleId
                 const isDragOver = dragOverModuleId === m.id
                 return (
@@ -716,26 +727,40 @@ export default function ModulosWorkspace({ course }) {
                     onDrop={canManageModules ? e => handleModuleDrop(e, m) : undefined}
                     onDragEnd={handleModuleDragEnd}
                     onClick={() => setActiveModuleId(m.id)}
-                    className={`p-3 rounded-xl border cursor-pointer transition-colors
+                    className={`px-2.5 py-2 rounded-lg border cursor-pointer transition-colors flex items-center gap-1.5
                       ${isActive ? 'border-brand-400 bg-brand-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}
                       ${isDragOver ? 'ring-2 ring-brand-300' : ''}
                     `}
                   >
-                    <div className="flex items-start gap-2">
-                      {canManageModules && <GripVertical size={13} className="text-gray-300 mt-0.5 cursor-grab active:cursor-grabbing flex-shrink-0" />}
-                      <div className="min-w-0 flex-1">
-                        <div className={`text-sm font-medium truncate ${isActive ? 'text-brand-900' : 'text-gray-700'}`}>{m.title}</div>
-                        <div className="text-[11px] text-gray-400 mt-0.5">{moduleContentCounts[m.id] || 0} conteúdos</div>
-                        <div className="mt-1.5"><Badge status={getModuleStatusKey(m, contentsByModuleId[m.id] || [])} /></div>
+                    {canManageModules && !sidebarCollapsed && (
+                      <GripVertical size={13} className="text-gray-300 cursor-grab active:cursor-grabbing flex-shrink-0" />
+                    )}
+                    <span className={`text-sm font-medium truncate flex-1 min-w-0 ${isActive ? 'text-brand-900' : 'text-gray-700'}`}>{m.title}</span>
+                    {!sidebarCollapsed && (
+                      <div className="flex items-center gap-0.5 flex-shrink-0">
+                        {canEditThisModule(m) && (
+                          <button
+                            onClick={e => { e.stopPropagation(); setEditingModule(m); setNewModuleOpen(true) }}
+                            title="Editar módulo"
+                            className="p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 rounded-md transition-colors"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                        )}
+                        {canDeleteThisModule(m) && (
+                          <button
+                            onClick={e => { e.stopPropagation(); setConfirmDeleteModule(m) }}
+                            title="Excluir módulo"
+                            className="p-1 text-gray-300 hover:bg-red-50 hover:text-red-500 rounded-md transition-colors"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
                       </div>
-                      <ChevronRight size={14} className={isActive ? 'text-brand-500' : 'text-gray-300'} />
-                    </div>
+                    )}
                   </div>
                 )
               })}
-              {filteredModules.length === 0 && (
-                <p className="text-xs text-gray-400 text-center py-4">Nenhum módulo encontrado.</p>
-              )}
             </div>
           </div>
 
@@ -743,18 +768,46 @@ export default function ModulosWorkspace({ course }) {
           {activeModule ? (
             <div className="card p-0 overflow-hidden">
               <div className="flex items-center justify-between flex-wrap gap-3 px-5 py-4 border-b border-gray-100">
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-800">Conteúdos do módulo</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">{moduleContents.length} conteúdo{moduleContents.length !== 1 ? 's' : ''} em {activeModule.title}</p>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm font-semibold text-gray-800 truncate">{activeModule.title}</h3>
+                    <Badge status={getModuleStatusKey(activeModule, moduleContents)} />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">{moduleContents.length} conteúdo{moduleContents.length !== 1 ? 's' : ''}</p>
                 </div>
-                <div className="relative">
-                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    value={contentSearch}
-                    onChange={e => setContentSearch(e.target.value)}
-                    placeholder="Buscar conteúdo..."
-                    className="input-field pl-8 text-xs py-2 w-48"
-                  />
+                <div className="flex items-center gap-2 flex-wrap">
+                  {activeModule.stage === 'producao' && (isAdmin || isProducer) && (
+                    <button
+                      onClick={() => runAction('enviar_supervisao')}
+                      disabled={busyAction === 'enviar_supervisao' || approvalSummary.total === 0 || approvalSummary.professorConcluded < approvalSummary.total}
+                      className="btn-primary text-xs py-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                      title={
+                        approvalSummary.total === 0
+                          ? 'Adicione ao menos um conteúdo antes de enviar'
+                          : approvalSummary.professorConcluded < approvalSummary.total
+                            ? 'Conclua todos os conteúdos antes de enviar para supervisão'
+                            : undefined
+                      }
+                    >
+                      <Send size={13} />
+                      {busyAction === 'enviar_supervisao' ? 'Enviando...' : 'Enviar para supervisão'}
+                    </button>
+                  )}
+                  {canPublish && (
+                    <button onClick={() => runAction('publicar')} disabled={!!busyAction} className="btn-primary text-xs py-2">
+                      <Rocket size={13} />
+                      {busyAction === 'publicar' ? 'Publicando...' : 'Publicar módulo'}
+                    </button>
+                  )}
+                  <div className="relative">
+                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      value={contentSearch}
+                      onChange={e => setContentSearch(e.target.value)}
+                      placeholder="Buscar conteúdo..."
+                      className="input-field pl-8 text-xs py-2 w-48"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -890,85 +943,6 @@ export default function ModulosWorkspace({ course }) {
               Selecione um módulo para visualizar os conteúdos.
             </div>
           )}
-
-          {/* Right: fluxo de validação */}
-          <div className="space-y-4">
-            {activeModule && (
-              <div className="card p-4 space-y-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-gray-800 truncate">{activeModule.title}</h3>
-                    <div className="mt-1"><Badge status={getModuleStatusKey(activeModule, moduleContents)} /></div>
-                  </div>
-                  {canEditModule && (
-                    <button
-                      onClick={() => { setEditingModule(activeModule); setNewModuleOpen(true) }}
-                      title="Editar módulo"
-                      className="p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors flex-shrink-0"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                  )}
-                </div>
-
-                {activeModule.description && (
-                  <p className="text-xs text-gray-500 leading-relaxed">{activeModule.description}</p>
-                )}
-
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <div className="text-gray-400">Carga horária</div>
-                    <div className="text-gray-700 font-medium">{activeModule.workload || '—'}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-400">Prazo de entrega</div>
-                    <div className="text-gray-700 font-medium">{formatDateOnly(activeModule.deadline)}</div>
-                  </div>
-                </div>
-
-                {/* Ações */}
-                <div className="space-y-2 pt-3 border-t border-gray-100">
-                  {activeModule.stage === 'producao' && (isAdmin || isProducer) && (
-                    <button
-                      onClick={() => runAction('enviar_supervisao')}
-                      disabled={busyAction === 'enviar_supervisao' || approvalSummary.total === 0 || approvalSummary.professorConcluded < approvalSummary.total}
-                      className="btn-primary w-full justify-center text-xs py-2"
-                      title={
-                        approvalSummary.total === 0
-                          ? 'Adicione ao menos um conteúdo antes de enviar'
-                          : approvalSummary.professorConcluded < approvalSummary.total
-                            ? 'Conclua todos os conteúdos antes de enviar para supervisão'
-                            : undefined
-                      }
-                    >
-                      <Send size={13} />
-                      {busyAction === 'enviar_supervisao' ? 'Enviando...' : 'Finalizar e enviar para supervisão'}
-                    </button>
-                  )}
-                  {activeModule.stage !== 'producao' && activeModule.stage !== 'publicado' && (
-                    <p className="text-xs text-green-700 flex items-center gap-1.5"><CheckCircle size={13} /> Enviado para supervisão</p>
-                  )}
-                  {canPublish && (
-                    <button onClick={() => runAction('publicar')} disabled={!!busyAction} className="btn-primary w-full justify-center text-xs py-2">
-                      <Rocket size={14} />
-                      {busyAction === 'publicar' ? 'Publicando...' : 'Publicar módulo'}
-                    </button>
-                  )}
-                  {activeModule.stage === 'publicado' && (
-                    <p className="text-xs text-brand-700 flex items-center gap-1.5"><CheckCircle size={13} /> Módulo publicado</p>
-                  )}
-                  {canDeleteModule && (
-                    <button
-                      onClick={() => setConfirmDeleteModule(activeModule)}
-                      className="w-full flex items-center justify-center gap-1.5 text-xs text-gray-400 hover:text-red-600 transition-colors pt-1"
-                    >
-                      <Trash2 size={13} /> Excluir módulo
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
         </div>
       )}
 
