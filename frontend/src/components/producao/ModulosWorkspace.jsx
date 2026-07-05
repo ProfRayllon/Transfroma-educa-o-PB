@@ -100,14 +100,6 @@ function getModuleStatusKey(m, contents = []) {
   return 'em_validacao'
 }
 
-function getContentStatusKey(mat) {
-  if (mat.coordinatorStatus === 'aprovado') return 'aprovado'
-  if (mat.coordinatorStatus === 'reprovado') return 'reprovado'
-  if (mat.supervisorStatus === 'ajustes' || mat.coordinatorStatus === 'ajustes') return 'ajustes'
-  if (mat.status === 'concluido') return 'em_validacao'
-  return mat.status || 'nao_iniciado'
-}
-
 /* ─── content modal ─── */
 
 function ContentModal({ open, onClose, onSave, saving, modules, defaultModuleId, course, editing, canReview, canEditStatus }) {
@@ -793,13 +785,12 @@ export default function ModulosWorkspace({ course }) {
                 <tr className="border-b border-gray-100">
                   <th className="table-header w-16">Ordem</th>
                   <th className="table-header">Item</th>
-                  <th className="table-header w-24">Tipo</th>
+                  <th className="table-header w-14">Tipo</th>
                   <th className="table-header w-36">Professor</th>
                   <th className="table-header w-36">Supervisor</th>
                   <th className="table-header w-36">Coordenação</th>
-                  <th className="table-header w-20">Prazo</th>
-                  <th className="table-header w-28">Status</th>
-                  <th className="table-header w-32">Ações</th>
+                  <th className="table-header w-28">Link</th>
+                  <th className="table-header w-28">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -845,7 +836,6 @@ export default function ModulosWorkspace({ course }) {
                             <span className="text-xs text-gray-400 whitespace-nowrap">{allContents.length} conteúdo{allContents.length !== 1 ? 's' : ''}</span>
                           </div>
                         </td>
-                        <td className="table-cell" />
                         <td className="table-cell" />
                         <td className="table-cell" />
                         <td className="table-cell" />
@@ -922,7 +912,6 @@ export default function ModulosWorkspace({ course }) {
                         const isDragOver = dragOverContentId === mat.id
                         const responsibleAvatar = materialAssignees.find(a => Number(a.id) === Number(mat.responsibleId))?.avatar
                         const rowLocked = m.stage !== 'producao' && !isAdmin
-                        const contentMenuKey = `content-${mat.id}`
                         const canDrag = canEditContent && !rowLocked && reorderingAllowed
                         return (
                           <tr
@@ -1000,51 +989,21 @@ export default function ModulosWorkspace({ course }) {
                                 )}
                               </div>
                             </td>
-                            <td className="table-cell text-gray-500">{formatDateOnly(mat.deliveryDate)}</td>
-                            <td className="table-cell"><Badge status={getContentStatusKey(mat)} /></td>
+                            <td className="table-cell"><LinkChip url={mat.adjustedLink || mat.originalLink} /></td>
                             <td className="table-cell">
-                              <div className="flex items-center justify-end gap-0.5 relative">
+                              <div className="flex items-center justify-end gap-0.5">
                                 <button onClick={() => setViewContent(mat)} title="Visualizar" className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
                                   <Eye size={14} />
                                 </button>
                                 {canEditContent && (
-                                  <button
-                                    onClick={() => setOpenMenuKey(k => k === contentMenuKey ? null : contentMenuKey)}
-                                    title="Mais ações"
-                                    className="p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors"
-                                  >
-                                    <MoreVertical size={14} />
+                                  <button onClick={() => openEditContent(mat)} title="Editar" className="p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors">
+                                    <Pencil size={14} />
                                   </button>
                                 )}
-                                {openMenuKey === contentMenuKey && (
-                                  <>
-                                    <div className="fixed inset-0 z-40" onClick={() => setOpenMenuKey(null)} />
-                                    <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden z-50 text-left">
-                                      <button
-                                        onClick={() => { setOpenMenuKey(null); openEditContent(mat) }}
-                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                                      >
-                                        <Pencil size={14} /> Editar
-                                      </button>
-                                      {mat.originalLink && (
-                                        <a
-                                          href={mat.originalLink}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          onClick={() => setOpenMenuKey(null)}
-                                          className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                                        >
-                                          <Link2 size={14} /> Abrir link original
-                                        </a>
-                                      )}
-                                      <button
-                                        onClick={() => { setOpenMenuKey(null); setConfirmDeleteContent(mat) }}
-                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                                      >
-                                        <Trash2 size={14} /> Excluir
-                                      </button>
-                                    </div>
-                                  </>
+                                {canEditContent && (
+                                  <button onClick={() => setConfirmDeleteContent(mat)} title="Excluir" className="p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors">
+                                    <Trash2 size={14} />
+                                  </button>
                                 )}
                               </div>
                             </td>
@@ -1053,7 +1012,7 @@ export default function ModulosWorkspace({ course }) {
                       })}
                       {isExpanded && visibleContents.length === 0 && (
                         <tr>
-                          <td colSpan={9} className="table-cell text-center py-6 text-gray-400 text-xs pl-10">
+                          <td colSpan={8} className="table-cell text-center py-6 text-gray-400 text-xs pl-10">
                             Nenhum conteúdo vinculado a este módulo ainda.
                           </td>
                         </tr>
@@ -1063,7 +1022,7 @@ export default function ModulosWorkspace({ course }) {
                 })}
                 {structureRows.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="table-cell text-center py-10 text-gray-400 text-sm">
+                    <td colSpan={8} className="table-cell text-center py-10 text-gray-400 text-sm">
                       Nenhum módulo encontrado.
                     </td>
                   </tr>
