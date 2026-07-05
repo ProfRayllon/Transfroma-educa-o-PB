@@ -15,6 +15,7 @@ import {
   getMaterialResponsibles,
   TypeBadge,
   LinkChip,
+  StackedAvatars,
   MiniAvatar,
   InlineStatusSelect,
 } from '../components/producao/shared'
@@ -488,8 +489,11 @@ export default function Producao() {
   const { materials, courses, materialAssignees, saveMaterial, updateMaterialStatus, deleteMaterial } = useData()
   const location = useLocation()
   const navigate = useNavigate()
-  const initialCourse = location.state?.course || 'Todos'
-  const [filters, setFilters] = useState({ course: initialCourse, session: '', responsible: 'Todos', status: '' })
+  // Capturado uma unica vez ao entrar na pagina (vindo do botao "Producao" em Cursos).
+  // So esse valor abre o workspace por modulo — mudar o filtro "Curso" abaixo nunca navega,
+  // apenas restringe a visao geral.
+  const [workspaceCourseName] = useState(() => location.state?.course || null)
+  const [filters, setFilters] = useState({ course: workspaceCourseName || 'Todos', session: '', responsible: 'Todos', status: '', supervisor: 'Todos', coordinator: 'Todos' })
   const [search, setSearch] = useState('')
   const [viewMaterial, setViewMaterial] = useState(null)
   const [editMaterial, setEditMaterial] = useState(null)
@@ -505,7 +509,9 @@ export default function Producao() {
   const isAdmin = user?.role === 'administrador'
   const canViewOverview = isAdmin || isCoordinator || user?.role === 'supervisor'
   const courseOptions = ['Todos', ...courses.map(c => c.name)]
-  const activeCourse = filters.course !== 'Todos' ? courses.find(c => c.name === filters.course) : null
+  const supervisorOptions = ['Todos', ...new Set(courses.map(c => c.supervisorName).filter(Boolean))]
+  const coordinatorOptions = ['Todos', ...new Set(courses.map(c => c.coordinatorName).filter(Boolean))]
+  const activeCourse = workspaceCourseName ? courses.find(c => c.name === workspaceCourseName) : null
 
   const getMaterialFlags = (material) => {
     const course = findCourseForMaterial(material, courses)
@@ -542,9 +548,17 @@ export default function Producao() {
     return getMaterialFlags(material).isPrivileged
   }
 
+  const matchesStructuralFilters = (m) => {
+    if (filters.course !== 'Todos' && !materialMatchesCourseName(m, filters.course, courses)) return false
+    const course = findCourseForMaterial(m, courses)
+    if (filters.supervisor !== 'Todos' && course?.supervisorName !== filters.supervisor) return false
+    if (filters.coordinator !== 'Todos' && course?.coordinatorName !== filters.coordinator) return false
+    return true
+  }
+
   const filtered = useMemo(() => {
     return materials.filter(m => {
-      if (filters.course !== 'Todos' && !materialMatchesCourseName(m, filters.course, courses)) return false
+      if (!matchesStructuralFilters(m)) return false
       if (filters.status && m.status !== filters.status) return false
       if (filters.responsible !== 'Todos' && !getMaterialResponsibleNames(m).includes(filters.responsible)) return false
       if (filters.session && String(m.session) !== filters.session) return false
@@ -562,9 +576,7 @@ export default function Producao() {
   const paged = filtered.slice((page - 1) * perPage, page * perPage)
   const totalPages = Math.ceil(filtered.length / perPage)
 
-  const statsMaterials = filters.course !== 'Todos'
-    ? materials.filter(m => materialMatchesCourseName(m, filters.course, courses))
-    : materials
+  const statsMaterials = materials.filter(matchesStructuralFilters)
   const stats = {
     total: statsMaterials.length,
     emProducao: statsMaterials.filter(m => ['nao_iniciado', 'em_execucao', 'em_ajustes'].includes(m.status)).length,
@@ -619,7 +631,7 @@ export default function Producao() {
   }
 
   const clearFilters = () => {
-    setFilters({ course: 'Todos', session: '', responsible: 'Todos', status: '' })
+    setFilters({ course: 'Todos', session: '', responsible: 'Todos', status: '', supervisor: 'Todos', coordinator: 'Todos' })
     setSearch('')
     setPage(1)
   }
@@ -633,9 +645,6 @@ export default function Producao() {
         <div>
           <h1 className="page-title">Produção</h1>
           <p className="page-subtitle">Visão geral dos materiais produzidos em todos os cursos.</p>
-          {canViewOverview && filters.course === 'Todos' && courses.length > 0 && (
-            <p className="text-xs text-gray-400 mt-0.5">Selecione um curso no filtro abaixo para abrir a produção por módulos.</p>
-          )}
         </div>
       )}
 
@@ -693,6 +702,26 @@ export default function Producao() {
               className="select-field"
             >
               {responsibleOptions.map(r => <option key={r}>{r}</option>)}
+            </select>
+          </div>
+          <div className="flex-1 min-w-[140px]">
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Supervisor</label>
+            <select
+              value={filters.supervisor}
+              onChange={e => { setFilters(f => ({ ...f, supervisor: e.target.value })); setPage(1) }}
+              className="select-field"
+            >
+              {supervisorOptions.map(s => <option key={s}>{s}</option>)}
+            </select>
+          </div>
+          <div className="flex-1 min-w-[140px]">
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Coordenador</label>
+            <select
+              value={filters.coordinator}
+              onChange={e => { setFilters(f => ({ ...f, coordinator: e.target.value })); setPage(1) }}
+              className="select-field"
+            >
+              {coordinatorOptions.map(c => <option key={c}>{c}</option>)}
             </select>
           </div>
           <div className="w-36">
@@ -768,7 +797,6 @@ export default function Producao() {
                 const canEditSupStatus = getCanEditSupervisorStatus(mat)
                 const canEditCoordStatus = getCanEditCoordinatorStatus(mat)
                 const matCourse = flags.course
-                const responsibleAvatar = materialAssignees.find(a => Number(a.id) === Number(mat.responsibleId))?.avatar
                 const supName = matCourse?.supervisorName || null
                 const supAvatar = matCourse?.supervisorAvatar || null
                 const coordName = matCourse?.coordinatorName || null
@@ -794,7 +822,7 @@ export default function Producao() {
                   <td className="table-cell"><TypeBadge type={mat.type} iconOnly /></td>
                   <td className="table-cell">
                     <div className="flex items-center gap-1.5">
-                      <MiniAvatar name={mat.responsibleName} roleLabel="Professor" avatar={responsibleAvatar} />
+                      <StackedAvatars assignees={materialAssignees} responsibles={getMaterialResponsibles(mat)} />
                       {canEditProfStatus ? (
                         <InlineStatusSelect
                           value={mat.status || ''}
