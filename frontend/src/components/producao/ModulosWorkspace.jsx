@@ -840,7 +840,7 @@ export default function ModulosWorkspace({ course }) {
                             <div className="w-7 h-7 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center flex-shrink-0">
                               <Layers size={14} />
                             </div>
-                            <span className="font-bold text-gray-900 truncate">{m.title}</span>
+                            <span className="font-bold text-gray-900 truncate max-w-48" title={m.title}>{m.title}</span>
                             <Badge status={getModuleStatusKey(m, allContents)} />
                             <span className="text-xs text-gray-400 whitespace-nowrap">{allContents.length} conteúdo{allContents.length !== 1 ? 's' : ''}</span>
                           </div>
@@ -948,7 +948,7 @@ export default function ModulosWorkspace({ course }) {
                                 <div className="w-6 h-6 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
                                   <FileText size={12} />
                                 </div>
-                                <span className="text-gray-700 truncate">{mat.theme}</span>
+                                <span className="text-gray-700 truncate max-w-56" title={mat.theme}>{mat.theme}</span>
                               </div>
                             </td>
                             <td className="table-cell"><TypeBadge type={mat.type} /></td>
