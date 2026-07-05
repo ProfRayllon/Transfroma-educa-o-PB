@@ -1,4 +1,7 @@
-import { FileText, CheckSquare, ExternalLink, Link2 } from 'lucide-react'
+import {
+  FileText, ExternalLink, Link2, Video, Presentation, ClipboardList,
+  Paperclip, MousePointerClick, Award, ListChecks, HelpCircle, BookOpen, File,
+} from 'lucide-react'
 
 export const PROFESSOR_STATUS_OPTIONS = [
   { value: '', label: '—' },
@@ -11,15 +14,29 @@ export const PROFESSOR_STATUS_OPTIONS = [
 export const MATERIAL_TYPE_OPTIONS = [
   { value: 'videoaula', label: 'Videoaula' },
   { value: 'apresentacao', label: 'Apresentação' },
-  { value: 'atividade_escrita', label: 'Atividade escrita' },
-  { value: 'material_complementar', label: 'Material complementar' },
+  { value: 'atividade_escrita', label: 'Tarefa' },
+  { value: 'material_complementar', label: 'Arquivo' },
   { value: 'atividade_interativa', label: 'Atividade interativa' },
   { value: 'outro', label: 'Outro' },
-  { value: 'ebook', label: 'Ebook' },
+  { value: 'ebook', label: 'E-book' },
   { value: 'avaliacao_final', label: 'Avaliação final' },
-  { value: 'atividade_objetiva', label: 'Atividade objetiva' },
+  { value: 'atividade_objetiva', label: 'Quiz' },
   { value: 'pdf', label: 'PDF' },
 ]
+
+const TYPE_ICONS = {
+  videoaula: Video,
+  apresentacao: Presentation,
+  atividade_escrita: ClipboardList,
+  material_complementar: Paperclip,
+  atividade_interativa: MousePointerClick,
+  outro: HelpCircle,
+  ebook: BookOpen,
+  avaliacao_final: Award,
+  atividade_objetiva: ListChecks,
+  pdf: File,
+  Aula: Video,
+}
 
 export const TYPE_LABELS = Object.fromEntries(MATERIAL_TYPE_OPTIONS.map((option) => [option.value, option.label]))
 
@@ -31,20 +48,38 @@ export function getMaterialResponsibles(material) {
   return []
 }
 
-export function TypeBadge({ type }) {
+export function TypeBadge({ type, iconOnly = false }) {
   const documentTypes = ['videoaula', 'apresentacao', 'ebook', 'pdf', 'Aula']
   const types = Array.isArray(type) ? type.filter(Boolean).slice(0, 1) : (type ? [type] : [])
   if (!types.length) return <span className="text-gray-300 text-xs">—</span>
   return (
     <div className="flex flex-wrap gap-1">
       {types.map(t => {
-        const cls = documentTypes.includes(t)
+        const Icon = TYPE_ICONS[t] || FileText
+        const isDoc = documentTypes.includes(t)
+        const label = TYPE_LABELS[t] || t
+
+        if (iconOnly) {
+          return (
+            <div key={t} className="relative group inline-flex">
+              <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isDoc ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}`}>
+                <Icon size={14} />
+              </div>
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none">
+                <div className="bg-gray-800 text-white text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-lg">{label}</div>
+                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+              </div>
+            </div>
+          )
+        }
+
+        const cls = isDoc
           ? 'bg-blue-50 text-blue-700 border border-blue-200'
           : 'bg-orange-50 text-orange-700 border border-orange-200'
         return (
           <span key={t} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium ${cls}`}>
-            {documentTypes.includes(t) ? <FileText size={10} /> : <CheckSquare size={10} />}
-            {TYPE_LABELS[t] || t}
+            <Icon size={10} />
+            {label}
           </span>
         )
       })}

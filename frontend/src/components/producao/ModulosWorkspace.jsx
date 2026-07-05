@@ -951,7 +951,7 @@ export default function ModulosWorkspace({ course }) {
                                 <span className="text-gray-700 truncate max-w-56" title={mat.theme}>{mat.theme}</span>
                               </div>
                             </td>
-                            <td className="table-cell"><TypeBadge type={mat.type} /></td>
+                            <td className="table-cell"><TypeBadge type={mat.type} iconOnly /></td>
                             <td className="table-cell">
                               <div className="flex items-center gap-1.5">
                                 <MiniAvatar name={mat.responsibleName} roleLabel="Professor" avatar={responsibleAvatar} />
