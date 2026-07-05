@@ -448,22 +448,18 @@ export default function ModulosWorkspace({ course }) {
     return counts
   }, [contentsByModuleId])
 
+  // Cards refletem o status de cada CONTEUDO (nao do modulo), acompanhando o mesmo
+  // fluxo professor -> supervisor -> coordenacao usado na tabela abaixo.
   const stats = useMemo(() => ({
     modulos: modules.length,
     conteudos: courseMaterials.length,
-    emProducao: modules.filter(m => m.stage === 'producao').length,
-    aguardando: modules.filter(m => {
-      if (m.stage !== 'supervisao') return false
-      const summary = getContentApprovalSummary(contentsByModuleId[m.id] || [])
-      return summary.total === 0 || summary.coordinatorApproved < summary.total
-    }).length,
-    aprovados: modules.filter(m => {
-      if (m.stage === 'publicado') return true
-      if (m.stage !== 'supervisao') return false
-      const summary = getContentApprovalSummary(contentsByModuleId[m.id] || [])
-      return summary.total > 0 && summary.coordinatorApproved === summary.total
-    }).length,
-  }), [modules, courseMaterials, contentsByModuleId])
+    emProducao: courseMaterials.filter(m => m.status === 'em_execucao' || m.status === 'em_ajustes').length,
+    aguardando: courseMaterials.filter(m =>
+      (m.status === 'concluido' && m.supervisorStatus !== 'aprovado') ||
+      (m.supervisorStatus === 'aprovado' && m.coordinatorStatus !== 'aprovado')
+    ).length,
+    aprovados: courseMaterials.filter(m => m.supervisorStatus === 'aprovado' && m.coordinatorStatus === 'aprovado').length,
+  }), [modules, courseMaterials])
 
   const sortedModules = useMemo(() => [...modules].sort((a, b) => (a.order || 0) - (b.order || 0)), [modules])
 
