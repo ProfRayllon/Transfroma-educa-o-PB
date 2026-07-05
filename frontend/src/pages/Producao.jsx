@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
-import { useLocation } from 'react-router-dom'
-import { Plus, CheckCircle, FileText, Clock, Eye, Search, Filter, X, ExternalLink, Link2, Pencil, SlidersHorizontal, GripVertical, Trash2 } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { CheckCircle, FileText, Clock, Eye, Search, Filter, X, Link2, Pencil, Trash2, ShieldAlert } from 'lucide-react'
 import Badge from '../components/ui/Badge'
 import StatCard from '../components/ui/StatCard'
 import Modal from '../components/ui/Modal'
@@ -9,30 +9,15 @@ import { useData } from '../context/DataContext'
 import ModulosWorkspace from '../components/producao/ModulosWorkspace'
 import {
   PROFESSOR_STATUS_OPTIONS,
+  SUPERVISOR_STATUS_OPTIONS,
+  COORDINATOR_STATUS_OPTIONS,
   MATERIAL_TYPE_OPTIONS,
   getMaterialResponsibles,
   TypeBadge,
   LinkChip,
-  StackedAvatars,
   MiniAvatar,
   InlineStatusSelect,
 } from '../components/producao/shared'
-
-const SUPERVISOR_STATUS_OPTIONS = [
-  { value: '', label: '—' },
-  { value: 'em_revisao', label: 'Em revisão' },
-  { value: 'nao_validado', label: 'Não validado' },
-  { value: 'validado_com_ajustes', label: 'Validado c/ ajustes' },
-  { value: 'valido', label: 'Válido' },
-]
-
-const COORDINATOR_STATUS_OPTIONS = [
-  { value: '', label: '—' },
-  { value: 'em_revisao', label: 'Em revisão' },
-  { value: 'nao_validado', label: 'Não validado' },
-  { value: 'validado_com_ajustes', label: 'Validado c/ ajustes' },
-  { value: 'valido', label: 'Válido' },
-]
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Todos' },
@@ -98,57 +83,10 @@ function ActionButtons({ material, onView, onEdit, onDelete, canEdit }) {
           <Pencil size={14} />
         </button>
       )}
-      {material.originalLink && (
-        <a href={material.originalLink} target="_blank" rel="noopener noreferrer" title="Abrir link original" className="p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-lg transition-colors">
-          <ExternalLink size={14} />
-        </a>
-      )}
       {canEdit && (
         <button onClick={() => onDelete(material)} title="Excluir" className="p-1.5 text-gray-300 hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors">
           <Trash2 size={14} />
         </button>
-      )}
-    </div>
-  )
-}
-
-function ColumnsToggle({ cols, onChange }) {
-  const [open, setOpen] = useState(false)
-  const labels = {
-    tema: 'Título',
-    objetivo: 'Objetivo',
-    tempo: 'Tempo',
-    dataEntrega: 'Data Entrega',
-    linkOriginal: 'Link Original',
-    linkAjustado: 'Link Ajustado',
-  }
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(o => !o)}
-        title="Colunas visíveis"
-        className={`p-1.5 rounded-lg transition-colors ${open ? 'bg-brand-50 text-brand-600' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'}`}
-      >
-        <SlidersHorizontal size={15} />
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-9 w-44 bg-white rounded-xl shadow-xl border border-gray-100 z-50 p-1.5">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 py-1.5">Colunas</p>
-            {Object.entries(labels).map(([key, label]) => (
-              <label key={key} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded-lg cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={cols[key]}
-                  onChange={() => onChange(key, !cols[key])}
-                  className="accent-brand-600 w-3.5 h-3.5"
-                />
-                <span className="text-xs text-gray-700">{label}</span>
-              </label>
-            ))}
-          </div>
-        </>
       )}
     </div>
   )
@@ -547,8 +485,9 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
 
 export default function Producao() {
   const { user, can } = useAuth()
-  const { materials, setMaterials, courses, materialAssignees, saveMaterial, approveMaterial, updateMaterialStatus, updateMaterialSession, deleteMaterial } = useData()
+  const { materials, courses, materialAssignees, saveMaterial, updateMaterialStatus, deleteMaterial } = useData()
   const location = useLocation()
+  const navigate = useNavigate()
   const initialCourse = location.state?.course || 'Todos'
   const [filters, setFilters] = useState({ course: initialCourse, session: '', responsible: 'Todos', status: '' })
   const [search, setSearch] = useState('')
@@ -558,63 +497,49 @@ export default function Producao() {
   const [savingMaterial, setSavingMaterial] = useState(false)
   const [toast, setToast] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
-  const [dragId, setDragId] = useState(null)
-  const [dragOverId, setDragOverId] = useState(null)
   const [page, setPage] = useState(1)
   const perPage = 50
-  const [visibleCols, setVisibleCols] = useState({
-    tema: true,
-    objetivo: false,
-    tempo: true,
-    dataEntrega: true,
-    linkOriginal: true,
-    linkAjustado: true,
-  })
-  const toggleCol = (key, val) => setVisibleCols(c => ({ ...c, [key]: val }))
 
   const isCoordinator = user?.role === 'coordenador' || (user?.function || '').toLowerCase().includes('coordenador')
   const canApprove = can('approve_material') || user?.role === 'administrador' || isCoordinator
-  const canEdit = can('edit_producao') || ['administrador', 'supervisor', 'professor'].includes(user?.role) || isCoordinator
-  const canMoveSessions = user?.role === 'administrador' || user?.role === 'supervisor' || isCoordinator
+  const isAdmin = user?.role === 'administrador'
+  const canViewOverview = isAdmin || isCoordinator || user?.role === 'supervisor'
   const courseOptions = ['Todos', ...courses.map(c => c.name)]
   const activeCourse = filters.course !== 'Todos' ? courses.find(c => c.name === filters.course) : null
 
+  const getMaterialFlags = (material) => {
+    const course = findCourseForMaterial(material, courses)
+    const isCourseCoordinator = isCoordinator && (course?.coordinatorId === user?.id || course?.coordinatorName === user?.name)
+    const isCourseSupervisor = user?.role === 'supervisor' && (course?.supervisorId === user?.id || course?.supervisorName === user?.name)
+    const isProducer = user?.role === 'professor' && (
+      material.responsibleId === user?.id || material.responsibles?.some(r => Number(r.id) === Number(user?.id))
+    )
+    return { course, isPrivileged: isAdmin || isCourseCoordinator, isCourseSupervisor, isProducer }
+  }
+
+  // Admin e coordenacao do curso podem sempre alterar qualquer status de qualquer perfil,
+  // mesma regra aplicada na producao por modulo (ModulosWorkspace).
   const getCanEditMaterial = (material) => {
     if (!user) return false
-    if (user.role === 'administrador') return true
-    if (isCoordinator) {
-      const course = findCourseForMaterial(material, courses)
-      return course?.coordinatorId === user.id || course?.coordinatorName === user.name
-    }
-    if (user.role === 'supervisor') {
-      const course = findCourseForMaterial(material, courses)
-      return course?.supervisorId === user.id || course?.supervisorName === user.name
-    }
-    if (user.role === 'professor') return (
-      material.responsibleId === user.id ||
-      material.responsibles?.some(r => Number(r.id) === Number(user.id))
-    )
-    return false
+    const { isPrivileged, isCourseSupervisor, isProducer } = getMaterialFlags(material)
+    return isPrivileged || isCourseSupervisor || isProducer
+  }
+
+  const getCanEditProfessorStatus = (material) => {
+    if (!user) return false
+    const { isPrivileged, isProducer } = getMaterialFlags(material)
+    return isPrivileged || isProducer
   }
 
   const getCanEditSupervisorStatus = (material) => {
     if (!user) return false
-    if (user.role === 'administrador') return true
-    if (user.role === 'supervisor') {
-      const course = findCourseForMaterial(material, courses)
-      return course?.supervisorId === user.id || course?.supervisorName === user.name
-    }
-    return false
+    const { isPrivileged, isCourseSupervisor } = getMaterialFlags(material)
+    return isPrivileged || isCourseSupervisor
   }
 
   const getCanEditCoordinatorStatus = (material) => {
     if (!user) return false
-    if (user.role === 'administrador') return true
-    if (isCoordinator) {
-      const course = findCourseForMaterial(material, courses)
-      return course?.coordinatorId === user.id || course?.coordinatorName === user.name
-    }
-    return false
+    return getMaterialFlags(material).isPrivileged
   }
 
   const filtered = useMemo(() => {
@@ -643,8 +568,8 @@ export default function Producao() {
   const stats = {
     total: statsMaterials.length,
     emProducao: statsMaterials.filter(m => ['nao_iniciado', 'em_execucao', 'em_ajustes'].includes(m.status)).length,
-    concluidos: statsMaterials.filter(m => m.status === 'concluido' && m.supervisorStatus === 'valido' && m.coordinatorStatus === 'valido').length,
-    emRevisao: statsMaterials.filter(m => m.status === 'concluido' && (m.supervisorStatus !== 'valido' || m.coordinatorStatus !== 'valido')).length,
+    concluidos: statsMaterials.filter(m => m.status === 'concluido' && m.supervisorStatus === 'aprovado' && m.coordinatorStatus === 'aprovado').length,
+    emRevisao: statsMaterials.filter(m => m.status === 'concluido' && (m.supervisorStatus !== 'aprovado' || m.coordinatorStatus !== 'aprovado')).length,
   }
 
   const showToast = (message, type = 'success') => {
@@ -674,55 +599,10 @@ export default function Producao() {
   const handleStatusChange = async (mat, field, value) => {
     try {
       await updateMaterialStatus(mat.id, { [field]: value })
-    } catch {
-      setMaterials(prev => prev.map(m => m.id === mat.id ? { ...m, [field]: value } : m))
+    } catch (err) {
+      showToast(err.message || 'Erro ao atualizar status.', 'error')
     }
   }
-
-  const handleMoveSession = async (mat, direction) => {
-    const newSession = Number(mat.session) + direction
-    if (newSession < 1) return
-    try {
-      await updateMaterialSession(mat.id, newSession)
-    } catch {
-      setMaterials(prev => prev.map(m => m.id === mat.id ? { ...m, session: newSession } : m))
-    }
-  }
-
-  const handleDragStart = (e, mat) => {
-    setDragId(mat.id)
-    e.dataTransfer.effectAllowed = 'move'
-  }
-
-  const handleDragOver = (e, mat) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    if (mat.id !== dragId) setDragOverId(mat.id)
-  }
-
-  const handleDrop = async (e, targetMat) => {
-    e.preventDefault()
-    setDragOverId(null)
-    if (!dragId || dragId === targetMat.id) { setDragId(null); return }
-    const srcMat = materials.find(m => m.id === dragId)
-    if (!srcMat) { setDragId(null); return }
-    const srcSession = Number(srcMat.session)
-    const tgtSession = Number(targetMat.session)
-    setMaterials(prev => prev.map(m => {
-      if (m.id === srcMat.id) return { ...m, session: tgtSession }
-      if (m.id === targetMat.id) return { ...m, session: srcSession }
-      return m
-    }))
-    try {
-      await Promise.all([
-        updateMaterialSession(srcMat.id, tgtSession),
-        updateMaterialSession(targetMat.id, srcSession),
-      ])
-    } catch { /* optimistic já aplicado */ }
-    setDragId(null)
-  }
-
-  const handleDragEnd = () => { setDragId(null); setDragOverId(null) }
 
   const handleDelete = (mat) => setConfirmDelete(mat)
 
@@ -750,30 +630,33 @@ export default function Producao() {
     <div className="space-y-5 animate-fade-in">
       {/* Header (a view por modulos renderiza seu proprio cabecalho) */}
       {!activeCourse && (
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="page-title">Produção</h1>
-            <p className="page-subtitle">Acompanhe os materiais produzidos pelos professores/produtores.</p>
-            {filters.course === 'Todos' && courses.length > 0 && (
-              <p className="text-xs text-gray-400 mt-0.5">Selecione um curso no filtro abaixo para abrir a produção por módulos.</p>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {canEdit && (
-              <button
-                onClick={() => { setEditMaterial({}); setEditOpen(true) }}
-                className="btn-primary"
-              >
-                <Plus size={14} />
-                Novo conteúdo
-              </button>
-            )}
-          </div>
+        <div>
+          <h1 className="page-title">Produção</h1>
+          <p className="page-subtitle">Visão geral dos materiais produzidos em todos os cursos.</p>
+          {canViewOverview && filters.course === 'Todos' && courses.length > 0 && (
+            <p className="text-xs text-gray-400 mt-0.5">Selecione um curso no filtro abaixo para abrir a produção por módulos.</p>
+          )}
         </div>
       )}
 
       {activeCourse ? (
         <ModulosWorkspace course={activeCourse} />
+      ) : !canViewOverview ? (
+        <div className="card flex flex-col items-center justify-center text-center py-14 gap-3">
+          <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+            <ShieldAlert size={22} />
+          </div>
+          <div>
+            <p className="font-semibold text-gray-800">Visão geral restrita</p>
+            <p className="text-sm text-gray-500 mt-1 max-w-md">
+              Esta visão consolidada de todos os cursos é exclusiva para administradores, coordenadores e supervisores.
+              Acesse a produção do seu curso pela página Cursos.
+            </p>
+          </div>
+          <button onClick={() => navigate('/cursos')} className="btn-primary mt-2">
+            Ir para Cursos
+          </button>
+        </div>
       ) : (
       <>
       {/* Filters */}
@@ -862,93 +745,66 @@ export default function Producao() {
 
       {/* Table */}
       <div className="card p-0 overflow-hidden">
-        <div className="flex items-center justify-end px-3 py-1.5 border-b border-gray-100">
-          <ColumnsToggle cols={visibleCols} onChange={toggleCol} />
-        </div>
         <div className="table-container">
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-100">
-                <th className="table-header w-12">N</th>
+                <th className="table-header w-32">Curso</th>
                 <th className="table-header w-16">Módulo</th>
-                {visibleCols.tema && <th className="table-header">Título</th>}
-                {visibleCols.objetivo && <th className="table-header">Objetivo</th>}
-                <th className="table-header w-24">Tipo</th>
-                {visibleCols.tempo && <th className="table-header w-16">Tempo</th>}
-                <th className="table-header w-10">Resp.</th>
-                <th className="table-header">St. Prof.</th>
-                <th className="table-header">St. Sup.</th>
-                <th className="table-header">St. Coord.</th>
-                {visibleCols.dataEntrega && <th className="table-header w-24">Data entrega</th>}
-                {visibleCols.linkOriginal && <th className="table-header w-28">Link original</th>}
-                {visibleCols.linkAjustado && <th className="table-header w-28">Link ajustado</th>}
-                <th className="table-header w-24">Ações</th>
+                <th className="table-header">Item</th>
+                <th className="table-header w-14">Tipo</th>
+                <th className="table-header w-36">Professor</th>
+                <th className="table-header w-36">Supervisor</th>
+                <th className="table-header w-36">Coordenação</th>
+                <th className="table-header w-28">Link</th>
+                <th className="table-header w-28">Ações</th>
               </tr>
             </thead>
             <tbody>
               {paged.map(mat => {
+                const flags = getMaterialFlags(mat)
                 const canEditThis = getCanEditMaterial(mat)
+                const canEditProfStatus = getCanEditProfessorStatus(mat)
                 const canEditSupStatus = getCanEditSupervisorStatus(mat)
                 const canEditCoordStatus = getCanEditCoordinatorStatus(mat)
-                const matCourse = findCourseForMaterial(mat, courses)
+                const matCourse = flags.course
+                const responsibleAvatar = materialAssignees.find(a => Number(a.id) === Number(mat.responsibleId))?.avatar
                 const supName = matCourse?.supervisorName || null
                 const supAvatar = matCourse?.supervisorAvatar || null
                 const coordName = matCourse?.coordinatorName || null
                 const coordAvatar = matCourse?.coordinatorAvatar || null
-                const isDragging = dragId === mat.id
-                const isDragOver = dragOverId === mat.id
                 return (
-                <tr
-                  key={mat.id}
-                  draggable={canMoveSessions && canEditThis}
-                  onDragStart={canMoveSessions && canEditThis ? e => handleDragStart(e, mat) : undefined}
-                  onDragOver={canMoveSessions ? e => handleDragOver(e, mat) : undefined}
-                  onDrop={canMoveSessions ? e => handleDrop(e, mat) : undefined}
-                  onDragEnd={handleDragEnd}
-                  className={`border-b border-gray-50 transition-colors
-                    ${isDragging ? 'opacity-40' : ''}
-                    ${isDragOver ? 'bg-brand-50/30 border-t-2 border-t-brand-400' : 'hover:bg-gray-50/50'}
-                  `}
-                >
-                  <td className="table-cell text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      {canMoveSessions && canEditThis && (
-                        <GripVertical size={13} className="text-gray-300 cursor-grab active:cursor-grabbing flex-shrink-0" />
-                      )}
-                      <span className="font-semibold text-gray-600">{mat.session}</span>
-                    </div>
+                <tr key={mat.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                  <td className="table-cell">
+                    <span className="text-gray-700 truncate max-w-[120px] inline-block align-middle" title={matCourse?.name || mat.course}>
+                      {matCourse?.name || mat.course}
+                    </span>
                   </td>
                   <td className="table-cell text-center">
                     <span className="text-xs font-medium text-gray-500">M{mat.module || 1}</span>
                   </td>
-                  {visibleCols.tema && (
-                    <td className="table-cell">
-                      <div className="font-medium text-gray-700 truncate max-w-[160px]">{mat.theme}</div>
-                    </td>
-                  )}
-                  {visibleCols.objetivo && (
-                    <td className="table-cell">
-                      <div className="text-gray-500 max-w-[180px] line-clamp-2">{mat.objective}</div>
-                    </td>
-                  )}
-                  <td className="table-cell"><TypeBadge type={mat.type} /></td>
-                  {visibleCols.tempo && <td className="table-cell text-gray-500">{mat.duration}</td>}
                   <td className="table-cell">
-                    <StackedAvatars
-                      assignees={materialAssignees}
-                      responsibles={getMaterialResponsibles(mat)}
-                    />
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-6 h-6 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
+                        <FileText size={12} />
+                      </div>
+                      <span className="text-gray-700 truncate max-w-56" title={mat.theme}>{mat.theme}</span>
+                    </div>
                   </td>
+                  <td className="table-cell"><TypeBadge type={mat.type} iconOnly /></td>
                   <td className="table-cell">
-                    {canEditThis ? (
-                      <InlineStatusSelect
-                        value={mat.status || ''}
-                        options={PROFESSOR_STATUS_OPTIONS}
-                        onChange={val => handleStatusChange(mat, 'status', val)}
-                      />
-                    ) : (
-                      <Badge status={mat.status || ''} />
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      <MiniAvatar name={mat.responsibleName} roleLabel="Professor" avatar={responsibleAvatar} />
+                      {canEditProfStatus ? (
+                        <InlineStatusSelect
+                          value={mat.status || ''}
+                          options={PROFESSOR_STATUS_OPTIONS}
+                          onChange={val => handleStatusChange(mat, 'status', val)}
+                        />
+                      ) : (
+                        <Badge status={mat.status || ''} />
+                      )}
+                    </div>
                   </td>
                   <td className="table-cell">
                     <div className="flex items-center gap-1.5">
@@ -957,7 +813,13 @@ export default function Producao() {
                         <InlineStatusSelect
                           value={mat.supervisorStatus || ''}
                           options={SUPERVISOR_STATUS_OPTIONS}
-                          onChange={val => handleStatusChange(mat, 'supervisorStatus', val)}
+                          onChange={val => {
+                            if (!flags.isPrivileged && val === 'aprovado' && mat.status !== 'concluido') {
+                              showToast('Só é possível aprovar após o professor concluir este conteúdo.', 'error')
+                              return
+                            }
+                            handleStatusChange(mat, 'supervisorStatus', val)
+                          }}
                         />
                       ) : (
                         <Badge status={mat.supervisorStatus || ''} />
@@ -978,17 +840,7 @@ export default function Producao() {
                       )}
                     </div>
                   </td>
-                  {visibleCols.dataEntrega && (
-                    <td className="table-cell text-gray-500">
-                      {mat.deliveryDate ? new Date(mat.deliveryDate).toLocaleDateString('pt-BR') : '—'}
-                    </td>
-                  )}
-                  {visibleCols.linkOriginal && (
-                    <td className="table-cell"><LinkChip url={mat.originalLink} /></td>
-                  )}
-                  {visibleCols.linkAjustado && (
-                    <td className="table-cell"><LinkChip url={mat.adjustedLink} /></td>
-                  )}
+                  <td className="table-cell"><LinkChip url={mat.adjustedLink || mat.originalLink} /></td>
                   <td className="table-cell">
                     <ActionButtons
                       material={mat}
@@ -1003,7 +855,7 @@ export default function Producao() {
               })}
               {paged.length === 0 && (
                 <tr>
-                  <td colSpan={20} className="table-cell text-center py-10 text-gray-400 text-sm">
+                  <td colSpan={9} className="table-cell text-center py-10 text-gray-400 text-sm">
                     Nenhum material encontrado com os filtros aplicados.
                   </td>
                 </tr>

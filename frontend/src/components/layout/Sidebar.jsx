@@ -7,10 +7,19 @@ import {
   LogOut, ChevronLeft, ChevronRight, Camera, Sun, Moon, Globe,
 } from 'lucide-react'
 
+const isCoordinatorRole = (user) => user?.role === 'coordenador' || (user?.function || '').toLowerCase().includes('coordenador')
+
 const navItems = [
   { to: '/painel', icon: LayoutDashboard, label: 'Painel' },
   { to: '/cursos', icon: BookOpen, label: 'Cursos' },
-  { to: '/producao', icon: FileText, label: 'Produção' },
+  {
+    to: '/producao',
+    icon: FileText,
+    label: 'Produção',
+    // Visao geral de todos os cursos e exclusiva para quem supervisiona producao;
+    // professor acessa a producao do proprio curso pela pagina Cursos.
+    visible: (user) => user?.role === 'administrador' || user?.role === 'supervisor' || isCoordinatorRole(user),
+  },
   { to: '/gestao-pessoas', icon: Users, label: 'Gestão de Pessoas' },
   { to: '/acessos', icon: ShieldCheck, label: 'Acessos' },
   { to: '/', icon: Globe, label: 'Site', adminOnly: true },
@@ -40,7 +49,11 @@ export default function Sidebar({ collapsed, onToggle }) {
   const { photo } = useAvatar()
   const navigate = useNavigate()
 
-  const visibleNavItems = navItems.filter(item => !item.adminOnly || user?.role === 'administrador')
+  const visibleNavItems = navItems.filter(item => {
+    if (item.adminOnly && user?.role !== 'administrador') return false
+    if (item.visible && !item.visible(user)) return false
+    return true
+  })
 
   const handleLogout = () => {
     logout()

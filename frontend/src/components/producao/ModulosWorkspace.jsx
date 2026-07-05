@@ -14,6 +14,8 @@ import { useData } from '../../context/DataContext'
 import api, { getApiErrorMessage } from '../../lib/api'
 import {
   PROFESSOR_STATUS_OPTIONS,
+  SUPERVISOR_STATUS_OPTIONS,
+  COORDINATOR_STATUS_OPTIONS,
   MATERIAL_TYPE_OPTIONS,
   getMaterialResponsibles,
   TypeBadge,
@@ -21,21 +23,6 @@ import {
   MiniAvatar,
   InlineStatusSelect,
 } from './shared'
-
-const CONTENT_SUPERVISOR_STATUS_OPTIONS = [
-  { value: '', label: '—' },
-  { value: 'aguardando', label: 'Aguardando' },
-  { value: 'aprovado', label: 'Aprovado' },
-  { value: 'ajustes', label: 'Ajustes' },
-]
-
-const CONTENT_COORDINATOR_STATUS_OPTIONS = [
-  { value: '', label: '—' },
-  { value: 'pendente', label: 'Pendente' },
-  { value: 'aprovado', label: 'Aprovado' },
-  { value: 'ajustes', label: 'Ajustes' },
-  { value: 'reprovado', label: 'Reprovado' },
-]
 
 const MODULE_STATUS_FILTER_OPTIONS = [
   { value: '', label: 'Todos os status' },
@@ -961,7 +948,7 @@ export default function ModulosWorkspace({ course }) {
                                 {(isPrivileged || isCourseSupervisor) ? (
                                   <InlineStatusSelect
                                     value={mat.supervisorStatus || ''}
-                                    options={CONTENT_SUPERVISOR_STATUS_OPTIONS}
+                                    options={SUPERVISOR_STATUS_OPTIONS}
                                     onChange={val => {
                                       if (!isPrivileged && val === 'aprovado' && mat.status !== 'concluido') {
                                         showToast('Só é possível aprovar após o professor concluir este conteúdo.', 'error')
@@ -981,7 +968,7 @@ export default function ModulosWorkspace({ course }) {
                                 {isPrivileged ? (
                                   <InlineStatusSelect
                                     value={mat.coordinatorStatus || ''}
-                                    options={CONTENT_COORDINATOR_STATUS_OPTIONS}
+                                    options={COORDINATOR_STATUS_OPTIONS}
                                     onChange={val => handleContentStatusChange(mat, 'coordinatorStatus', val)}
                                   />
                                 ) : (

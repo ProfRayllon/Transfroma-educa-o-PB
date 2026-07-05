@@ -11,6 +11,21 @@ export const PROFESSOR_STATUS_OPTIONS = [
   { value: 'concluido', label: 'Concluído' },
 ]
 
+export const SUPERVISOR_STATUS_OPTIONS = [
+  { value: '', label: '—' },
+  { value: 'aguardando', label: 'Aguardando' },
+  { value: 'aprovado', label: 'Aprovado' },
+  { value: 'ajustes', label: 'Ajustes' },
+]
+
+export const COORDINATOR_STATUS_OPTIONS = [
+  { value: '', label: '—' },
+  { value: 'pendente', label: 'Pendente' },
+  { value: 'aprovado', label: 'Aprovado' },
+  { value: 'ajustes', label: 'Ajustes' },
+  { value: 'reprovado', label: 'Reprovado' },
+]
+
 export const MATERIAL_TYPE_OPTIONS = [
   { value: 'videoaula', label: 'Videoaula' },
   { value: 'apresentacao', label: 'Apresentação' },

@@ -194,7 +194,7 @@ function CourseCard({ course, materials, onEdit, ementaStatus }) {
 
   const courseMaterials = materials.filter((material) => materialMatchesCourse(material, course))
   const totalContents = courseMaterials.length
-  const completedSessions = courseMaterials.filter((material) => material.status === 'concluido' && material.supervisorStatus === 'valido' && material.coordinatorStatus === 'valido').length
+  const completedSessions = courseMaterials.filter((material) => material.status === 'concluido' && material.supervisorStatus === 'aprovado' && material.coordinatorStatus === 'aprovado').length
   const totalModules = new Set(courseMaterials.map(m => m.module || 1)).size
   const progress = totalContents > 0 ? Math.round((completedSessions / totalContents) * 100) : 0
 
@@ -702,7 +702,7 @@ export default function Cursos() {
     setModalOpen(true)
   }
 
-  const totalCompleted = materials.filter(m => m.status === 'concluido' && m.supervisorStatus === 'valido' && m.coordinatorStatus === 'valido').length
+  const totalCompleted = materials.filter(m => m.status === 'concluido' && m.supervisorStatus === 'aprovado' && m.coordinatorStatus === 'aprovado').length
   const totalSessions = materials.length
   const overallProgress = totalSessions > 0 ? Math.round((totalCompleted / totalSessions) * 100) : 0
 
