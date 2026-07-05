@@ -505,28 +505,28 @@ export default function Ementa() {
 
   const course = courses.find((c) => c.id === Number(courseId))
   const isCoord = user?.role === 'coordenador' || String(user?.function || '').toLowerCase().includes('coordenador')
+  const isAdmin = user?.role === 'administrador'
+  // Admin e coordenacao do curso podem sempre alterar qualquer status (professor/supervisor/
+  // coordenador), mesma regra aplicada na producao (Producao.jsx e ModulosWorkspace.jsx).
+  const isPrivileged = isAdmin || (isCoord && (course?.coordinatorId === user?.id || course?.coordinatorName === user?.name))
 
   const canEdit = !!(
-    user?.role === 'administrador'
+    isPrivileged
     || course?.producers?.some((p) => Number(p.id) === Number(user?.id))
     || (user?.role === 'supervisor' && (course?.supervisorId === user?.id || course?.supervisorName === user?.name))
-    || (isCoord && (course?.coordinatorId === user?.id || course?.coordinatorName === user?.name))
   )
 
   const isProfessor = !!(
-    user?.role === 'administrador'
+    isPrivileged
     || course?.producers?.some((p) => Number(p.id) === Number(user?.id))
   )
 
   const canEditSupStatus = !!(
-    user?.role === 'administrador'
+    isPrivileged
     || (user?.role === 'supervisor' && (course?.supervisorId === user?.id || course?.supervisorName === user?.name))
   )
 
-  const canEditCoordStatus = !!(
-    user?.role === 'administrador'
-    || (isCoord && (course?.coordinatorId === user?.id || course?.coordinatorName === user?.name))
-  )
+  const canEditCoordStatus = isPrivileged
 
   const isFinalizado = ementa?.professorStatus === 'concluido'
   const isApproved = isFinalizado && ementa?.supervisorStatus === 'valido' && ementa?.coordinatorStatus === 'valido'

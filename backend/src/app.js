@@ -1173,25 +1173,23 @@ app.patch('/api/ementas/:courseId/status', auth, async (req, res) => {
     if (!ementa) return res.status(404).json({ message: 'Ementa nao encontrada.' })
 
     const isCoord = isCoordinator(actor)
+    // Admin e coordenacao do curso podem sempre alterar qualquer status (professor/supervisor/
+    // coordenador), mesma regra aplicada em materials (PATCH /api/materials/:id/status).
+    const isPrivileged = actor.role === 'administrador' || (isCoord && (course.coordinatorId === actor.id || course.coordinatorName === actor.name))
     const update = {}
 
-    if (actor.role === 'administrador') {
-      if (req.body.professorStatus) update.professorStatus = req.body.professorStatus
-      if (req.body.supervisorStatus) update.supervisorStatus = req.body.supervisorStatus
-      if (req.body.coordinatorStatus) update.coordinatorStatus = req.body.coordinatorStatus
-    } else if (req.body.professorStatus) {
+    if (req.body.professorStatus) {
       const isProducer = course.producers?.some((p) => Number(p.id) === Number(actor.id))
-      if (!isProducer) return res.status(403).json({ message: 'Apenas produtores do curso podem submeter a ementa.' })
+      if (!isPrivileged && !isProducer) return res.status(403).json({ message: 'Apenas produtores do curso podem submeter a ementa.' })
       update.professorStatus = req.body.professorStatus
-    } else if (req.body.supervisorStatus) {
-      if (actor.role !== 'supervisor' || (course.supervisorId !== actor.id && course.supervisorName !== actor.name)) {
-        return res.status(403).json({ message: 'Apenas o supervisor do curso pode validar.' })
-      }
+    }
+    if (req.body.supervisorStatus) {
+      const isCourseSupervisor = actor.role === 'supervisor' && (course.supervisorId === actor.id || course.supervisorName === actor.name)
+      if (!isPrivileged && !isCourseSupervisor) return res.status(403).json({ message: 'Apenas o supervisor do curso pode validar.' })
       update.supervisorStatus = req.body.supervisorStatus
-    } else if (req.body.coordinatorStatus) {
-      if (!isCoord || (course.coordinatorId !== actor.id && course.coordinatorName !== actor.name)) {
-        return res.status(403).json({ message: 'Apenas o coordenador do curso pode aprovar.' })
-      }
+    }
+    if (req.body.coordinatorStatus) {
+      if (!isPrivileged) return res.status(403).json({ message: 'Apenas o coordenador do curso pode aprovar.' })
       update.coordinatorStatus = req.body.coordinatorStatus
     }
 
