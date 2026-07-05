@@ -9,19 +9,26 @@ import {
 
 const isCoordinatorRole = (user) => user?.role === 'coordenador' || (user?.function || '').toLowerCase().includes('coordenador')
 
+// Menu reduzido ao que cada perfil realmente usa no dia a dia: professor só
+// acompanha os proprios cursos; supervisor/coordenador tambem cuidam da producao;
+// Gestao de Pessoas e Acessos ficam restritos a quem administra o sistema
+// (admin, e Gestao de Pessoas tambem para o perfil "gestao", dono dessa area).
 const navItems = [
-  { to: '/painel', icon: LayoutDashboard, label: 'Painel' },
+  { to: '/painel', icon: LayoutDashboard, label: 'Painel', visible: (user) => user?.role === 'administrador' },
   { to: '/cursos', icon: BookOpen, label: 'Cursos' },
   {
     to: '/producao',
     icon: FileText,
     label: 'Produção',
-    // Visao geral de todos os cursos e exclusiva para quem supervisiona producao;
-    // professor acessa a producao do proprio curso pela pagina Cursos.
     visible: (user) => user?.role === 'administrador' || user?.role === 'supervisor' || isCoordinatorRole(user),
   },
-  { to: '/gestao-pessoas', icon: Users, label: 'Gestão de Pessoas' },
-  { to: '/acessos', icon: ShieldCheck, label: 'Acessos' },
+  {
+    to: '/gestao-pessoas',
+    icon: Users,
+    label: 'Gestão de Pessoas',
+    visible: (user) => user?.role === 'administrador' || user?.role === 'gestao',
+  },
+  { to: '/acessos', icon: ShieldCheck, label: 'Acessos', visible: (user) => user?.role === 'administrador' },
   { to: '/', icon: Globe, label: 'Site', adminOnly: true },
 ]
 
