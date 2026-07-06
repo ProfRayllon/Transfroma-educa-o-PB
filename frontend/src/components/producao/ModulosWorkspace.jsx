@@ -636,26 +636,69 @@ export default function ModulosWorkspace({ course }) {
     }
   }
 
+  const moveContentToModule = async (src, targetModuleId) => {
+    const newSession = (contentsByModuleId[targetModuleId]?.length || 0) + 1
+    try {
+      await saveMaterial({ id: src.id, moduleId: targetModuleId, session: newSession })
+      expandModule(targetModuleId)
+      showToast('Conteúdo movido de módulo!')
+    } catch (err) {
+      showToast(err.message || 'Erro ao mover conteúdo entre módulos.', 'error')
+    }
+  }
+
   const handleContentDragStart = (e, mat) => { setDragContentId(mat.id); e.dataTransfer.effectAllowed = 'move' }
   const handleContentDragOver = (e, mat) => { e.preventDefault(); if (mat.id !== dragContentId) setDragOverContentId(mat.id) }
-  const handleContentDragEnd = () => { setDragContentId(null); setDragOverContentId(null) }
+  const handleContentDragEnd = () => { setDragContentId(null); setDragOverContentId(null); setDragOverModuleId(null) }
   const handleContentDrop = async (e, target) => {
     e.preventDefault()
     setDragOverContentId(null)
-    if (!dragContentId || dragContentId === target.id) { setDragContentId(null); return }
-    const src = courseMaterials.find(m => m.id === dragContentId)
-    if (!src || Number(src.moduleId) !== Number(target.moduleId)) { setDragContentId(null); return }
-    const srcSession = Number(src.session)
-    const tgtSession = Number(target.session)
-    try {
-      await Promise.all([
-        updateMaterialSession(src.id, tgtSession),
-        updateMaterialSession(target.id, srcSession),
-      ])
-    } catch {
-      showToast('Erro ao reordenar conteúdos.', 'error')
-    }
+    const contentId = dragContentId
     setDragContentId(null)
+    if (!contentId || contentId === target.id) return
+    const src = courseMaterials.find(m => m.id === contentId)
+    if (!src) return
+
+    if (Number(src.moduleId) === Number(target.moduleId)) {
+      const srcSession = Number(src.session)
+      const tgtSession = Number(target.session)
+      try {
+        await Promise.all([
+          updateMaterialSession(src.id, tgtSession),
+          updateMaterialSession(target.id, srcSession),
+        ])
+      } catch {
+        showToast('Erro ao reordenar conteúdos.', 'error')
+      }
+      return
+    }
+
+    await moveContentToModule(src, Number(target.moduleId))
+  }
+
+  const handleContentDropOnModule = async (e, targetModule) => {
+    e.preventDefault()
+    setDragOverModuleId(null)
+    const contentId = dragContentId
+    setDragContentId(null)
+    if (!contentId) return
+    const src = courseMaterials.find(m => m.id === contentId)
+    if (!src || Number(src.moduleId) === Number(targetModule.id)) return
+    await moveContentToModule(src, targetModule.id)
+  }
+
+  const handleModuleRowDragOver = (e, m) => {
+    if (dragContentId) {
+      e.preventDefault()
+      if (dragOverModuleId !== m.id) setDragOverModuleId(m.id)
+      return
+    }
+    if (canManageModules && reorderingAllowed) handleModuleDragOver(e, m)
+  }
+
+  const handleModuleRowDrop = (e, m) => {
+    if (dragContentId) return handleContentDropOnModule(e, m)
+    if (canManageModules && reorderingAllowed) return handleModuleDrop(e, m)
   }
 
   if (loading) {
@@ -792,8 +835,8 @@ export default function ModulosWorkspace({ course }) {
                       <tr
                         draggable={canManageModules && reorderingAllowed}
                         onDragStart={canManageModules && reorderingAllowed ? e => handleModuleDragStart(e, m) : undefined}
-                        onDragOver={canManageModules && reorderingAllowed ? e => handleModuleDragOver(e, m) : undefined}
-                        onDrop={canManageModules && reorderingAllowed ? e => handleModuleDrop(e, m) : undefined}
+                        onDragOver={e => handleModuleRowDragOver(e, m)}
+                        onDrop={e => handleModuleRowDrop(e, m)}
                         onDragEnd={handleModuleDragEnd}
                         className={`border-b border-gray-100 bg-gray-50/60 transition-colors
                           ${isDraggingModule ? 'opacity-40' : ''}
@@ -814,7 +857,7 @@ export default function ModulosWorkspace({ course }) {
                             <div className="w-7 h-7 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center flex-shrink-0">
                               <Layers size={14} />
                             </div>
-                            <span className="font-bold text-gray-900 truncate max-w-48" title={m.title}>{m.title}</span>
+                            <span className="font-bold text-gray-900">{m.title}</span>
                             <Badge status={getModuleStatusKey(m, allContents)} />
                             <span className="text-xs text-gray-400 whitespace-nowrap">{allContents.length} conteúdo{allContents.length !== 1 ? 's' : ''}</span>
                           </div>
