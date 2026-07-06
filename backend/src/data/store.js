@@ -1051,13 +1051,34 @@ async function updateCourse(id, payload) {
 }
 
 async function deleteCourse(id) {
+  const course = await getCourseById(id)
+  if (!course) return false
+
   if (!isMysqlMode()) {
-    const idx = courses.findIndex((course) => course.id === Number(id))
+    // Sem FK no modo mock: cascata manual de materiais, modulos e eventos de modulo,
+    // no mesmo espirito do cascade ja feito ao excluir um modulo isolado.
+    for (let i = materials.length - 1; i >= 0; i -= 1) {
+      if (Number(materials[i].courseId) === Number(id) || materials[i].course === course.name) materials.splice(i, 1)
+    }
+    const moduleIdsToRemove = modules.filter((m) => Number(m.courseId) === Number(id)).map((m) => m.id)
+    for (let i = modules.length - 1; i >= 0; i -= 1) {
+      if (Number(modules[i].courseId) === Number(id)) modules.splice(i, 1)
+    }
+    for (let i = moduleEvents.length - 1; i >= 0; i -= 1) {
+      if (moduleIdsToRemove.includes(moduleEvents[i].moduleId)) moduleEvents.splice(i, 1)
+    }
+    for (let i = ementas_data.length - 1; i >= 0; i -= 1) {
+      if (Number(ementas_data[i].courseId) === Number(id)) ementas_data.splice(i, 1)
+    }
+    const idx = courses.findIndex((c) => c.id === Number(id))
     if (idx === -1) return false
     courses.splice(idx, 1)
     return true
   }
 
+  // course_modules/module_events/ementas ja cascadam via FK (ON DELETE CASCADE);
+  // materials nao tem FK para courses, entao precisa ser removido explicitamente.
+  await pool.execute('DELETE FROM materials WHERE course_id = ? OR course = ?', [id, course.name])
   const [result] = await pool.execute('DELETE FROM courses WHERE id = ?', [id])
   return result.affectedRows > 0
 }

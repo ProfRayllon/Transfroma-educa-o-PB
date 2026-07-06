@@ -1056,10 +1056,12 @@ app.delete('/api/modules/:id', auth, async (req, res) => {
     const current = await store.getModuleById(req.params.id)
     if (!current) return res.status(404).json({ message: 'Modulo nao encontrado.' })
     const course = await store.getCourseById(current.courseId)
-    // Exclusao de modulo e restrita ao supervisor do curso (admin sempre pode).
-    const canDelete = actor.role === 'administrador' || isModuleSupervisor(actor, current, course)
-    if (!canDelete) return res.status(403).json({ message: 'Apenas o supervisor do curso pode excluir modulos.' })
-    if (actor.role !== 'administrador' && current.stage !== 'producao') {
+    // Exclusao de modulo: supervisor do curso (so em producao), ou admin/coordenacao do
+    // curso, que podem excluir sempre -- mesmo bypass ja aplicado aos status de conteudo.
+    const isPrivileged = actor.role === 'administrador' || isModuleCoordinator(actor, current, course)
+    const canDelete = isPrivileged || isModuleSupervisor(actor, current, course)
+    if (!canDelete) return res.status(403).json({ message: 'Apenas supervisor, coordenacao ou administrador podem excluir modulos.' })
+    if (!isPrivileged && current.stage !== 'producao') {
       return res.status(400).json({ message: 'So e possivel excluir modulos que ainda estao em producao.' })
     }
 

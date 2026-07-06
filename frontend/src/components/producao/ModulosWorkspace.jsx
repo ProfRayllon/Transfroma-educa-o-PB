@@ -422,9 +422,10 @@ export default function ModulosWorkspace({ course }) {
   const canEditContent = isAdmin || isProducer || isCourseSupervisor || isCourseCoordinator
   const canReviewContent = isAdmin || isCourseSupervisor || isCourseCoordinator
 
-  // Editar qualquer modulo em producao; excluir e restrito ao supervisor do curso (admin sempre pode).
+  // Editar qualquer modulo em producao; excluir e do supervisor do curso (so em producao),
+  // ou de admin/coordenacao do curso, que podem excluir sempre.
   const canEditThisModule = (m) => !!m && (isAdmin || (canManageModules && m.stage === 'producao'))
-  const canDeleteThisModule = (m) => !!m && (isAdmin || (isCourseSupervisor && m.stage === 'producao'))
+  const canDeleteThisModule = (m) => !!m && (isPrivileged || (isCourseSupervisor && m.stage === 'producao'))
   const canPublishThisModule = (m, summary) => (isAdmin || isCourseCoordinator) && m.stage === 'supervisao' && summary.total > 0 && summary.coordinatorApproved === summary.total
 
   const courseMaterials = useMemo(

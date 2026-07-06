@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
+  AlertTriangle,
   BookOpen,
   Calendar,
   Camera,
@@ -17,9 +18,10 @@ import {
   X,
 } from 'lucide-react'
 import Modal from '../components/ui/Modal'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
-import api from '../lib/api'
+import api, { getApiErrorMessage } from '../lib/api'
 
 const PRIMARY_TRAILS = {
   'TRILHAS TRANSVERSAIS': [
@@ -186,11 +188,19 @@ function MultiSelectFilter({ label, placeholder, options, values, onChange }) {
   )
 }
 
-function CourseCard({ course, materials, onEdit, ementaStatus }) {
+function CourseCard({ course, materials, onEdit, onDelete, ementaStatus }) {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const color = getTrailColor(course.primaryTrail)
   const ementaApproved = ementaStatus?.coordinatorStatus === 'valido'
   const alert = deadlineBadge(course.deadline)
+
+  // Mesma regra do backend (DELETE /api/courses/:id): admin sempre pode; coordenador/supervisor
+  // so podem excluir o proprio curso.
+  const isCoord = user?.role === 'coordenador' || (user?.function || '').toLowerCase().includes('coordenador')
+  const canDeleteThis = user?.role === 'administrador'
+    || (isCoord && (course.coordinatorId === user?.id || course.coordinatorName === user?.name))
+    || (user?.role === 'supervisor' && (course.supervisorId === user?.id || course.supervisorName === user?.name))
 
   const courseMaterials = materials.filter((material) => materialMatchesCourse(material, course))
   const totalContents = courseMaterials.length
@@ -325,6 +335,15 @@ function CourseCard({ course, materials, onEdit, ementaStatus }) {
           >
             Editar
           </button>
+          {canDeleteThis && (
+            <button
+              onClick={() => onDelete(course)}
+              title="Excluir curso"
+              className="p-2 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -608,13 +627,15 @@ function CourseModal({ course, open, onClose, onSave, participants = { superviso
 
 export default function Cursos() {
   const { user } = useAuth()
-  const { materials, courses, coursesLoading, coursesError, courseParticipants, saveCourse } = useData()
+  const { materials, courses, coursesLoading, coursesError, courseParticipants, saveCourse, deleteCourse } = useData()
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editCourse, setEditCourse] = useState(null)
   const [savingCourse, setSavingCourse] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [ementaStatuses, setEmentaStatuses] = useState({})
+  const [confirmDeleteCourse, setConfirmDeleteCourse] = useState(null)
+  const [toast, setToast] = useState(null)
   const [filters, setFilters] = useState({
     primaryTrails: [],
     trails: [],
@@ -701,6 +722,26 @@ export default function Cursos() {
     setSaveError(null)
     setModalOpen(true)
   }
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 3500)
+  }
+
+  const handleDeleteCourse = async () => {
+    if (!confirmDeleteCourse) return
+    try {
+      await deleteCourse(confirmDeleteCourse.id)
+      showToast('Curso e todo o conteúdo vinculado foram excluídos com sucesso!')
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Erro ao excluir curso.'), 'error')
+    } finally {
+      setConfirmDeleteCourse(null)
+    }
+  }
+
+  const courseContentCount = (course) =>
+    materials.filter((material) => materialMatchesCourse(material, course)).length
 
   const totalCompleted = materials.filter(m => m.status === 'concluido' && m.supervisorStatus === 'aprovado' && m.coordinatorStatus === 'aprovado').length
   const totalSessions = materials.length
@@ -853,7 +894,14 @@ export default function Cursos() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
           {filtered.map((course) => (
-            <CourseCard key={course.id} course={course} materials={materials} onEdit={openEdit} ementaStatus={ementaStatuses[course.id]} />
+            <CourseCard
+              key={course.id}
+              course={course}
+              materials={materials}
+              onEdit={openEdit}
+              onDelete={setConfirmDeleteCourse}
+              ementaStatus={ementaStatuses[course.id]}
+            />
           ))}
         </div>
       )}
@@ -868,6 +916,27 @@ export default function Cursos() {
         saving={savingCourse}
         error={saveError}
       />
+
+      <ConfirmDialog
+        open={!!confirmDeleteCourse}
+        onClose={() => setConfirmDeleteCourse(null)}
+        onConfirm={handleDeleteCourse}
+        title="Excluir curso"
+        message={
+          confirmDeleteCourse
+            ? `Tem certeza que deseja excluir "${confirmDeleteCourse.name}"? Os módulos, os ${courseContentCount(confirmDeleteCourse)} conteúdo(s) e a ementa vinculados a este curso também serão excluídos permanentemente. Essa ação não pode ser desfeita.`
+            : ''
+        }
+        confirmLabel="Excluir"
+      />
+
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-[200] flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium animate-fade-in
+          ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-gray-900 text-white'}`}>
+          {toast.type === 'error' ? <AlertTriangle size={16} className="text-red-200" /> : <CheckCircle size={16} className="text-green-400" />}
+          {toast.message}
+        </div>
+      )}
     </div>
   )
 }
