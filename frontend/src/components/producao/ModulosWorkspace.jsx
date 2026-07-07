@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Plus, Search, GripVertical, CheckCircle, Send, Rocket, Trash2, Pencil, Eye,
   Link2, AlertTriangle, ArrowLeft, ChevronDown, ChevronRight, MoreVertical, Filter, Info,
-  Layers, FileText, Clock,
+  Layers, FileText, Clock, X,
 } from 'lucide-react'
 import Badge from '../ui/Badge'
 import StatCard from '../ui/StatCard'
@@ -21,6 +21,7 @@ import {
   TypeBadge,
   LinkChip,
   MiniAvatar,
+  StackedAvatars,
   InlineStatusSelect,
 } from './shared'
 
@@ -48,7 +49,7 @@ const EMPTY_CONTENT_FORM = {
   objective: '',
   duration: '',
   deliveryDate: '',
-  responsibleId: '',
+  responsibles: [],
   originalLink: '',
   adjustedLink: '',
   status: 'nao_iniciado',
@@ -96,7 +97,6 @@ function ContentModal({ open, onClose, onSave, saving, modules, defaultModuleId,
   useEffect(() => {
     if (!open) return
     if (editing) {
-      const responsibles = getMaterialResponsibles(editing)
       setForm({
         moduleId: editing.moduleId || '',
         type: Array.isArray(editing.type) ? (editing.type[0] || '') : (editing.type || ''),
@@ -104,7 +104,7 @@ function ContentModal({ open, onClose, onSave, saving, modules, defaultModuleId,
         objective: editing.objective || '',
         duration: editing.duration || '',
         deliveryDate: editing.deliveryDate || '',
-        responsibleId: responsibles[0]?.id || '',
+        responsibles: getMaterialResponsibles(editing),
         originalLink: editing.originalLink || '',
         adjustedLink: editing.adjustedLink || '',
         status: editing.status || 'nao_iniciado',
@@ -118,20 +118,33 @@ function ContentModal({ open, onClose, onSave, saving, modules, defaultModuleId,
 
   const producers = course.producers || []
 
+  const addResponsible = (e) => {
+    const userId = Number(e.target.value)
+    if (!userId) return
+    const p = producers.find(p => Number(p.id) === userId)
+    if (!p || form.responsibles.some(r => Number(r.id) === p.id)) return
+    setForm(f => ({ ...f, responsibles: [...f.responsibles, { id: p.id, name: p.name, role: p.function || '' }] }))
+    e.target.value = ''
+  }
+
+  const removeResponsible = (i) => {
+    setForm(f => ({ ...f, responsibles: f.responsibles.filter((_, j) => j !== i) }))
+  }
+
   const handleSubmit = () => {
     if (!form.moduleId) { setError('Selecione o módulo.'); return }
     if (!form.type) { setError('Selecione o tipo de material.'); return }
     if (!form.theme.trim()) { setError('Informe o título do conteúdo.'); return }
-    if (!form.responsibleId) { setError('Selecione o responsável pelo conteúdo.'); return }
+    if (!form.responsibles.length) { setError('Selecione ao menos um professor(a) responsável pelo conteúdo.'); return }
 
-    const responsible = producers.find(p => Number(p.id) === Number(form.responsibleId))
+    const primary = form.responsibles[0]
     onSave({
       ...(editing ? { id: editing.id } : {}),
       ...form,
-      responsibleId: responsible?.id,
-      responsibleName: responsible?.name,
-      responsibleRole: responsible?.function || '',
-      responsibles: responsible ? [{ id: responsible.id, name: responsible.name, role: responsible.function || '' }] : [],
+      responsibleId: primary.id,
+      responsibleName: primary.name,
+      responsibleRole: primary.role || '',
+      responsibles: form.responsibles,
     })
   }
 
@@ -205,12 +218,29 @@ function ContentModal({ open, onClose, onSave, saving, modules, defaultModuleId,
         </div>
 
         <div className="col-span-2">
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">Responsável <span className="text-red-500">*</span></label>
-          <select value={form.responsibleId} onChange={e => setForm(f => ({ ...f, responsibleId: e.target.value }))} className="select-field">
-            <option value="">Selecionar responsável...</option>
-            {producers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Professor(a) responsável <span className="text-red-500">*</span></label>
+          {form.responsibles.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {form.responsibles.map((r, i) => (
+                <div key={r.id || i} className="flex items-center gap-1.5 bg-brand-50 border border-brand-200 rounded-lg px-2 py-1">
+                  <div className="w-5 h-5 rounded-full bg-brand-700 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">
+                    {r.name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()}
+                  </div>
+                  <span className="text-xs font-medium text-brand-700 truncate max-w-[140px]">{r.name}</span>
+                  <button type="button" onClick={() => removeResponsible(i)} className="text-brand-300 hover:text-red-500 transition-colors flex-shrink-0">
+                    <X size={11} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <select value="" onChange={addResponsible} className="select-field">
+            <option value="">+ Adicionar professor(a)...</option>
+            {producers.filter(p => !form.responsibles.some(r => Number(r.id) === Number(p.id))).map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
           </select>
-          {producers.length === 0 && <p className="text-xs text-amber-600 mt-1">Nenhum professor/produtor vinculado ao curso.</p>}
+          {producers.length === 0 && <p className="text-xs text-amber-600 mt-1">Nenhum professor(a)/produtor vinculado ao curso.</p>}
         </div>
 
         <div>
@@ -229,7 +259,7 @@ function ContentModal({ open, onClose, onSave, saving, modules, defaultModuleId,
         </div>
 
         <div className="col-span-2">
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">Status do professor</label>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Status do professor(a)</label>
           <select
             value={form.status}
             onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
@@ -813,10 +843,10 @@ export default function ModulosWorkspace({ course }) {
                   <th className="table-header w-16">Ordem</th>
                   <th className="table-header">Item</th>
                   <th className="table-header w-14">Tipo</th>
-                  <th className="table-header w-36">Professor</th>
-                  <th className="table-header w-36">Supervisor</th>
-                  <th className="table-header w-36">Coordenação</th>
+                  <th className="table-header w-36">Professor(a)</th>
                   <th className="table-header w-28">Link</th>
+                  <th className="table-header w-36">Supervisor(a)</th>
+                  <th className="table-header w-36">Coordenador(a)</th>
                   <th className="table-header w-28">Ações</th>
                 </tr>
               </thead>
@@ -858,7 +888,7 @@ export default function ModulosWorkspace({ course }) {
                             <div className="w-7 h-7 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center flex-shrink-0">
                               <Layers size={14} />
                             </div>
-                            <span className="font-bold text-gray-900">{m.title}</span>
+                            <span className="font-bold text-gray-900 whitespace-nowrap">{m.title}</span>
                             <Badge status={getModuleStatusKey(m, allContents)} />
                             <span className="text-xs text-gray-400 whitespace-nowrap">{allContents.length} conteúdo{allContents.length !== 1 ? 's' : ''}</span>
                           </div>
@@ -937,7 +967,6 @@ export default function ModulosWorkspace({ course }) {
                       {isExpanded && visibleContents.map((mat, idx) => {
                         const isDragging = dragContentId === mat.id
                         const isDragOver = dragOverContentId === mat.id
-                        const responsibleAvatar = materialAssignees.find(a => Number(a.id) === Number(mat.responsibleId))?.avatar
                         const rowLocked = m.stage !== 'producao' && !isAdmin
                         const canDrag = canEditContent && !rowLocked && reorderingAllowed
                         return (
@@ -970,7 +999,7 @@ export default function ModulosWorkspace({ course }) {
                             <td className="table-cell"><TypeBadge type={mat.type} iconOnly /></td>
                             <td className="table-cell">
                               <div className="flex items-center gap-1.5">
-                                <MiniAvatar name={mat.responsibleName} roleLabel="Professor" avatar={responsibleAvatar} />
+                                <StackedAvatars responsibles={getMaterialResponsibles(mat)} assignees={materialAssignees} />
                                 {(isPrivileged || isProducer) ? (
                                   <InlineStatusSelect
                                     value={mat.status || ''}
@@ -982,9 +1011,10 @@ export default function ModulosWorkspace({ course }) {
                                 )}
                               </div>
                             </td>
+                            <td className="table-cell"><LinkChip url={mat.adjustedLink || mat.originalLink} /></td>
                             <td className="table-cell">
                               <div className="flex items-center gap-1.5">
-                                <MiniAvatar name={course.supervisorName} roleLabel="Supervisor" avatar={course.supervisorAvatar} />
+                                <MiniAvatar name={course.supervisorName} roleLabel="Supervisor(a)" avatar={course.supervisorAvatar} />
                                 {(isPrivileged || isCourseSupervisor) ? (
                                   <InlineStatusSelect
                                     value={mat.supervisorStatus || ''}
@@ -1016,7 +1046,6 @@ export default function ModulosWorkspace({ course }) {
                                 )}
                               </div>
                             </td>
-                            <td className="table-cell"><LinkChip url={mat.adjustedLink || mat.originalLink} /></td>
                             <td className="table-cell">
                               <div className="flex items-center justify-end gap-0.5">
                                 <button onClick={() => setViewContent(mat)} title="Visualizar" className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
@@ -1083,7 +1112,7 @@ export default function ModulosWorkspace({ course }) {
               <TypeBadge type={viewContent.type} />
             </div>
             <div>
-              <div className="text-xs font-medium text-gray-500 mb-1">Professor</div>
+              <div className="text-xs font-medium text-gray-500 mb-1">Professor(a)</div>
               <Badge status={viewContent.status || ''} />
             </div>
             <div className="col-span-2">
@@ -1107,11 +1136,11 @@ export default function ModulosWorkspace({ course }) {
               <LinkChip url={viewContent.adjustedLink} />
             </div>
             <div>
-              <div className="text-xs font-medium text-gray-500 mb-1">Supervisor</div>
+              <div className="text-xs font-medium text-gray-500 mb-1">Supervisor(a)</div>
               <Badge status={viewContent.supervisorStatus || ''} />
             </div>
             <div>
-              <div className="text-xs font-medium text-gray-500 mb-1">Coordenação</div>
+              <div className="text-xs font-medium text-gray-500 mb-1">Coordenador(a)</div>
               <Badge status={viewContent.coordinatorStatus || ''} />
             </div>
             {viewContent.reviewNotes && (
