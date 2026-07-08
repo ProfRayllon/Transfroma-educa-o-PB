@@ -36,7 +36,7 @@ const COURSE_TRAILS = {
   ],
 }
 
-const USER_ROLES = ['administrador', 'coordenador', 'supervisor', 'professor', 'tutor', 'tecnico', 'gestao']
+const USER_ROLES = ['administrador', 'coordenador', 'supervisor', 'professor', 'tutor', 'tecnico', 'gestao', 'revisor']
 const USER_STATUSES = ['ativo', 'inativo', 'pendente', 'desligado', 'substituido']
 
 app.set('trust proxy', 1)
@@ -68,6 +68,10 @@ function isManager(role) {
 
 function isCoordinator(user) {
   return user?.role === 'coordenador' || String(user?.function || '').toLowerCase().includes('coordenador')
+}
+
+function isRevisor(user) {
+  return user?.role === 'revisor'
 }
 
 function isModuleProducer(user, course) {
@@ -138,6 +142,7 @@ async function coursePayload(body) {
     coordinatorId: Number(body.coordinatorId) || null,
     coordinatorName: String(body.coordinatorName || '').trim(),
     producerIds: Array.isArray(body.producerIds) ? body.producerIds.map(Number).filter(Boolean) : [],
+    revisorIds: Array.isArray(body.revisorIds) ? body.revisorIds.map(Number).filter(Boolean) : [],
     startDate: body.startDate || null,
     deadline: body.deadline || null,
     image: body.image || null,
@@ -185,6 +190,17 @@ async function coursePayload(body) {
       return { error: 'Professor/produtor invalido.' }
     }
     payload.producers.push(sanitizeUser(producer))
+  }
+
+  payload.revisorIds = [...new Set(payload.revisorIds)]
+  payload.revisors = []
+
+  for (const revisorId of payload.revisorIds) {
+    const revisor = await store.getUserById(revisorId)
+    if (!revisor || revisor.role !== 'revisor') {
+      return { error: 'Revisor(a) invalido.' }
+    }
+    payload.revisors.push(sanitizeUser(revisor))
   }
 
   return { payload }
@@ -338,6 +354,24 @@ async function materialPayload(body, actor, currentMaterial) {
     if (payload.supervisorStatus === undefined) payload.supervisorStatus = currentMaterial?.supervisorStatus ?? null
     payload.coordinatorStatus = normalizeOptionalEnum(body.coordinatorStatus)
     if (payload.coordinatorStatus === undefined) payload.coordinatorStatus = currentMaterial?.coordinatorStatus ?? null
+
+    payload.revisorId = Object.prototype.hasOwnProperty.call(body, 'revisorId')
+      ? (body.revisorId ? Number(body.revisorId) : null)
+      : (currentMaterial?.revisorId ?? null)
+
+    if (payload.revisorId) {
+      const revisor = await findUserById(payload.revisorId)
+      if (!revisor || revisor.role !== 'revisor') {
+        return { error: 'Revisor(a) invalido.' }
+      }
+      payload.revisorName = revisor.name
+    } else {
+      payload.revisorName = null
+    }
+
+    payload.revisorStatus = normalizeOptionalEnum(body.revisorStatus)
+    if (payload.revisorStatus === undefined) payload.revisorStatus = currentMaterial?.revisorStatus ?? null
+
     payload.reviewNotes = body.reviewNotes ?? currentMaterial?.reviewNotes ?? ''
     payload.responsibleId = Number(body.responsibleId) || currentMaterial?.responsibleId
 
@@ -360,6 +394,9 @@ async function materialPayload(body, actor, currentMaterial) {
   payload.reviewStatus = currentMaterial?.reviewStatus || 'em_execucao'
   payload.supervisorStatus = currentMaterial?.supervisorStatus ?? null
   payload.coordinatorStatus = currentMaterial?.coordinatorStatus ?? null
+  payload.revisorId = currentMaterial?.revisorId ?? null
+  payload.revisorName = currentMaterial?.revisorName ?? null
+  payload.revisorStatus = currentMaterial?.revisorStatus ?? null
   payload.reviewNotes = currentMaterial?.reviewNotes || ''
   payload.responsibleId = currentMaterial?.responsibleId || actor.id
 
@@ -739,11 +776,16 @@ app.patch('/api/materials/:id/approve', auth, async (req, res) => {
 
 app.patch('/api/materials/:id/status', auth, async (req, res) => {
   const actor = await store.getUserById(req.user.id)
-  if (!canManageProduction(actor)) return res.status(403).json({ message: 'Sem permissao para alterar status.' })
 
   const current = await store.getMaterialById(req.params.id)
   if (!current) return res.status(404).json({ message: 'Material nao encontrado.' })
-  if (!(await canEditMaterial(actor, current))) {
+
+  const isAssignedRevisor = isRevisor(actor) && Number(current.revisorId) === Number(actor.id)
+
+  if (!canManageProduction(actor) && !isAssignedRevisor) {
+    return res.status(403).json({ message: 'Sem permissao para alterar status.' })
+  }
+  if (!(await canEditMaterial(actor, current)) && !isAssignedRevisor) {
     return res.status(403).json({ message: 'Voce nao tem permissao para editar este material.' })
   }
 
@@ -755,6 +797,7 @@ app.patch('/api/materials/:id/status', auth, async (req, res) => {
   const isSupervisor = isPrivileged || actor.role === 'supervisor'
   const isCoord = isPrivileged
   const isProfessor = isPrivileged || actor.role === 'professor'
+  const isRevisorRole = isPrivileged || isAssignedRevisor
   let professorStatusChangedDirectly = false
 
   if (current.moduleId) {
@@ -784,7 +827,20 @@ app.patch('/api/materials/:id/status', auth, async (req, res) => {
       }
     }
 
-    if ((isSupervisor || isCoord) && Object.prototype.hasOwnProperty.call(req.body, 'reviewNotes')) {
+    if (isRevisorRole && Object.prototype.hasOwnProperty.call(req.body, 'revisorStatus')) {
+      const nextRevStatus = normalizeOptionalEnum(req.body.revisorStatus)
+      if (!isPrivileged && nextRevStatus === 'aprovado' && update.coordinatorStatus !== 'aprovado') {
+        return res.status(400).json({ message: 'O(a) revisor(a) so pode aprovar conteudos ja aprovados pela coordenacao.' })
+      }
+      update.revisorStatus = nextRevStatus
+      if (nextRevStatus === 'ajustes' || nextRevStatus === 'reprovado') {
+        update.coordinatorStatus = 'pendente'
+        update.supervisorStatus = 'aguardando'
+        update.status = 'em_ajustes'
+      }
+    }
+
+    if ((isSupervisor || isCoord || isRevisorRole) && Object.prototype.hasOwnProperty.call(req.body, 'reviewNotes')) {
       update.reviewNotes = req.body.reviewNotes
     }
   } else if (actor.role === 'professor' && !isAdmin) {
@@ -810,7 +866,20 @@ app.patch('/api/materials/:id/status', auth, async (req, res) => {
       }
     }
 
-    if ((isSupervisor || isCoord) && Object.prototype.hasOwnProperty.call(req.body, 'reviewNotes')) {
+    if (isRevisorRole && Object.prototype.hasOwnProperty.call(req.body, 'revisorStatus')) {
+      const nextRevStatus = normalizeOptionalEnum(req.body.revisorStatus)
+      if (!isPrivileged && nextRevStatus === 'aprovado' && update.coordinatorStatus !== 'aprovado') {
+        return res.status(400).json({ message: 'O(a) revisor(a) so pode aprovar conteudos ja aprovados pela coordenacao.' })
+      }
+      update.revisorStatus = nextRevStatus
+      if (nextRevStatus === 'ajustes' || nextRevStatus === 'reprovado') {
+        update.coordinatorStatus = 'pendente'
+        update.supervisorStatus = 'aguardando'
+        update.status = 'em_ajustes'
+      }
+    }
+
+    if ((isSupervisor || isCoord || isRevisorRole) && Object.prototype.hasOwnProperty.call(req.body, 'reviewNotes')) {
       update.reviewNotes = req.body.reviewNotes
     }
   }
@@ -823,6 +892,7 @@ app.patch('/api/materials/:id/status', auth, async (req, res) => {
       status: { concluido: 'concluir_conteudo_professor', em_ajustes: 'ajustes_conteudo_professor' },
       supervisorStatus: { aprovado: 'aprovar_conteudo_supervisor', ajustes: 'ajustes_conteudo_supervisor' },
       coordinatorStatus: { aprovado: 'aprovar_conteudo_coordenador', ajustes: 'ajustes_conteudo_coordenador', reprovado: 'reprovar_conteudo_coordenador' },
+      revisorStatus: { aprovado: 'aprovar_conteudo_revisor', ajustes: 'ajustes_conteudo_revisor', reprovado: 'reprovar_conteudo_revisor' },
     }
     const note = String(req.body.reviewNotes || '').trim()
 
@@ -858,6 +928,18 @@ app.patch('/api/materials/:id/status', auth, async (req, res) => {
         authorRole: actor.role,
         type: 'history',
         action: CONTENT_ACTION_BY_STATUS.coordinatorStatus[update.coordinatorStatus],
+        message: [material.theme, note].filter(Boolean).join(' — ') || material.theme,
+      })
+    }
+
+    if (update.revisorStatus !== current.revisorStatus && CONTENT_ACTION_BY_STATUS.revisorStatus[update.revisorStatus]) {
+      await store.createModuleEvent({
+        moduleId: material.moduleId,
+        authorId: actor.id,
+        authorName: actor.name,
+        authorRole: actor.role,
+        type: 'history',
+        action: CONTENT_ACTION_BY_STATUS.revisorStatus[update.revisorStatus],
         message: [material.theme, note].filter(Boolean).join(' — ') || material.theme,
       })
     }
@@ -1007,6 +1089,11 @@ app.patch('/api/modules/:id/status', auth, async (req, res) => {
         const summary = await store.getModuleApprovalSummary(current.id)
         if (summary.total === 0 || summary.coordinatorApproved < summary.total) {
           return res.status(400).json({ message: 'Todos os conteudos do modulo precisam estar aprovados pela coordenacao antes de publicar.' })
+        }
+        // So exige aprovacao do(a) revisor(a) em cursos que tem revisor(es) configurado(s) na
+        // equipe -- cursos sem revisor continuam publicando so com a coordenacao, sem mudanca.
+        if (course?.revisors?.length > 0 && summary.revisorApproved < summary.total) {
+          return res.status(400).json({ message: 'Todos os conteudos do modulo precisam estar aprovados pelo(a) revisor(a) antes de publicar.' })
         }
         update = { stage: 'publicado' }
         break

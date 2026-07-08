@@ -350,10 +350,14 @@ function CourseCard({ course, materials, onEdit, onDelete, ementaStatus }) {
   )
 }
 
-function CourseModal({ course, open, onClose, onSave, participants = { supervisors: [], coordinators: [], producers: [] }, saving = false, error = null }) {
+function CourseModal({ course, open, onClose, onSave, participants = { supervisors: [], coordinators: [], producers: [], revisors: [] }, saving = false, error = null }) {
   const fileRef = useRef(null)
   const [form, setForm] = useState(() => course
-    ? { ...course, producerIds: course.producerIds || course.producers?.map((producer) => producer.id) || [] }
+    ? {
+      ...course,
+      producerIds: course.producerIds || course.producers?.map((producer) => producer.id) || [],
+      revisorIds: course.revisorIds || course.revisors?.map((revisor) => revisor.id) || [],
+    }
     : {
     name: '',
     primaryTrail: '',
@@ -367,6 +371,7 @@ function CourseModal({ course, open, onClose, onSave, participants = { superviso
     deadline: '',
     image: null,
     producerIds: [],
+    revisorIds: [],
   })
 
   const handleChange = (event) => {
@@ -428,6 +433,17 @@ function CourseModal({ course, open, onClose, onSave, participants = { superviso
     })
   }
 
+  const toggleRevisor = (revisorId) => {
+    setForm((current) => {
+      const currentIds = current.revisorIds || []
+      const nextIds = currentIds.includes(revisorId)
+        ? currentIds.filter((id) => id !== revisorId)
+        : [...currentIds, revisorId]
+
+      return { ...current, revisorIds: nextIds }
+    })
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     await onSave({
@@ -435,6 +451,7 @@ function CourseModal({ course, open, onClose, onSave, participants = { superviso
       supervisorId: Number(form.supervisorId) || null,
       coordinatorId: Number(form.coordinatorId) || null,
       producerIds: (form.producerIds || []).map(Number).filter(Boolean),
+      revisorIds: (form.revisorIds || []).map(Number).filter(Boolean),
       totalSessions: Number(form.totalSessions) || 0,
     })
   }
@@ -584,6 +601,32 @@ function CourseModal({ course, open, onClose, onSave, participants = { superviso
             {(form.producerIds || []).length === 0 && (
               <p className="text-xs text-amber-600 mt-1">Selecione pelo menos um professor/produtor.</p>
             )}
+          </div>
+
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Revisor(a)(es)</label>
+            <div className="rounded-xl border border-gray-200 bg-white max-h-44 overflow-y-auto divide-y divide-gray-100">
+              {(participants.revisors || []).length === 0 ? (
+                <div className="px-3 py-3 text-sm text-gray-400">Nenhum(a) revisor(a) ativo(a) encontrado(a).</div>
+              ) : (
+                participants.revisors.map((revisor) => {
+                  const checked = (form.revisorIds || []).includes(revisor.id)
+                  return (
+                    <label key={revisor.id} className="flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleRevisor(revisor.id)}
+                        className="rounded border-gray-300 text-brand-700 focus:ring-brand-500"
+                      />
+                      <PersonAvatar name={revisor.name} avatar={revisor.avatar} size="sm" />
+                      <span className="truncate">{revisor.name}</span>
+                    </label>
+                  )
+                })
+              )}
+            </div>
+            <p className="text-xs text-gray-400 mt-1">Opcional. Os revisores selecionados ficam disponiveis para atribuicao por conteudo.</p>
           </div>
 
           <div>

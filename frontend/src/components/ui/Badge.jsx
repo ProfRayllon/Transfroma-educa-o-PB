@@ -45,6 +45,7 @@ const variants = {
   tutor: 'bg-pink-100 text-pink-800 border border-pink-200',
   tecnico: 'bg-cyan-100 text-cyan-800 border border-cyan-200',
   gestao: 'bg-teal-100 text-teal-800 border border-teal-200',
+  revisor: 'bg-rose-100 text-rose-800 border border-rose-200',
 }
 
 const labels = {
@@ -88,6 +89,7 @@ const labels = {
   tutor: 'Tutor',
   tecnico: 'Apoio tecnico',
   gestao: 'Gestão de Pessoas',
+  revisor: 'Revisor(a)',
 }
 
 const dots = {

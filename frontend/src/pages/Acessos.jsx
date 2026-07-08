@@ -12,6 +12,7 @@ const MANAGED_ROLES = [
   { value: 'supervisor', label: 'Supervisor' },
   { value: 'professor', label: 'Professor' },
   { value: 'tecnico', label: 'Apoio tecnico' },
+  { value: 'revisor', label: 'Revisor(a)' },
 ]
 
 const FILTER_ROLES = [
@@ -28,6 +29,7 @@ const ROLE_LABELS = {
   tecnico: 'Apoio tecnico',
   tutor: 'Tutor',
   gestao: 'Gestao de Pessoas',
+  revisor: 'Revisor(a)',
 }
 
 const ROLE_FUNCTIONS = {
@@ -43,6 +45,9 @@ const ROLE_FUNCTIONS = {
   tecnico: [
     'Apoio Tecnico de Tutoria',
     'Apoio Tecnico Supervisor de Tutoria',
+  ],
+  revisor: [
+    'Revisor(a) de conteudo',
   ],
 }
 
@@ -84,6 +89,7 @@ const PERMISSIONS_MAP = {
   supervisor: ['Acessa Producao', 'Aprova materiais', 'Edita ocorrencias', 'Registra frequencia', 'Visualiza relatorios'],
   professor: ['Acessa Producao', 'Cadastra materiais', 'Edita os proprios materiais', 'Visualiza status da revisao'],
   tecnico: ['Acesso somente leitura aos dados vinculados'],
+  revisor: ['Acessa Producao dos cursos vinculados', 'Aprova ou pede ajuste nos conteudos atribuidos', 'Nao pode excluir conteudos ou modulos'],
 }
 
 function getInitials(name = '') {

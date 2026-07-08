@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Plus, Search, GripVertical, CheckCircle, Send, Rocket, Trash2, Pencil, Eye,
   Link2, AlertTriangle, ArrowLeft, ChevronDown, ChevronRight, MoreVertical, Filter, Info,
-  Layers, FileText, Clock, X,
+  Layers, FileText, Clock, X, MessageSquare,
 } from 'lucide-react'
 import Badge from '../ui/Badge'
 import StatCard from '../ui/StatCard'
@@ -16,6 +16,7 @@ import {
   PROFESSOR_STATUS_OPTIONS,
   SUPERVISOR_STATUS_OPTIONS,
   COORDINATOR_STATUS_OPTIONS,
+  REVISOR_STATUS_OPTIONS,
   MATERIAL_TYPE_OPTIONS,
   getMaterialResponsibles,
   TypeBadge,
@@ -54,6 +55,7 @@ const EMPTY_CONTENT_FORM = {
   adjustedLink: '',
   status: 'nao_iniciado',
   reviewNotes: '',
+  revisorId: '',
 }
 
 function formatDateOnly(value) {
@@ -69,11 +71,17 @@ function getContentApprovalSummary(contents) {
     professorConcluded: contents.filter(c => c.status === 'concluido').length,
     supervisorApproved: contents.filter(c => c.supervisorStatus === 'aprovado').length,
     coordinatorApproved: contents.filter(c => c.coordinatorStatus === 'aprovado').length,
-    anyNeedsAttention: contents.some(c => c.supervisorStatus === 'ajustes' || c.coordinatorStatus === 'ajustes' || c.coordinatorStatus === 'reprovado'),
+    revisorApproved: contents.filter(c => c.revisorStatus === 'aprovado').length,
+    anyNeedsAttention: contents.some(c =>
+      c.supervisorStatus === 'ajustes' || c.coordinatorStatus === 'ajustes' || c.coordinatorStatus === 'reprovado' ||
+      c.revisorStatus === 'ajustes' || c.revisorStatus === 'reprovado'
+    ),
   }
 }
 
-function getModuleStatusKey(m, contents = []) {
+// So exige aprovacao do(a) revisor(a) em cursos que tem revisor(es) configurado(s) na equipe
+// (mesma regra condicional aplicada no backend em PATCH /modules/:id/status, acao "publicar").
+function getModuleStatusKey(m, contents = [], hasRevisors = false) {
   if (!m) return 'rascunho'
   if (m.stage === 'publicado') return 'publicado'
   if (m.stage === 'producao') {
@@ -84,7 +92,9 @@ function getModuleStatusKey(m, contents = []) {
   const summary = getContentApprovalSummary(contents)
   if (summary.total === 0) return 'em_validacao'
   if (summary.anyNeedsAttention) return 'em_revisao'
-  if (summary.coordinatorApproved === summary.total) return 'aprovado'
+  const coordinatorDone = summary.coordinatorApproved === summary.total
+  const revisorDone = !hasRevisors || summary.revisorApproved === summary.total
+  if (coordinatorDone && revisorDone) return 'aprovado'
   return 'em_validacao'
 }
 
@@ -109,6 +119,7 @@ function ContentModal({ open, onClose, onSave, saving, modules, defaultModuleId,
         adjustedLink: editing.adjustedLink || '',
         status: editing.status || 'nao_iniciado',
         reviewNotes: editing.reviewNotes || '',
+        revisorId: editing.revisorId || '',
       })
     } else {
       setForm({ ...EMPTY_CONTENT_FORM, moduleId: defaultModuleId || '' })
@@ -117,6 +128,7 @@ function ContentModal({ open, onClose, onSave, saving, modules, defaultModuleId,
   }, [open, editing, defaultModuleId])
 
   const producers = course.producers || []
+  const revisorsPool = course.revisors || []
 
   const addResponsible = (e) => {
     const userId = Number(e.target.value)
@@ -145,6 +157,7 @@ function ContentModal({ open, onClose, onSave, saving, modules, defaultModuleId,
       responsibleName: primary.name,
       responsibleRole: primary.role || '',
       responsibles: form.responsibles,
+      revisorId: form.revisorId || null,
     })
   }
 
@@ -241,6 +254,15 @@ function ContentModal({ open, onClose, onSave, saving, modules, defaultModuleId,
             ))}
           </select>
           {producers.length === 0 && <p className="text-xs text-amber-600 mt-1">Nenhum professor(a)/produtor vinculado ao curso.</p>}
+        </div>
+
+        <div className="col-span-2">
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Revisor(a)</label>
+          <select value={form.revisorId} onChange={e => setForm(f => ({ ...f, revisorId: e.target.value }))} className="select-field">
+            <option value="">Nenhum revisor(a) selecionado</option>
+            {revisorsPool.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+          {revisorsPool.length === 0 && <p className="text-xs text-gray-400 mt-1">Nenhum(a) revisor(a) vinculado ao curso. Opcional.</p>}
         </div>
 
         <div>
@@ -412,6 +434,10 @@ export default function ModulosWorkspace({ course }) {
   const [dragOverModuleId, setDragOverModuleId] = useState(null)
   const [dragContentId, setDragContentId] = useState(null)
   const [dragOverContentId, setDragOverContentId] = useState(null)
+  const [revisorNoteTarget, setRevisorNoteTarget] = useState(null)
+  const [revisorNoteText, setRevisorNoteText] = useState('')
+  const [savingRevisorNote, setSavingRevisorNote] = useState(false)
+  const [pendingRevisorStatus, setPendingRevisorStatus] = useState(null)
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type })
@@ -444,11 +470,19 @@ export default function ModulosWorkspace({ course }) {
   const isProducer = user?.role === 'professor' && course.producers?.some(p => Number(p.id) === Number(user.id))
   const isCourseSupervisor = user?.role === 'supervisor' && (course.supervisorId === user.id || course.supervisorName === user.name)
   const isCourseCoordinator = isCoordinatorUser && (course.coordinatorId === user.id || course.coordinatorName === user.name)
+  // Revisor(a) so enxerga cursos onde esta no pool de revisores do curso; o campo de
+  // status por conteudo so fica editavel para quem e o revisor atribuido aquele conteudo
+  // especifico (verificado por material, nao aqui).
+  const isRevisor = user?.role === 'revisor'
+  const isCourseRevisor = isRevisor && course.revisors?.some(r => Number(r.id) === Number(user.id))
+  const hasRevisors = (course.revisors?.length || 0) > 0
   const canManageModules = isAdmin || isProducer || isCourseSupervisor || isCourseCoordinator
   // Admin e coordenacao do curso podem sempre alterar qualquer status de qualquer perfil,
   // sem passar pelo gate sequencial (professor -> supervisor -> coordenacao).
   const isPrivileged = isAdmin || isCourseCoordinator
 
+  // Revisor(a) nunca entra aqui de proposito: ele nao pode editar/excluir conteudo ou
+  // modulo, so tem acesso ao proprio campo de status por conteudo (ver coluna Revisor(a)).
   const canEditContent = isAdmin || isProducer || isCourseSupervisor || isCourseCoordinator
   const canReviewContent = isAdmin || isCourseSupervisor || isCourseCoordinator
 
@@ -456,7 +490,11 @@ export default function ModulosWorkspace({ course }) {
   // ou de admin/coordenacao do curso, que podem excluir sempre.
   const canEditThisModule = (m) => !!m && (isAdmin || (canManageModules && m.stage === 'producao'))
   const canDeleteThisModule = (m) => !!m && (isPrivileged || (isCourseSupervisor && m.stage === 'producao'))
-  const canPublishThisModule = (m, summary) => (isAdmin || isCourseCoordinator) && m.stage === 'supervisao' && summary.total > 0 && summary.coordinatorApproved === summary.total
+  // So exige aprovacao do(a) revisor(a) em cursos que tem revisor(es) configurado(s) --
+  // mesma regra condicional do backend em PATCH /modules/:id/status, acao "publicar".
+  const canPublishThisModule = (m, summary) => (isAdmin || isCourseCoordinator) && m.stage === 'supervisao'
+    && summary.total > 0 && summary.coordinatorApproved === summary.total
+    && (!hasRevisors || summary.revisorApproved === summary.total)
 
   const courseMaterials = useMemo(
     () => materials.filter(m => Number(m.courseId) === Number(course.id) || m.course === course.name),
@@ -490,6 +528,7 @@ export default function ModulosWorkspace({ course }) {
       (m.supervisorStatus === 'aprovado' && m.coordinatorStatus !== 'aprovado')
     ).length,
     aprovados: courseMaterials.filter(m => m.supervisorStatus === 'aprovado' && m.coordinatorStatus === 'aprovado').length,
+    revisado: courseMaterials.filter(m => m.revisorStatus === 'aprovado').length,
   }), [modules, courseMaterials])
 
   const sortedModules = useMemo(() => [...modules].sort((a, b) => (a.order || 0) - (b.order || 0)), [modules])
@@ -501,7 +540,7 @@ export default function ModulosWorkspace({ course }) {
     return sortedModules
       .map(m => {
         const allContents = (contentsByModuleId[m.id] || []).slice().sort((a, b) => Number(a.session) - Number(b.session))
-        if (statusFilter && getModuleStatusKey(m, allContents) !== statusFilter) return null
+        if (statusFilter && getModuleStatusKey(m, allContents, hasRevisors) !== statusFilter) return null
         if (!q) return { module: m, allContents, visibleContents: allContents, forceExpand: false }
         const moduleMatches = m.title?.toLowerCase().includes(q)
         const matchingContents = allContents.filter(c => c.theme?.toLowerCase().includes(q))
@@ -510,7 +549,7 @@ export default function ModulosWorkspace({ course }) {
         return null
       })
       .filter(Boolean)
-  }, [sortedModules, contentsByModuleId, structureSearch, statusFilter])
+  }, [sortedModules, contentsByModuleId, structureSearch, statusFilter, hasRevisors])
 
   const toggleModuleCollapsed = (id) => {
     setCollapsedModuleIds(prev => {
@@ -655,6 +694,32 @@ export default function ModulosWorkspace({ course }) {
     }
   }
 
+  // Revisor(a) nao tem acesso ao formulario completo de edicao de conteudo (so pode ver,
+  // aprovar/pedir ajuste e comentar) -- por isso o parecer dele(a) usa este modal enxuto
+  // em vez do ContentModal, que exigiria permissao de editar/excluir que o revisor nao tem.
+  const openRevisorNote = (mat, status) => {
+    setRevisorNoteTarget(mat)
+    setPendingRevisorStatus(status)
+    setRevisorNoteText(mat.reviewNotes || '')
+  }
+
+  const handleSaveRevisorNote = async () => {
+    if (!revisorNoteTarget) return
+    setSavingRevisorNote(true)
+    try {
+      await updateMaterialStatus(revisorNoteTarget.id, {
+        revisorStatus: pendingRevisorStatus,
+        reviewNotes: revisorNoteText,
+      })
+      setRevisorNoteTarget(null)
+      setPendingRevisorStatus(null)
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'Erro ao salvar parecer.'), 'error')
+    } finally {
+      setSavingRevisorNote(false)
+    }
+  }
+
   const handleDeleteContent = async () => {
     if (!confirmDeleteContent) return
     try {
@@ -777,12 +842,13 @@ export default function ModulosWorkspace({ course }) {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <StatCard icon={Layers} iconBg="bg-brand-100" iconColor="text-brand-700" value={stats.modulos} label="Módulos" />
         <StatCard icon={FileText} iconBg="bg-blue-100" iconColor="text-blue-700" value={stats.conteudos} label="Conteúdos" />
         <StatCard icon={Clock} iconBg="bg-amber-100" iconColor="text-amber-600" value={stats.emProducao} label="Em produção" />
         <StatCard icon={Eye} iconBg="bg-purple-100" iconColor="text-purple-700" value={stats.aguardando} label="Aguardando validação" />
         <StatCard icon={CheckCircle} iconBg="bg-green-100" iconColor="text-green-600" value={stats.aprovados} label="Aprovados" />
+        <StatCard icon={CheckCircle} iconBg="bg-rose-100" iconColor="text-rose-700" value={stats.revisado} label="Revisado" />
       </div>
 
       {modules.length === 0 ? (
@@ -840,14 +906,15 @@ export default function ModulosWorkspace({ course }) {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th className="table-header w-16">Ordem</th>
-                  <th className="table-header">Item</th>
-                  <th className="table-header w-14">Tipo</th>
-                  <th className="table-header w-36">Professor(a)</th>
-                  <th className="table-header w-28">Link</th>
-                  <th className="table-header w-36">Supervisor(a)</th>
-                  <th className="table-header w-36">Coordenador(a)</th>
-                  <th className="table-header w-28">Ações</th>
+                  <th className="table-header w-16 px-2">Ordem</th>
+                  <th className="table-header px-2">Item</th>
+                  <th className="table-header w-14 px-2">Tipo</th>
+                  <th className="table-header w-32 px-2">Professor(a)</th>
+                  <th className="table-header w-24 px-2">Link</th>
+                  <th className="table-header w-32 px-2">Supervisor(a)</th>
+                  <th className="table-header w-32 px-2">Coordenador(a)</th>
+                  <th className="table-header w-32 px-2">Revisor(a)</th>
+                  <th className="table-header w-24 px-2">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -874,13 +941,13 @@ export default function ModulosWorkspace({ course }) {
                           ${isDragOverModule ? 'bg-brand-50/50 border-t-2 border-t-brand-400' : ''}
                         `}
                       >
-                        <td className="table-cell text-center">
+                        <td className="table-cell px-2 text-center">
                           <div className="flex items-center justify-center gap-1">
                             {canManageModules && reorderingAllowed && <GripVertical size={13} className="text-gray-300 cursor-grab active:cursor-grabbing flex-shrink-0" />}
                             <span className="font-semibold text-gray-600">{m.order}</span>
                           </div>
                         </td>
-                        <td className="table-cell">
+                        <td className="table-cell px-2">
                           <div className="flex items-center gap-2 min-w-0">
                             <button onClick={() => toggleModuleCollapsed(m.id)} className="p-0.5 text-gray-400 hover:text-gray-600 flex-shrink-0">
                               {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
@@ -889,7 +956,7 @@ export default function ModulosWorkspace({ course }) {
                               <Layers size={14} />
                             </div>
                             <span className="font-bold text-gray-900 whitespace-nowrap">{m.title}</span>
-                            <Badge status={getModuleStatusKey(m, allContents)} />
+                            <Badge status={getModuleStatusKey(m, allContents, hasRevisors)} />
                             <span className="text-xs text-gray-400 whitespace-nowrap">{allContents.length} conteúdo{allContents.length !== 1 ? 's' : ''}</span>
                           </div>
                         </td>
@@ -898,7 +965,8 @@ export default function ModulosWorkspace({ course }) {
                         <td className="table-cell" />
                         <td className="table-cell" />
                         <td className="table-cell" />
-                        <td className="table-cell">
+                        <td className="table-cell" />
+                        <td className="table-cell px-2">
                           <div className="flex items-center justify-end gap-1 relative">
                             {canEditContent && (
                               <button
@@ -982,13 +1050,13 @@ export default function ModulosWorkspace({ course }) {
                               ${isDragOver ? 'bg-brand-50/30 border-t-2 border-t-brand-400' : 'hover:bg-gray-50/50'}
                             `}
                           >
-                            <td className="table-cell text-center text-gray-400">
+                            <td className="table-cell px-2 text-center text-gray-400">
                               <div className="flex items-center justify-center gap-1">
                                 {canDrag && <GripVertical size={12} className="text-gray-200 cursor-grab active:cursor-grabbing flex-shrink-0" />}
                                 <span>{m.order}.{idx + 1}</span>
                               </div>
                             </td>
-                            <td className="table-cell">
+                            <td className="table-cell px-2">
                               <div className="flex items-center gap-2 pl-7 min-w-0">
                                 <div className="w-6 h-6 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
                                   <FileText size={12} />
@@ -996,8 +1064,8 @@ export default function ModulosWorkspace({ course }) {
                                 <span className="text-gray-700 truncate max-w-56" title={mat.theme}>{mat.theme}</span>
                               </div>
                             </td>
-                            <td className="table-cell"><TypeBadge type={mat.type} iconOnly /></td>
-                            <td className="table-cell">
+                            <td className="table-cell px-2"><TypeBadge type={mat.type} iconOnly /></td>
+                            <td className="table-cell px-2">
                               <div className="flex items-center gap-1.5">
                                 <StackedAvatars responsibles={getMaterialResponsibles(mat)} assignees={materialAssignees} />
                                 {(isPrivileged || isProducer) ? (
@@ -1011,8 +1079,8 @@ export default function ModulosWorkspace({ course }) {
                                 )}
                               </div>
                             </td>
-                            <td className="table-cell"><LinkChip url={mat.adjustedLink || mat.originalLink} /></td>
-                            <td className="table-cell">
+                            <td className="table-cell px-2"><LinkChip url={mat.adjustedLink || mat.originalLink} /></td>
+                            <td className="table-cell px-2">
                               <div className="flex items-center gap-1.5">
                                 <MiniAvatar name={course.supervisorName} roleLabel="Supervisor(a)" avatar={course.supervisorAvatar} />
                                 {(isPrivileged || isCourseSupervisor) ? (
@@ -1032,7 +1100,7 @@ export default function ModulosWorkspace({ course }) {
                                 )}
                               </div>
                             </td>
-                            <td className="table-cell">
+                            <td className="table-cell px-2">
                               <div className="flex items-center gap-1.5">
                                 <MiniAvatar name={course.coordinatorName} roleLabel="Coordenador(a)" avatar={course.coordinatorAvatar} />
                                 {isPrivileged ? (
@@ -1046,7 +1114,50 @@ export default function ModulosWorkspace({ course }) {
                                 )}
                               </div>
                             </td>
-                            <td className="table-cell">
+                            <td className="table-cell px-2">
+                              <div className="flex items-center gap-1.5">
+                                <MiniAvatar
+                                  name={mat.revisorName}
+                                  roleLabel="Revisor(a)"
+                                  avatar={course.revisors?.find(r => Number(r.id) === Number(mat.revisorId))?.avatar || null}
+                                />
+                                {(() => {
+                                  const isAssignedRevisor = isRevisor && Number(mat.revisorId) === Number(user?.id)
+                                  if (!isPrivileged && !isAssignedRevisor) {
+                                    return <Badge status={mat.revisorStatus || ''} />
+                                  }
+                                  return (
+                                    <>
+                                      <InlineStatusSelect
+                                        value={mat.revisorStatus || ''}
+                                        options={REVISOR_STATUS_OPTIONS}
+                                        onChange={val => {
+                                          if (!isPrivileged && val === 'aprovado' && mat.coordinatorStatus !== 'aprovado') {
+                                            showToast('Só é possível aprovar após a coordenação aprovar este conteúdo.', 'error')
+                                            return
+                                          }
+                                          if (val === 'ajustes' || val === 'reprovado') {
+                                            openRevisorNote(mat, val)
+                                            return
+                                          }
+                                          handleContentStatusChange(mat, 'revisorStatus', val)
+                                        }}
+                                      />
+                                      {isAssignedRevisor && (
+                                        <button
+                                          onClick={() => openRevisorNote(mat, mat.revisorStatus || '')}
+                                          title="Deixar parecer/comentário"
+                                          className="p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors"
+                                        >
+                                          <MessageSquare size={13} />
+                                        </button>
+                                      )}
+                                    </>
+                                  )
+                                })()}
+                              </div>
+                            </td>
+                            <td className="table-cell px-2">
                               <div className="flex items-center justify-end gap-0.5">
                                 <button onClick={() => setViewContent(mat)} title="Visualizar" className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
                                   <Eye size={14} />
@@ -1068,7 +1179,7 @@ export default function ModulosWorkspace({ course }) {
                       })}
                       {isExpanded && visibleContents.length === 0 && (
                         <tr>
-                          <td colSpan={8} className="table-cell text-center py-6 text-gray-400 text-xs pl-10">
+                          <td colSpan={9} className="table-cell text-center py-6 text-gray-400 text-xs pl-10">
                             Nenhum conteúdo vinculado a este módulo ainda.
                           </td>
                         </tr>
@@ -1078,7 +1189,7 @@ export default function ModulosWorkspace({ course }) {
                 })}
                 {structureRows.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="table-cell text-center py-10 text-gray-400 text-sm">
+                    <td colSpan={9} className="table-cell text-center py-10 text-gray-400 text-sm">
                       Nenhum módulo encontrado.
                     </td>
                   </tr>
@@ -1143,12 +1254,53 @@ export default function ModulosWorkspace({ course }) {
               <div className="text-xs font-medium text-gray-500 mb-1">Coordenador(a)</div>
               <Badge status={viewContent.coordinatorStatus || ''} />
             </div>
+            <div>
+              <div className="text-xs font-medium text-gray-500 mb-1">Revisor(a)</div>
+              <Badge status={viewContent.revisorStatus || ''} />
+            </div>
             {viewContent.reviewNotes && (
               <div className="col-span-2">
                 <div className="text-xs font-medium text-gray-500 mb-1">Parecer / observações da revisão</div>
                 <div className="text-sm text-gray-800 bg-amber-50 border border-amber-100 rounded-lg p-3">{viewContent.reviewNotes}</div>
               </div>
             )}
+          </div>
+        </Modal>
+      )}
+
+      {/* Parecer do(a) revisor(a) */}
+      {revisorNoteTarget && (
+        <Modal
+          open={!!revisorNoteTarget}
+          onClose={() => { setRevisorNoteTarget(null); setPendingRevisorStatus(null) }}
+          title="Parecer do(a) revisor(a)"
+          size="md"
+          footer={
+            <>
+              <button onClick={() => { setRevisorNoteTarget(null); setPendingRevisorStatus(null) }} className="btn-secondary" disabled={savingRevisorNote}>
+                Cancelar
+              </button>
+              <button onClick={handleSaveRevisorNote} className="btn-primary" disabled={savingRevisorNote}>
+                {savingRevisorNote ? 'Salvando...' : 'Salvar parecer'}
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">
+              Conteúdo: <span className="font-medium text-gray-800">{revisorNoteTarget.theme}</span>
+            </p>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Comentário para o professor(a)</label>
+              <textarea
+                value={revisorNoteText}
+                onChange={e => setRevisorNoteText(e.target.value)}
+                className="input-field resize-none"
+                rows={3}
+                placeholder="Explique o que precisa ser ajustado..."
+                autoFocus
+              />
+            </div>
           </div>
         </Modal>
       )}
@@ -1163,7 +1315,7 @@ export default function ModulosWorkspace({ course }) {
           defaultModuleId={contentModalDefaultModuleId}
           course={course}
           editing={editingContent}
-          canReview={canReviewContent}
+          canReview={canReviewContent || (isRevisor && Number(editingContent?.revisorId) === Number(user?.id))}
           canEditStatus={isPrivileged || isProducer}
         />
       )}

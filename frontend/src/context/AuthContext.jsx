@@ -126,4 +126,7 @@ const PERMISSIONS = {
   gestao: [
     'view_pessoas', 'edit_frequencia', 'update_funcional', 'view_ocorrencias',
   ],
+  revisor: [
+    'view_producao', 'view_review_status',
+  ],
 }

@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(150) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   registration VARCHAR(30) DEFAULT NULL,
-  role ENUM('administrador','coordenador','supervisor','professor','tutor','tecnico','gestao') NOT NULL DEFAULT 'professor',
+  role ENUM('administrador','coordenador','supervisor','professor','tutor','tecnico','gestao','revisor') NOT NULL DEFAULT 'professor',
   `function` VARCHAR(100) DEFAULT NULL,
   area VARCHAR(150) DEFAULT NULL,
   avatar MEDIUMTEXT DEFAULT NULL,
@@ -117,12 +117,18 @@ CREATE TABLE IF NOT EXISTS materials (
   review_status ENUM('pendente','em_revisao','aprovado','reprovado','ajuste_solicitado','em_execucao','validado','em_ajustes','revisao_linguistica','edicao','concluido','esperando_material') NOT NULL DEFAULT 'em_execucao',
   supervisor_status VARCHAR(20) NULL DEFAULT NULL,
   coordinator_status VARCHAR(20) NULL DEFAULT NULL,
+  revisor_id INT DEFAULT NULL,
+  revisor_name VARCHAR(150) DEFAULT NULL,
+  revisor_status VARCHAR(20) NULL DEFAULT NULL,
   responsibles TEXT DEFAULT NULL,
   review_notes TEXT DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_materials_responsible
     FOREIGN KEY (responsible_id) REFERENCES users(id)
+    ON DELETE SET NULL,
+  CONSTRAINT fk_materials_revisor
+    FOREIGN KEY (revisor_id) REFERENCES users(id)
     ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
@@ -135,6 +141,19 @@ CREATE TABLE IF NOT EXISTS course_producers (
     FOREIGN KEY (course_id) REFERENCES courses(id)
     ON DELETE CASCADE,
   CONSTRAINT fk_course_producers_user
+    FOREIGN KEY (user_id) REFERENCES users(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS course_revisors (
+  course_id INT NOT NULL,
+  user_id INT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (course_id, user_id),
+  CONSTRAINT fk_course_revisors_course
+    FOREIGN KEY (course_id) REFERENCES courses(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_course_revisors_user
     FOREIGN KEY (user_id) REFERENCES users(id)
     ON DELETE CASCADE
 ) ENGINE=InnoDB;

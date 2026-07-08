@@ -11,14 +11,14 @@ export function DataProvider({ children }) {
   const [courses, setCourses] = useState(mockCourses)
   const [coursesLoading, setCoursesLoading] = useState(false)
   const [coursesError, setCoursesError] = useState(null)
-  const [courseParticipants, setCourseParticipants] = useState({ supervisors: [], coordinators: [], producers: [] })
+  const [courseParticipants, setCourseParticipants] = useState({ supervisors: [], coordinators: [], producers: [], revisors: [] })
   const [materialAssignees, setMaterialAssignees] = useState([])
 
   const loadCourses = useCallback(async () => {
     if (!user) {
       setMaterials(mockMaterials)
       setCourses(mockCourses)
-      setCourseParticipants({ supervisors: [], coordinators: [], producers: [] })
+      setCourseParticipants({ supervisors: [], coordinators: [], producers: [], revisors: [] })
       setMaterialAssignees([])
       setCoursesError(null)
       return

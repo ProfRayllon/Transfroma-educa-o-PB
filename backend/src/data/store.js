@@ -54,6 +54,9 @@ function mapMaterialRow(row) {
     reviewStatus: row.review_status,
     supervisorStatus: row.supervisor_status ?? null,
     coordinatorStatus: row.coordinator_status ?? null,
+    revisorId: row.revisor_id || null,
+    revisorName: row.revisor_name || null,
+    revisorStatus: row.revisor_status ?? null,
     reviewNotes: row.review_notes,
     createdAt: formatDate(row.created_at),
   }
@@ -95,6 +98,7 @@ function mapCourseRow(row) {
     coordinatorName: row.coordinator_name,
     coordinatorAvatar: row.coordinator_avatar || null,
     producers: parseJsonArray(row.producers).filter((producer) => producer.id),
+    revisors: parseJsonArray(row.revisors).filter((revisor) => revisor.id),
     startDate: formatDate(row.start_date),
     deadline: formatDate(row.deadline),
     image: row.image,
@@ -270,7 +274,7 @@ async function createPool() {
 
 async function ensureMysqlSchema() {
   await pool.execute(
-    "ALTER TABLE users MODIFY role ENUM('administrador','coordenador','supervisor','professor','tutor','tecnico','gestao') NOT NULL DEFAULT 'professor'"
+    "ALTER TABLE users MODIFY role ENUM('administrador','coordenador','supervisor','professor','tutor','tecnico','gestao','revisor') NOT NULL DEFAULT 'professor'"
   )
 
   const [userExtraColumns] = await pool.execute(
@@ -351,6 +355,21 @@ async function ensureMysqlSchema() {
   `)
 
   await pool.execute(`
+    CREATE TABLE IF NOT EXISTS course_revisors (
+      course_id INT NOT NULL,
+      user_id INT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (course_id, user_id),
+      CONSTRAINT fk_course_revisors_course
+        FOREIGN KEY (course_id) REFERENCES courses(id)
+        ON DELETE CASCADE,
+      CONSTRAINT fk_course_revisors_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE
+    ) ENGINE=InnoDB
+  `)
+
+  await pool.execute(`
     ALTER TABLE materials
     MODIFY type VARCHAR(500) NOT NULL DEFAULT 'videoaula'
   `)
@@ -395,7 +414,7 @@ async function ensureMysqlSchema() {
   const [newMatColumns] = await pool.execute(
     `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'materials'
-       AND COLUMN_NAME IN ('course_id', 'module', 'supervisor_status', 'coordinator_status', 'responsibles')`
+       AND COLUMN_NAME IN ('course_id', 'module', 'supervisor_status', 'coordinator_status', 'responsibles', 'revisor_id', 'revisor_name', 'revisor_status')`
   )
   const existingNewCols = new Set(newMatColumns.map((c) => c.COLUMN_NAME))
 
@@ -433,6 +452,18 @@ async function ensureMysqlSchema() {
 
   if (!existingNewCols.has('responsibles')) {
     await pool.execute('ALTER TABLE materials ADD COLUMN responsibles TEXT DEFAULT NULL AFTER responsible_role')
+  }
+
+  if (!existingNewCols.has('revisor_id')) {
+    await pool.execute('ALTER TABLE materials ADD COLUMN revisor_id INT DEFAULT NULL AFTER coordinator_status')
+  }
+
+  if (!existingNewCols.has('revisor_name')) {
+    await pool.execute('ALTER TABLE materials ADD COLUMN revisor_name VARCHAR(150) DEFAULT NULL AFTER revisor_id')
+  }
+
+  if (!existingNewCols.has('revisor_status')) {
+    await pool.execute('ALTER TABLE materials ADD COLUMN revisor_status VARCHAR(20) NULL DEFAULT NULL AFTER revisor_name')
   }
 
   await pool.execute(`
@@ -824,6 +855,9 @@ async function listCourses(user) {
         if (isCoordinatorUser(user)) {
           return course.coordinatorId === user.id || course.coordinatorName === user.name
         }
+        if (user?.role === 'revisor') {
+          return course.revisors?.some((revisor) => Number(revisor.id) === Number(user.id))
+        }
         return false
       })
     return visible.slice().sort((a, b) => String(a.name).localeCompare(String(b.name)))
@@ -847,7 +881,19 @@ async function listCourses(user) {
         FROM course_producers cp
         JOIN users u ON u.id = cp.user_id
         WHERE cp.course_id = c.id
-      ), JSON_ARRAY()) AS producers
+      ), JSON_ARRAY()) AS producers,
+      COALESCE((
+        SELECT JSON_ARRAYAGG(JSON_OBJECT(
+          'id', u.id,
+          'name', u.name,
+          'avatar', u.avatar,
+          'function', u.\`function\`,
+          'role', u.role
+        ))
+        FROM course_revisors cr
+        JOIN users u ON u.id = cr.user_id
+        WHERE cr.course_id = c.id
+      ), JSON_ARRAY()) AS revisors
     FROM courses c
     LEFT JOIN users s ON s.id = c.supervisor_id
     LEFT JOIN users co ON co.id = c.coordinator_id
@@ -864,6 +910,12 @@ async function listCourses(user) {
       sql += ` WHERE EXISTS (
         SELECT 1 FROM course_producers cp
         WHERE cp.course_id = c.id AND cp.user_id = ?
+      )`
+      params.push(user.id)
+    } else if (user?.role === 'revisor') {
+      sql += ` WHERE EXISTS (
+        SELECT 1 FROM course_revisors cr
+        WHERE cr.course_id = c.id AND cr.user_id = ?
       )`
       params.push(user.id)
     } else {
@@ -898,7 +950,19 @@ async function getCourseById(id) {
         FROM course_producers cp
         JOIN users u ON u.id = cp.user_id
         WHERE cp.course_id = c.id
-      ), JSON_ARRAY()) AS producers
+      ), JSON_ARRAY()) AS producers,
+      COALESCE((
+        SELECT JSON_ARRAYAGG(JSON_OBJECT(
+          'id', u.id,
+          'name', u.name,
+          'avatar', u.avatar,
+          'function', u.\`function\`,
+          'role', u.role
+        ))
+        FROM course_revisors cr
+        JOIN users u ON u.id = cr.user_id
+        WHERE cr.course_id = c.id
+      ), JSON_ARRAY()) AS revisors
      FROM courses c
      LEFT JOIN users s ON s.id = c.supervisor_id
      LEFT JOIN users co ON co.id = c.coordinator_id
@@ -931,7 +995,19 @@ async function getCourseByName(name) {
         FROM course_producers cp
         JOIN users u ON u.id = cp.user_id
         WHERE cp.course_id = c.id
-      ), JSON_ARRAY()) AS producers
+      ), JSON_ARRAY()) AS producers,
+      COALESCE((
+        SELECT JSON_ARRAYAGG(JSON_OBJECT(
+          'id', u.id,
+          'name', u.name,
+          'avatar', u.avatar,
+          'function', u.\`function\`,
+          'role', u.role
+        ))
+        FROM course_revisors cr
+        JOIN users u ON u.id = cr.user_id
+        WHERE cr.course_id = c.id
+      ), JSON_ARRAY()) AS revisors
      FROM courses c
      LEFT JOIN users s ON s.id = c.supervisor_id
      LEFT JOIN users co ON co.id = c.coordinator_id
@@ -955,12 +1031,26 @@ async function syncCourseProducers(courseId, producerIds = []) {
   }
 }
 
+async function syncCourseRevisors(courseId, revisorIds = []) {
+  const ids = [...new Set(revisorIds.map((id) => Number(id)).filter(Boolean))]
+
+  await pool.execute('DELETE FROM course_revisors WHERE course_id = ?', [courseId])
+
+  for (const revisorId of ids) {
+    await pool.execute(
+      'INSERT INTO course_revisors (course_id, user_id) VALUES (?, ?)',
+      [courseId, revisorId]
+    )
+  }
+}
+
 async function createCourse(payload) {
   if (!isMysqlMode()) {
     const course = {
       id: Date.now(),
       ...payload,
       producers: payload.producers || [],
+      revisors: payload.revisors || [],
       totalSessions: Number(payload.totalSessions) || 0,
       createdAt: new Date().toISOString().slice(0, 19),
     }
@@ -988,6 +1078,7 @@ async function createCourse(payload) {
   )
 
   await syncCourseProducers(result.insertId, payload.producerIds)
+  await syncCourseRevisors(result.insertId, payload.revisorIds)
 
   return getCourseById(result.insertId)
 }
@@ -1002,6 +1093,7 @@ async function updateCourse(id, payload) {
       ...payload,
       id: Number(id),
       producers: payload.producers || [],
+      revisors: payload.revisors || [],
       totalSessions: Number(payload.totalSessions) || 0,
     }
     materials.forEach((material, materialIndex) => {
@@ -1038,6 +1130,7 @@ async function updateCourse(id, payload) {
   )
 
   await syncCourseProducers(id, payload.producerIds)
+  await syncCourseRevisors(id, payload.revisorIds)
   if (previous) {
     await pool.execute(
       `UPDATE materials
@@ -1095,6 +1188,7 @@ async function listCourseParticipants() {
       supervisors: activeUsers.filter((user) => ['supervisor', 'administrador'].includes(user.role)).map(safeUser),
       coordinators: activeUsers.filter((user) => user.role === 'administrador' || isCoordinatorUser(user)).map(safeUser),
       producers: activeUsers.filter((user) => user.role === 'professor').map(safeUser),
+      revisors: activeUsers.filter((user) => user.role === 'revisor').map(safeUser),
     }
   }
 
@@ -1103,7 +1197,7 @@ async function listCourseParticipants() {
      FROM users
      WHERE status = 'ativo'
        AND (
-        role IN ('administrador', 'coordenador', 'supervisor', 'professor')
+        role IN ('administrador', 'coordenador', 'supervisor', 'professor', 'revisor')
         OR LOWER(COALESCE(\`function\`, '')) LIKE '%coordenador%'
        )
      ORDER BY name`
@@ -1114,6 +1208,7 @@ async function listCourseParticipants() {
     supervisors: mapped.filter((user) => ['supervisor', 'administrador'].includes(user.role)),
     coordinators: mapped.filter((user) => user.role === 'administrador' || isCoordinatorUser(user)),
     producers: mapped.filter((user) => user.role === 'professor'),
+    revisors: mapped.filter((user) => user.role === 'revisor'),
   }
 }
 
@@ -1165,6 +1260,12 @@ async function listMaterials(user) {
         return course?.coordinatorId === user.id || course?.coordinatorName === user.name
       })
     }
+    if (user.role === 'revisor') {
+      return materials.filter((material) => {
+        const course = courses.find((listedCourse) => materialMatchesCourse(material, listedCourse))
+        return course?.revisors?.some((revisor) => Number(revisor.id) === Number(user.id))
+      })
+    }
     return materials.slice()
   }
 
@@ -1185,6 +1286,13 @@ async function listMaterials(user) {
   } else if (isCoordinatorUser(user) && user.role !== 'administrador') {
     sql += ` LEFT JOIN courses c ON ${materialsCourseJoin('m', 'c')} WHERE c.coordinator_id = ? OR c.coordinator_name = ?`
     params.push(user.id, user.name)
+  } else if (user.role === 'revisor') {
+    sql += ` LEFT JOIN courses c ON ${materialsCourseJoin('m', 'c')}
+      WHERE EXISTS (
+        SELECT 1 FROM course_revisors cr
+        WHERE cr.course_id = c.id AND cr.user_id = ?
+      )`
+    params.push(user.id)
   }
   sql += ' ORDER BY m.id'
   const [rows] = await pool.execute(sql, params)
@@ -1209,8 +1317,8 @@ async function createMaterial(payload) {
 
   const [result] = await pool.execute(
     `INSERT INTO materials
-     (course, course_id, session, module, module_id, theme, objective, type, duration, responsible_id, responsible_name, responsible_role, responsibles, status, delivery_date, original_link, adjusted_link, review_status, supervisor_status, coordinator_status, review_notes, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (course, course_id, session, module, module_id, theme, objective, type, duration, responsible_id, responsible_name, responsible_role, responsibles, status, delivery_date, original_link, adjusted_link, review_status, supervisor_status, coordinator_status, revisor_id, revisor_name, revisor_status, review_notes, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       payload.course,
       payload.courseId || null,
@@ -1232,6 +1340,9 @@ async function createMaterial(payload) {
       payload.reviewStatus || 'em_execucao',
       payload.supervisorStatus ?? null,
       payload.coordinatorStatus ?? null,
+      payload.revisorId || null,
+      payload.revisorName || null,
+      payload.revisorStatus ?? null,
       payload.reviewNotes || null,
       new Date().toISOString().slice(0, 10),
     ]
@@ -1253,7 +1364,7 @@ async function updateMaterial(id, payload) {
      SET course = ?, course_id = ?, session = ?, module = ?, module_id = ?, theme = ?, objective = ?, type = ?, duration = ?,
          responsible_id = ?, responsible_name = ?, responsible_role = ?, responsibles = ?, status = ?,
          delivery_date = ?, original_link = ?, adjusted_link = ?, review_status = ?,
-         supervisor_status = ?, coordinator_status = ?, review_notes = ?
+         supervisor_status = ?, coordinator_status = ?, revisor_id = ?, revisor_name = ?, revisor_status = ?, review_notes = ?
      WHERE id = ?`,
     [
       payload.course,
@@ -1276,6 +1387,9 @@ async function updateMaterial(id, payload) {
       payload.reviewStatus || 'em_execucao',
       payload.supervisorStatus ?? null,
       payload.coordinatorStatus ?? null,
+      payload.revisorId || null,
+      payload.revisorName || null,
+      payload.revisorStatus ?? null,
       payload.reviewNotes || null,
       id,
     ]
@@ -1603,6 +1717,7 @@ async function getModuleApprovalSummary(moduleId) {
       professorConcluded: contents.filter((m) => m.status === 'concluido').length,
       supervisorApproved: contents.filter((m) => m.supervisorStatus === 'aprovado').length,
       coordinatorApproved: contents.filter((m) => m.coordinatorStatus === 'aprovado').length,
+      revisorApproved: contents.filter((m) => m.revisorStatus === 'aprovado').length,
     }
   }
 
@@ -1611,7 +1726,8 @@ async function getModuleApprovalSummary(moduleId) {
       COUNT(*) AS total,
       SUM(CASE WHEN status = 'concluido' THEN 1 ELSE 0 END) AS professor_concluded,
       SUM(CASE WHEN supervisor_status = 'aprovado' THEN 1 ELSE 0 END) AS supervisor_approved,
-      SUM(CASE WHEN coordinator_status = 'aprovado' THEN 1 ELSE 0 END) AS coordinator_approved
+      SUM(CASE WHEN coordinator_status = 'aprovado' THEN 1 ELSE 0 END) AS coordinator_approved,
+      SUM(CASE WHEN revisor_status = 'aprovado' THEN 1 ELSE 0 END) AS revisor_approved
      FROM materials WHERE module_id = ?`,
     [moduleId]
   )
@@ -1620,6 +1736,7 @@ async function getModuleApprovalSummary(moduleId) {
     professorConcluded: Number(row.professor_concluded) || 0,
     supervisorApproved: Number(row.supervisor_approved) || 0,
     coordinatorApproved: Number(row.coordinator_approved) || 0,
+    revisorApproved: Number(row.revisor_approved) || 0,
   }
 }
 
