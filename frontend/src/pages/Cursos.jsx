@@ -367,6 +367,7 @@ function CourseCard({ course, materials, onEdit, onDelete, ementaStatus }) {
 
 function CourseModal({ course, open, onClose, onSave, participants = { supervisors: [], coordinators: [], producers: [], revisors: [] }, saving = false, error = null }) {
   const fileRef = useRef(null)
+  const [imageError, setImageError] = useState('')
   const [form, setForm] = useState(() => course
     ? {
       ...course,
@@ -429,6 +430,13 @@ function CourseModal({ course, open, onClose, onSave, participants = { superviso
   const handleImage = (event) => {
     const file = event.target.files?.[0]
     if (!file) return
+
+    setImageError('')
+    if (file.size > 4 * 1024 * 1024) {
+      setImageError('A capa do curso deve ter no maximo 4 MB.')
+      event.target.value = ''
+      return
+    }
 
     const reader = new FileReader()
     reader.onload = (loadEvent) => {
@@ -510,6 +518,7 @@ function CourseModal({ course, open, onClose, onSave, participants = { superviso
             )}
           </div>
           <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleImage} />
+          {imageError && <p className="text-xs text-red-600 mt-1.5">{imageError}</p>}
         </div>
 
         <div className="grid grid-cols-2 gap-4">

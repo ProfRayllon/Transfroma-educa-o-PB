@@ -161,6 +161,10 @@ async function coursePayload(body) {
     return { error: `Preencha os campos obrigatorios: ${missing.join(', ')}.` }
   }
 
+  if (payload.image && Buffer.byteLength(payload.image, 'utf8') > 4 * 1024 * 1024) {
+    return { error: 'A capa do curso deve ter no maximo 4 MB.' }
+  }
+
   if (!COURSE_TRAILS[payload.primaryTrail]) {
     return { error: 'Trilha principal invalida.' }
   }
