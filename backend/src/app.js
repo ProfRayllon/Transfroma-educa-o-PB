@@ -2,6 +2,8 @@ require('dotenv').config()
 
 const express = require('express')
 const cors = require('cors')
+const helmet = require('helmet')
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 
@@ -37,8 +39,19 @@ const COURSE_TRAILS = {
 const USER_ROLES = ['administrador', 'coordenador', 'supervisor', 'professor', 'tutor', 'tecnico', 'gestao']
 const USER_STATUSES = ['ativo', 'inativo', 'pendente', 'desligado', 'substituido']
 
+app.set('trust proxy', 1)
+app.use(helmet())
 app.use(cors({ origin: corsOrigins }))
 app.use(express.json({ limit: '5mb' }))
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Muitas tentativas de login. Tente novamente mais tarde.' },
+  keyGenerator: (req) => `${ipKeyGenerator(req.ip)}:${String(req.body?.email || '').trim().toLowerCase()}`,
+})
 
 function sanitizeUser(user) {
   const { passwordHash: _, ...safeUser } = user
@@ -437,7 +450,7 @@ function requireRole(...roles) {
   }
 }
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', loginLimiter, async (req, res) => {
   try {
     const { email, password } = req.body
     const user = await store.getUserByEmail(email || '')
