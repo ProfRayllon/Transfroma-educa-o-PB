@@ -256,6 +256,21 @@ function CourseCard({ course, materials, onEdit, onDelete, ementaStatus }) {
             </div>
           </div>
           <div className="rounded-xl bg-gray-50 px-3 py-2 border border-gray-100 col-span-2">
+            <div className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Revisor(a)(es)</div>
+            {course.revisors?.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {course.revisors.map((revisor) => (
+                  <div key={revisor.id} className="flex items-center gap-1.5 min-w-0 font-medium text-gray-700">
+                    <PersonAvatar name={revisor.name} avatar={revisor.avatar} size="sm" />
+                    <span className="truncate max-w-[140px]">{revisor.name}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <span className="text-gray-400">Nenhum revisor(a) vinculado</span>
+            )}
+          </div>
+          <div className="rounded-xl bg-gray-50 px-3 py-2 border border-gray-100 col-span-2">
             <div className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Conteúdos / Módulos</div>
             <div className="font-medium text-gray-700">{totalContents} conteúdos · {totalModules} módulo{totalModules !== 1 ? 's' : ''}</div>
           </div>
