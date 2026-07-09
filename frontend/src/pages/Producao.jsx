@@ -11,6 +11,7 @@ import {
   PROFESSOR_STATUS_OPTIONS,
   SUPERVISOR_STATUS_OPTIONS,
   COORDINATOR_STATUS_OPTIONS,
+  REVISOR_STATUS_OPTIONS,
   MATERIAL_TYPE_OPTIONS,
   getMaterialResponsibles,
   TypeBadge,
@@ -520,7 +521,8 @@ export default function Producao() {
     const isProducer = user?.role === 'professor' && (
       material.responsibleId === user?.id || material.responsibles?.some(r => Number(r.id) === Number(user?.id))
     )
-    return { course, isPrivileged: isAdmin || isCourseCoordinator, isCourseSupervisor, isProducer }
+    const isAssignedRevisor = user?.role === 'revisor' && Number(material.revisorId) === Number(user?.id)
+    return { course, isPrivileged: isAdmin || isCourseCoordinator, isCourseSupervisor, isProducer, isAssignedRevisor }
   }
 
   // Admin e coordenacao do curso podem sempre alterar qualquer status de qualquer perfil,
@@ -546,6 +548,12 @@ export default function Producao() {
   const getCanEditCoordinatorStatus = (material) => {
     if (!user) return false
     return getMaterialFlags(material).isPrivileged
+  }
+
+  const getCanEditRevisorStatus = (material) => {
+    if (!user) return false
+    const { isPrivileged, isAssignedRevisor } = getMaterialFlags(material)
+    return isPrivileged || isAssignedRevisor
   }
 
   const matchesStructuralFilters = (m) => {
@@ -778,15 +786,16 @@ export default function Producao() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-100">
-                <th className="table-header w-32">Curso</th>
-                <th className="table-header w-16">Módulo</th>
-                <th className="table-header">Item</th>
-                <th className="table-header w-14">Tipo</th>
-                <th className="table-header w-36">Professor</th>
-                <th className="table-header w-36">Supervisor</th>
-                <th className="table-header w-36">Coordenação</th>
-                <th className="table-header w-28">Link</th>
-                <th className="table-header w-28">Ações</th>
+                <th className="table-header w-32 px-2">Curso</th>
+                <th className="table-header w-16 px-2">Módulo</th>
+                <th className="table-header w-64 px-2">Item</th>
+                <th className="table-header w-14 px-2">Tipo</th>
+                <th className="table-header w-32 px-2">Professor(a)</th>
+                <th className="table-header w-24 px-2">Link</th>
+                <th className="table-header w-32 px-2">Supervisor(a)</th>
+                <th className="table-header w-32 px-2">Coordenador(a)</th>
+                <th className="table-header w-32 px-2">Revisor(a)</th>
+                <th className="table-header w-24 px-2">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -796,22 +805,24 @@ export default function Producao() {
                 const canEditProfStatus = getCanEditProfessorStatus(mat)
                 const canEditSupStatus = getCanEditSupervisorStatus(mat)
                 const canEditCoordStatus = getCanEditCoordinatorStatus(mat)
+                const canEditRevStatus = getCanEditRevisorStatus(mat)
                 const matCourse = flags.course
                 const supName = matCourse?.supervisorName || null
                 const supAvatar = matCourse?.supervisorAvatar || null
                 const coordName = matCourse?.coordinatorName || null
                 const coordAvatar = matCourse?.coordinatorAvatar || null
+                const revAvatar = matCourse?.revisors?.find(r => Number(r.id) === Number(mat.revisorId))?.avatar || null
                 return (
                 <tr key={mat.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                  <td className="table-cell">
+                  <td className="table-cell px-2">
                     <span className="text-gray-700 truncate max-w-[120px] inline-block align-middle" title={matCourse?.name || mat.course}>
                       {matCourse?.name || mat.course}
                     </span>
                   </td>
-                  <td className="table-cell text-center">
+                  <td className="table-cell px-2 text-center">
                     <span className="text-xs font-medium text-gray-500">M{mat.module || 1}</span>
                   </td>
-                  <td className="table-cell">
+                  <td className="table-cell px-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <div className="w-6 h-6 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
                         <FileText size={12} />
@@ -819,8 +830,8 @@ export default function Producao() {
                       <span className="text-gray-700 truncate max-w-56" title={mat.theme}>{mat.theme}</span>
                     </div>
                   </td>
-                  <td className="table-cell"><TypeBadge type={mat.type} iconOnly /></td>
-                  <td className="table-cell">
+                  <td className="table-cell px-2"><TypeBadge type={mat.type} iconOnly /></td>
+                  <td className="table-cell px-2">
                     <div className="flex items-center gap-1.5">
                       <StackedAvatars assignees={materialAssignees} responsibles={getMaterialResponsibles(mat)} />
                       {canEditProfStatus ? (
@@ -834,9 +845,10 @@ export default function Producao() {
                       )}
                     </div>
                   </td>
-                  <td className="table-cell">
+                  <td className="table-cell px-2"><LinkChip url={mat.adjustedLink || mat.originalLink} /></td>
+                  <td className="table-cell px-2">
                     <div className="flex items-center gap-1.5">
-                      <MiniAvatar name={supName} roleLabel="Supervisor" avatar={supAvatar} />
+                      <MiniAvatar name={supName} roleLabel="Supervisor(a)" avatar={supAvatar} />
                       {canEditSupStatus ? (
                         <InlineStatusSelect
                           value={mat.supervisorStatus || ''}
@@ -854,9 +866,9 @@ export default function Producao() {
                       )}
                     </div>
                   </td>
-                  <td className="table-cell">
+                  <td className="table-cell px-2">
                     <div className="flex items-center gap-1.5">
-                      <MiniAvatar name={coordName} roleLabel="Coordenador" avatar={coordAvatar} />
+                      <MiniAvatar name={coordName} roleLabel="Coordenador(a)" avatar={coordAvatar} />
                       {canEditCoordStatus ? (
                         <InlineStatusSelect
                           value={mat.coordinatorStatus || ''}
@@ -868,8 +880,27 @@ export default function Producao() {
                       )}
                     </div>
                   </td>
-                  <td className="table-cell"><LinkChip url={mat.adjustedLink || mat.originalLink} /></td>
-                  <td className="table-cell">
+                  <td className="table-cell px-2">
+                    <div className="flex items-center gap-1.5">
+                      <MiniAvatar name={mat.revisorName} roleLabel="Revisor(a)" avatar={revAvatar} />
+                      {canEditRevStatus ? (
+                        <InlineStatusSelect
+                          value={mat.revisorStatus || ''}
+                          options={REVISOR_STATUS_OPTIONS}
+                          onChange={val => {
+                            if (!flags.isPrivileged && val === 'aprovado' && mat.coordinatorStatus !== 'aprovado') {
+                              showToast('Só é possível aprovar após a coordenação aprovar este conteúdo.', 'error')
+                              return
+                            }
+                            handleStatusChange(mat, 'revisorStatus', val)
+                          }}
+                        />
+                      ) : (
+                        <Badge status={mat.revisorStatus || ''} />
+                      )}
+                    </div>
+                  </td>
+                  <td className="table-cell px-2">
                     <ActionButtons
                       material={mat}
                       onView={m => setViewMaterial(m)}
@@ -883,7 +914,7 @@ export default function Producao() {
               })}
               {paged.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="table-cell text-center py-10 text-gray-400 text-sm">
+                  <td colSpan={10} className="table-cell text-center py-10 text-gray-400 text-sm">
                     Nenhum material encontrado com os filtros aplicados.
                   </td>
                 </tr>
