@@ -13,6 +13,7 @@ import Cursos from './pages/Cursos'
 import Producao from './pages/Producao'
 import Ementa from './pages/Ementa'
 import GestaoPessoas from './pages/GestaoPessoas'
+import Frequencia from './pages/Frequencia'
 import Acessos from './pages/Acessos'
 import Notificacoes from './pages/Notificacoes'
 import Perfil from './pages/Perfil'
@@ -59,6 +60,7 @@ export default function App() {
             <Route path="cursos/:courseId/ementa" element={<Ementa />} />
             <Route path="producao" element={<Producao />} />
             <Route path="gestao-pessoas" element={<GestaoPessoas />} />
+            <Route path="frequencia" element={<Frequencia />} />
             <Route path="acessos" element={<Acessos />} />
             <Route path="notificacoes" element={<Notificacoes />} />
             <Route path="perfil" element={<Perfil />} />

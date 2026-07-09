@@ -13,6 +13,7 @@ const MANAGED_ROLES = [
   { value: 'professor', label: 'Professor' },
   { value: 'tecnico', label: 'Apoio tecnico' },
   { value: 'revisor', label: 'Revisor(a)' },
+  { value: 'supervisor_tutoria', label: 'Supervisor de tutoria' },
 ]
 
 const FILTER_ROLES = [
@@ -30,6 +31,7 @@ const ROLE_LABELS = {
   tutor: 'Tutor',
   gestao: 'Gestao de Pessoas',
   revisor: 'Revisor(a)',
+  supervisor_tutoria: 'Supervisor de tutoria',
 }
 
 const ROLE_FUNCTIONS = {
@@ -48,6 +50,9 @@ const ROLE_FUNCTIONS = {
   ],
   revisor: [
     'Revisor(a) de conteudo',
+  ],
+  supervisor_tutoria: [
+    'Supervisor de tutoria',
   ],
 }
 
@@ -90,6 +95,7 @@ const PERMISSIONS_MAP = {
   professor: ['Acessa Producao', 'Cadastra materiais', 'Edita os proprios materiais', 'Visualiza status da revisao'],
   tecnico: ['Acesso somente leitura aos dados vinculados'],
   revisor: ['Acessa Producao dos cursos vinculados', 'Aprova ou pede ajuste nos conteudos atribuidos', 'Nao pode excluir conteudos ou modulos'],
+  supervisor_tutoria: ['Acessa Gestao de Pessoas'],
 }
 
 function getInitials(name = '') {
@@ -107,6 +113,7 @@ function getAreaOptions(role) {
   if (role === 'professor') return PROFESSOR_AREAS
   if (role === 'supervisor') return SUPERVISOR_AREAS
   if (role === 'tecnico') return TECH_AREAS
+  if (role === 'supervisor_tutoria') return SUPERVISOR_AREAS
   return []
 }
 
