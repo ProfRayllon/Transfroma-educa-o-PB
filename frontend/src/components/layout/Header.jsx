@@ -11,6 +11,8 @@ const roleLabels = {
   tutor: 'Tutor',
   tecnico: 'Técnico',
   gestao: 'Gestão de Pessoas',
+  revisor: 'Revisor(a)',
+  supervisor_tutoria: 'Supervisor de tutoria',
 }
 
 function Avatar({ name, size = 'md' }) {

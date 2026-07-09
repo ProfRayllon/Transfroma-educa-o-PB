@@ -1,6 +1,9 @@
 const mysql = require('mysql2/promise')
 const bcrypt = require('bcryptjs')
-const { users, courses, materials, modules, moduleEvents, people, occurrences, notifications } = require('./mockData')
+const {
+  users, courses, materials, modules, moduleEvents, people, occurrences, notifications,
+  frequenciaCriterios, frequenciaLancamentos,
+} = require('./mockData')
 
 const DATA_MODE = process.env.DATA_MODE || 'mock'
 const MYSQL_AUTO_SEED = process.env.MYSQL_AUTO_SEED === 'true'
@@ -244,6 +247,46 @@ function mapNotificationRow(row) {
   }
 }
 
+function mapFrequenciaCriterioRow(row) {
+  return {
+    id: row.id,
+    role: row.role,
+    title: row.title,
+    type: row.type,
+    unit: row.unit,
+    target: row.target === null || row.target === undefined ? null : Number(row.target),
+    referenceMonth: row.reference_month,
+    createdBy: row.created_by,
+    createdAt: formatDate(row.created_at, true),
+  }
+}
+
+function mapFrequenciaLancamentoRow(row) {
+  return {
+    id: row.id,
+    criterioId: row.criterio_id,
+    userId: row.user_id,
+    target: row.target === null || row.target === undefined ? null : Number(row.target),
+    realized: row.realized === null || row.realized === undefined ? null : Number(row.realized),
+    frequencyPct: row.frequency_pct === null || row.frequency_pct === undefined ? null : Number(row.frequency_pct),
+    status: row.status,
+    notes: row.notes,
+    attachmentNote: row.attachment_note,
+    registeredBy: row.registered_by,
+    registeredAt: row.registered_at ? formatDate(row.registered_at) : null,
+    createdAt: formatDate(row.created_at, true),
+    updatedAt: formatDate(row.updated_at, true),
+  }
+}
+
+function computeFrequencyPct(type, target, realized) {
+  if (type !== 'quantitativo') return null
+  const numericTarget = Number(target)
+  const numericRealized = Number(realized)
+  if (!numericTarget || Number.isNaN(numericRealized)) return null
+  return Math.round((numericRealized / numericTarget) * 100 * 100) / 100
+}
+
 function formatDate(value, includeTime = false) {
   if (!value) return null
 
@@ -274,7 +317,7 @@ async function createPool() {
 
 async function ensureMysqlSchema() {
   await pool.execute(
-    "ALTER TABLE users MODIFY role ENUM('administrador','coordenador','supervisor','professor','tutor','tecnico','gestao','revisor') NOT NULL DEFAULT 'professor'"
+    "ALTER TABLE users MODIFY role ENUM('administrador','coordenador','supervisor','professor','tutor','tecnico','gestao','revisor','supervisor_tutoria') NOT NULL DEFAULT 'professor'"
   )
 
   const [userExtraColumns] = await pool.execute(
@@ -565,6 +608,54 @@ async function ensureMysqlSchema() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       CONSTRAINT fk_ementa_course FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB
+  `)
+
+  // Modulo "Frequencia": criterios mensais por perfil avaliado + lancamentos por usuario.
+  // Um criterio vale para (perfil, mes) e passa a valer automaticamente para todo usuario
+  // ativo daquele perfil no mes -- nao ha vinculo criterio-usuario manual.
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS frequencia_criterios (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      role VARCHAR(30) NOT NULL,
+      title VARCHAR(150) NOT NULL,
+      type ENUM('quantitativo','qualitativo') NOT NULL DEFAULT 'quantitativo',
+      unit VARCHAR(40) DEFAULT NULL,
+      target DECIMAL(10,2) DEFAULT NULL,
+      reference_month VARCHAR(7) NOT NULL,
+      created_by INT DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT fk_frequencia_criterios_created_by
+        FOREIGN KEY (created_by) REFERENCES users(id)
+        ON DELETE SET NULL
+    ) ENGINE=InnoDB
+  `)
+
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS frequencia_lancamentos (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      criterio_id INT NOT NULL,
+      user_id INT NOT NULL,
+      target DECIMAL(10,2) DEFAULT NULL,
+      realized DECIMAL(10,2) DEFAULT NULL,
+      frequency_pct DECIMAL(5,2) DEFAULT NULL,
+      status ENUM('pendente','em_andamento','concluido','em_revisao') NOT NULL DEFAULT 'pendente',
+      notes TEXT DEFAULT NULL,
+      attachment_note VARCHAR(255) DEFAULT NULL,
+      registered_by INT DEFAULT NULL,
+      registered_at DATE DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_frequencia_lancamentos_criterio_user (criterio_id, user_id),
+      CONSTRAINT fk_frequencia_lancamentos_criterio
+        FOREIGN KEY (criterio_id) REFERENCES frequencia_criterios(id)
+        ON DELETE CASCADE,
+      CONSTRAINT fk_frequencia_lancamentos_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE,
+      CONSTRAINT fk_frequencia_lancamentos_registered_by
+        FOREIGN KEY (registered_by) REFERENCES users(id)
+        ON DELETE SET NULL
     ) ENGINE=InnoDB
   `)
 }
@@ -2124,6 +2215,287 @@ async function getAllEmentas() {
   }))
 }
 
+/* ─── Frequencia: criterios mensais por perfil + lancamentos ─── */
+
+async function listUsersByRoles(roles = []) {
+  if (!roles.length) return []
+  const safeUser = (user) => {
+    const { passwordHash: _, ...rest } = user
+    return rest
+  }
+
+  if (!isMysqlMode()) {
+    return users.filter((user) => user.status === 'ativo' && roles.includes(user.role)).map(safeUser)
+  }
+
+  const placeholders = roles.map(() => '?').join(', ')
+  const [rows] = await pool.execute(
+    `SELECT * FROM users WHERE status = 'ativo' AND role IN (${placeholders}) ORDER BY name`,
+    roles
+  )
+  return rows.map(mapUserRow).map(safeUser)
+}
+
+async function listFrequenciaCriterios({ roles, month } = {}) {
+  if (!isMysqlMode()) {
+    return frequenciaCriterios
+      .filter((criterio) => (!month || criterio.referenceMonth === month) && (!roles?.length || roles.includes(criterio.role)))
+      .slice()
+      .sort((a, b) => a.id - b.id)
+  }
+
+  const conditions = []
+  const params = []
+  if (month) {
+    conditions.push('reference_month = ?')
+    params.push(month)
+  }
+  if (roles?.length) {
+    conditions.push(`role IN (${roles.map(() => '?').join(', ')})`)
+    params.push(...roles)
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+  const [rows] = await pool.execute(`SELECT * FROM frequencia_criterios ${where} ORDER BY id`, params)
+  return rows.map(mapFrequenciaCriterioRow)
+}
+
+async function getFrequenciaCriterioById(id) {
+  if (!isMysqlMode()) {
+    return frequenciaCriterios.find((criterio) => criterio.id === Number(id)) || null
+  }
+  const [rows] = await pool.execute('SELECT * FROM frequencia_criterios WHERE id = ? LIMIT 1', [id])
+  return rows[0] ? mapFrequenciaCriterioRow(rows[0]) : null
+}
+
+// Um criterio vale para todo usuario ativo do perfil no mes -- ao criar o criterio,
+// provisiona (idempotente) um lancamento "pendente" para cada usuario elegivel, o que
+// explica os lancamentos ja existirem antes de qualquer preenchimento manual.
+async function provisionFrequenciaLancamentos(criterio) {
+  const eligibleUsers = await listUsersByRoles([criterio.role])
+
+  if (!isMysqlMode()) {
+    eligibleUsers.forEach((user, index) => {
+      const alreadyExists = frequenciaLancamentos.some(
+        (lancamento) => lancamento.criterioId === criterio.id && lancamento.userId === user.id
+      )
+      if (alreadyExists) return
+      frequenciaLancamentos.push({
+        id: Date.now() + index,
+        criterioId: criterio.id,
+        userId: user.id,
+        target: criterio.target,
+        realized: null,
+        frequencyPct: null,
+        status: 'pendente',
+        notes: null,
+        attachmentNote: null,
+        registeredBy: null,
+        registeredAt: null,
+        createdAt: new Date().toISOString().slice(0, 19),
+        updatedAt: new Date().toISOString().slice(0, 19),
+      })
+    })
+    return
+  }
+
+  for (const user of eligibleUsers) {
+    await pool.execute(
+      `INSERT IGNORE INTO frequencia_lancamentos (criterio_id, user_id, target, status)
+       VALUES (?, ?, ?, 'pendente')`,
+      [criterio.id, user.id, criterio.target ?? null]
+    )
+  }
+}
+
+async function createFrequenciaCriterio(payload) {
+  if (!isMysqlMode()) {
+    const criterio = {
+      id: Date.now(),
+      role: payload.role,
+      title: payload.title,
+      type: payload.type,
+      unit: payload.unit || null,
+      target: payload.target ?? null,
+      referenceMonth: payload.referenceMonth,
+      createdBy: payload.createdBy || null,
+      createdAt: new Date().toISOString().slice(0, 19),
+    }
+    frequenciaCriterios.push(criterio)
+    await provisionFrequenciaLancamentos(criterio)
+    return criterio
+  }
+
+  const [result] = await pool.execute(
+    `INSERT INTO frequencia_criterios (role, title, type, unit, target, reference_month, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      payload.role,
+      payload.title,
+      payload.type,
+      payload.unit || null,
+      payload.target ?? null,
+      payload.referenceMonth,
+      payload.createdBy || null,
+    ]
+  )
+  const criterio = await getFrequenciaCriterioById(result.insertId)
+  await provisionFrequenciaLancamentos(criterio)
+  return criterio
+}
+
+async function updateFrequenciaCriterio(id, updates) {
+  if (!isMysqlMode()) {
+    const idx = frequenciaCriterios.findIndex((criterio) => criterio.id === Number(id))
+    if (idx === -1) return null
+    frequenciaCriterios[idx] = { ...frequenciaCriterios[idx], ...updates, id: Number(id) }
+    return frequenciaCriterios[idx]
+  }
+
+  const fields = []
+  const values = []
+  const mapped = { title: updates.title, type: updates.type, unit: updates.unit, target: updates.target }
+  Object.entries(mapped).forEach(([key, value]) => {
+    if (value !== undefined) {
+      fields.push(`${key} = ?`)
+      values.push(value)
+    }
+  })
+  if (fields.length > 0) {
+    values.push(id)
+    await pool.execute(`UPDATE frequencia_criterios SET ${fields.join(', ')} WHERE id = ?`, values)
+  }
+  return getFrequenciaCriterioById(id)
+}
+
+async function deleteFrequenciaCriterio(id) {
+  if (!isMysqlMode()) {
+    const idx = frequenciaCriterios.findIndex((criterio) => criterio.id === Number(id))
+    if (idx === -1) return false
+    frequenciaCriterios.splice(idx, 1)
+    for (let i = frequenciaLancamentos.length - 1; i >= 0; i -= 1) {
+      if (Number(frequenciaLancamentos[i].criterioId) === Number(id)) frequenciaLancamentos.splice(i, 1)
+    }
+    return true
+  }
+
+  const [result] = await pool.execute('DELETE FROM frequencia_criterios WHERE id = ?', [id])
+  return result.affectedRows > 0
+}
+
+function frequenciaLancamentoWithJoins(lancamento, criterio, user) {
+  return {
+    ...lancamento,
+    role: criterio?.role || null,
+    criterioTitle: criterio?.title || null,
+    criterioType: criterio?.type || null,
+    criterioUnit: criterio?.unit || null,
+    referenceMonth: criterio?.referenceMonth || null,
+    userName: user?.name || null,
+    userAvatar: user?.avatar || null,
+    userEmail: user?.email || null,
+  }
+}
+
+async function listFrequenciaLancamentos({ month, roles, status, search } = {}) {
+  if (!isMysqlMode()) {
+    const q = search ? search.toLowerCase() : ''
+    return frequenciaLancamentos
+      .map((lancamento) => {
+        const criterio = frequenciaCriterios.find((c) => c.id === lancamento.criterioId)
+        const user = users.find((u) => u.id === lancamento.userId)
+        return frequenciaLancamentoWithJoins(lancamento, criterio, user)
+      })
+      .filter((item) => !month || item.referenceMonth === month)
+      .filter((item) => !roles?.length || roles.includes(item.role))
+      .filter((item) => !status || item.status === status)
+      .filter((item) => !q || (item.userName || '').toLowerCase().includes(q) || (item.criterioTitle || '').toLowerCase().includes(q))
+      .sort((a, b) => a.id - b.id)
+  }
+
+  const conditions = []
+  const params = []
+  if (month) {
+    conditions.push('c.reference_month = ?')
+    params.push(month)
+  }
+  if (roles?.length) {
+    conditions.push(`c.role IN (${roles.map(() => '?').join(', ')})`)
+    params.push(...roles)
+  }
+  if (status) {
+    conditions.push('l.status = ?')
+    params.push(status)
+  }
+  if (search) {
+    conditions.push('(u.name LIKE ? OR c.title LIKE ?)')
+    params.push(`%${search}%`, `%${search}%`)
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+  const [rows] = await pool.execute(
+    `SELECT l.*, c.role AS c_role, c.title AS c_title, c.type AS c_type, c.unit AS c_unit, c.reference_month AS c_reference_month,
+            u.name AS u_name, u.avatar AS u_avatar, u.email AS u_email
+     FROM frequencia_lancamentos l
+     JOIN frequencia_criterios c ON c.id = l.criterio_id
+     JOIN users u ON u.id = l.user_id
+     ${where}
+     ORDER BY l.id`,
+    params
+  )
+  return rows.map((row) => frequenciaLancamentoWithJoins(
+    mapFrequenciaLancamentoRow(row),
+    { role: row.c_role, title: row.c_title, type: row.c_type, unit: row.c_unit, referenceMonth: row.c_reference_month },
+    { name: row.u_name, avatar: row.u_avatar, email: row.u_email }
+  ))
+}
+
+async function getFrequenciaLancamentoById(id) {
+  if (!isMysqlMode()) {
+    return frequenciaLancamentos.find((lancamento) => lancamento.id === Number(id)) || null
+  }
+  const [rows] = await pool.execute('SELECT * FROM frequencia_lancamentos WHERE id = ? LIMIT 1', [id])
+  return rows[0] ? mapFrequenciaLancamentoRow(rows[0]) : null
+}
+
+async function updateFrequenciaLancamento(id, updates) {
+  const current = await getFrequenciaLancamentoById(id)
+  if (!current) return null
+  const criterio = await getFrequenciaCriterioById(current.criterioId)
+
+  const target = updates.target !== undefined ? updates.target : current.target
+  const realized = updates.realized !== undefined ? updates.realized : current.realized
+  const frequencyPct = computeFrequencyPct(criterio?.type, target, realized)
+
+  const next = {
+    target: target ?? null,
+    realized: realized ?? null,
+    frequencyPct,
+    status: updates.status ?? current.status,
+    notes: updates.notes !== undefined ? updates.notes : current.notes,
+    attachmentNote: updates.attachmentNote !== undefined ? updates.attachmentNote : current.attachmentNote,
+    registeredBy: updates.registeredBy ?? current.registeredBy,
+    registeredAt: updates.registeredAt !== undefined ? updates.registeredAt : current.registeredAt,
+  }
+
+  if (!isMysqlMode()) {
+    const idx = frequenciaLancamentos.findIndex((lancamento) => lancamento.id === Number(id))
+    if (idx === -1) return null
+    frequenciaLancamentos[idx] = {
+      ...frequenciaLancamentos[idx],
+      ...next,
+      updatedAt: new Date().toISOString().slice(0, 19),
+    }
+    return frequenciaLancamentos[idx]
+  }
+
+  await pool.execute(
+    `UPDATE frequencia_lancamentos
+     SET target = ?, realized = ?, frequency_pct = ?, status = ?, notes = ?, attachment_note = ?, registered_by = ?, registered_at = ?
+     WHERE id = ?`,
+    [next.target, next.realized, next.frequencyPct, next.status, next.notes, next.attachmentNote, next.registeredBy, next.registeredAt, id]
+  )
+  return getFrequenciaLancamentoById(id)
+}
+
 module.exports = {
   DATA_MODE,
   MYSQL_AUTO_SEED,
@@ -2169,4 +2541,13 @@ module.exports = {
   updateOccurrence,
   listNotifications,
   markNotificationRead,
+  listUsersByRoles,
+  listFrequenciaCriterios,
+  getFrequenciaCriterioById,
+  createFrequenciaCriterio,
+  updateFrequenciaCriterio,
+  deleteFrequenciaCriterio,
+  listFrequenciaLancamentos,
+  getFrequenciaLancamentoById,
+  updateFrequenciaLancamento,
 }

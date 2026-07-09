@@ -8,6 +8,7 @@ const variants = {
 
   em_producao: 'bg-amber-50 text-amber-700 border border-amber-200',
   em_execucao: 'bg-amber-50 text-amber-700 border border-amber-200',
+  em_andamento: 'bg-amber-50 text-amber-700 border border-amber-200',
   pendente: 'bg-amber-50 text-amber-700 border border-amber-200',
   em_analise: 'bg-amber-50 text-amber-700 border border-amber-200',
   edicao: 'bg-amber-50 text-amber-700 border border-amber-200',
@@ -46,6 +47,7 @@ const variants = {
   tecnico: 'bg-cyan-100 text-cyan-800 border border-cyan-200',
   gestao: 'bg-teal-100 text-teal-800 border border-teal-200',
   revisor: 'bg-rose-100 text-rose-800 border border-rose-200',
+  supervisor_tutoria: 'bg-fuchsia-100 text-fuchsia-800 border border-fuchsia-200',
 }
 
 const labels = {
@@ -57,6 +59,7 @@ const labels = {
   validado: 'Validado',
   em_producao: 'Em produção',
   em_execucao: 'Em execução',
+  em_andamento: 'Em andamento',
   pendente: 'Pendente',
   em_analise: 'Em análise',
   em_revisao: 'Em revisão',
@@ -90,6 +93,7 @@ const labels = {
   tecnico: 'Apoio tecnico',
   gestao: 'Gestão de Pessoas',
   revisor: 'Revisor(a)',
+  supervisor_tutoria: 'Supervisor de tutoria',
 }
 
 const dots = {
@@ -99,6 +103,7 @@ const dots = {
   registrada: 'bg-green-500',
   em_producao: 'bg-amber-500',
   em_execucao: 'bg-amber-500',
+  em_andamento: 'bg-amber-500',
   pendente: 'bg-amber-500',
   em_revisao: 'bg-purple-500',
   revisao_linguistica: 'bg-purple-500',

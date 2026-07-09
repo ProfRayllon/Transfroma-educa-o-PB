@@ -39,4 +39,19 @@ const occurrences = []
 
 const notifications = []
 
-module.exports = { users, courses, materials, modules, moduleEvents, people, occurrences, notifications }
+const frequenciaCriterios = []
+
+const frequenciaLancamentos = []
+
+module.exports = {
+  users,
+  courses,
+  materials,
+  modules,
+  moduleEvents,
+  people,
+  occurrences,
+  notifications,
+  frequenciaCriterios,
+  frequenciaLancamentos,
+}

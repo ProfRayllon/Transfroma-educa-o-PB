@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import { useAvatar } from '../../context/AvatarContext'
 import {
-  LayoutDashboard, BookOpen, FileText, Users, ShieldCheck,
+  LayoutDashboard, BookOpen, FileText, Users, ShieldCheck, CalendarCheck,
   LogOut, ChevronLeft, ChevronRight, Camera, Sun, Moon, Globe,
 } from 'lucide-react'
 
@@ -28,6 +28,12 @@ const navItems = [
     label: 'Gestão de Pessoas',
     visible: (user) => user?.role === 'administrador' || user?.role === 'gestao',
   },
+  {
+    to: '/frequencia',
+    icon: CalendarCheck,
+    label: 'Frequência',
+    visible: (user) => user?.role === 'administrador' || user?.role === 'supervisor' || isCoordinatorRole(user),
+  },
   { to: '/acessos', icon: ShieldCheck, label: 'Acessos', visible: (user) => user?.role === 'administrador' },
   { to: '/', icon: Globe, label: 'Site', adminOnly: true },
 ]
@@ -41,6 +47,7 @@ const roleLabels = {
   tecnico: 'Apoio tecnico',
   gestao: 'Gestão de Pessoas',
   revisor: 'Revisor(a)',
+  supervisor_tutoria: 'Supervisor de tutoria',
 }
 
 function Tooltip({ label }) {

@@ -36,8 +36,19 @@ const COURSE_TRAILS = {
   ],
 }
 
-const USER_ROLES = ['administrador', 'coordenador', 'supervisor', 'professor', 'tutor', 'tecnico', 'gestao', 'revisor']
+const USER_ROLES = ['administrador', 'coordenador', 'supervisor', 'professor', 'tutor', 'tecnico', 'gestao', 'revisor', 'supervisor_tutoria']
 const USER_STATUSES = ['ativo', 'inativo', 'pendente', 'desligado', 'substituido']
+
+// Perfis avaliados pelo modulo de Frequencia (metas/criterios mensais) -- distinto do
+// USER_ROLES completo: "tutor" fica de fora aqui (nao e usado no dia a dia do sistema hoje).
+const FREQUENCIA_ROLES = ['supervisor', 'revisor', 'tecnico', 'supervisor_tutoria', 'professor']
+const FREQUENCIA_ROLE_LABELS = {
+  supervisor: 'Supervisor',
+  revisor: 'Revisor(a)',
+  tecnico: 'Apoio tecnico',
+  supervisor_tutoria: 'Supervisor de tutoria',
+  professor: 'Professor(a)',
+}
 
 app.set('trust proxy', 1)
 app.use(helmet())
@@ -111,6 +122,24 @@ function canAssignMaterial(user) {
 
 function isAttendanceManager(role) {
   return ['administrador', 'supervisor', 'gestao'].includes(role)
+}
+
+// Modulo de Frequencia: quem acessa (ve as telas) e quem pode criar/lancar dado para
+// qual perfil avaliado. Coordenador/administrador tem acesso total; supervisor so pode
+// criar criterio e lancar dado para o perfil Professor(a).
+function canAccessFrequencia(user) {
+  return user?.role === 'administrador' || isCoordinator(user) || user?.role === 'supervisor'
+}
+
+function frequenciaRolesForActor(user) {
+  if (user?.role === 'administrador' || isCoordinator(user)) return FREQUENCIA_ROLES
+  if (user?.role === 'supervisor') return ['professor']
+  return []
+}
+
+function canCreateFrequenciaCriterio(user, targetRole) {
+  if (!FREQUENCIA_ROLES.includes(targetRole)) return false
+  return frequenciaRolesForActor(user).includes(targetRole)
 }
 
 async function canEditMaterial(user, material) {
@@ -1305,6 +1334,247 @@ app.patch('/api/ementas/:courseId/status', auth, async (req, res) => {
   } catch (err) {
     console.error('[PATCH /api/ementas/:courseId/status]', err)
     res.status(500).json({ message: 'Erro ao atualizar status da ementa.' })
+  }
+})
+
+/* ─── Frequencia: criterios mensais por perfil + lancamentos ─── */
+
+function frequenciaCriterioPayload(body) {
+  const role = String(body.role || '').trim()
+  const title = String(body.title || '').trim()
+  const type = body.type === 'qualitativo' ? 'qualitativo' : 'quantitativo'
+  const referenceMonth = String(body.referenceMonth || '').trim()
+
+  const missing = []
+  if (!FREQUENCIA_ROLES.includes(role)) missing.push('perfil avaliado')
+  if (!title) missing.push('titulo')
+  if (!referenceMonth) missing.push('mes de referencia')
+  if (type === 'quantitativo' && !String(body.unit || '').trim()) missing.push('unidade')
+  if (type === 'quantitativo' && !(Number(body.target) > 0)) missing.push('meta')
+
+  if (missing.length > 0) {
+    return { error: `Preencha os campos obrigatorios: ${missing.join(', ')}.` }
+  }
+
+  if (!/^\d{4}-\d{2}$/.test(referenceMonth)) {
+    return { error: 'Mes de referencia invalido.' }
+  }
+
+  return {
+    payload: {
+      role,
+      title,
+      type,
+      unit: type === 'quantitativo' ? String(body.unit).trim() : null,
+      target: type === 'quantitativo' ? Number(body.target) : null,
+      referenceMonth,
+    },
+  }
+}
+
+app.get('/api/frequencia/usuarios', auth, async (req, res) => {
+  try {
+    const actor = await findUserById(req.user.id)
+    if (!canAccessFrequencia(actor)) return res.status(403).json({ message: 'Sem acesso ao modulo de Frequencia.' })
+
+    const allowedRoles = frequenciaRolesForActor(actor)
+    const requestedRole = req.query.role ? String(req.query.role) : null
+    if (requestedRole && !allowedRoles.includes(requestedRole)) {
+      return res.status(403).json({ message: 'Voce nao tem acesso a esse perfil.' })
+    }
+
+    const roles = requestedRole ? [requestedRole] : allowedRoles
+    const usersList = await store.listUsersByRoles(roles)
+    res.json(usersList)
+  } catch (err) {
+    console.error('[GET /api/frequencia/usuarios]', err)
+    res.status(500).json({ message: 'Erro ao carregar usuarios.' })
+  }
+})
+
+app.get('/api/frequencia/overview', auth, async (req, res) => {
+  try {
+    const actor = await findUserById(req.user.id)
+    if (!canAccessFrequencia(actor)) return res.status(403).json({ message: 'Sem acesso ao modulo de Frequencia.' })
+
+    const month = /^\d{4}-\d{2}$/.test(req.query.month) ? req.query.month : new Date().toISOString().slice(0, 7)
+    const allowedRoles = frequenciaRolesForActor(actor)
+    const requestedRole = req.query.role ? String(req.query.role) : null
+    const roles = requestedRole ? allowedRoles.filter((r) => r === requestedRole) : allowedRoles
+
+    const [criterios, lancamentos, usersList] = await Promise.all([
+      store.listFrequenciaCriterios({ roles, month }),
+      store.listFrequenciaLancamentos({ roles, month }),
+      store.listUsersByRoles(roles),
+    ])
+
+    // "Criado por" mostra o papel de quem criou (Coordenador/Supervisor/Administrador),
+    // nao o nome -- reflete a regra "Criado por: Coordenador" do modulo.
+    const creatorIds = [...new Set(criterios.map((c) => c.createdBy).filter(Boolean))]
+    const creators = await Promise.all(creatorIds.map((id) => store.getUserById(id)))
+    const creatorLabelById = new Map(creatorIds.map((id, index) => {
+      const creator = creators[index]
+      let label = '—'
+      if (creator?.role === 'administrador') label = 'Administrador'
+      else if (isCoordinator(creator)) label = 'Coordenador'
+      else if (creator?.role === 'supervisor') label = 'Supervisor'
+      return [id, label]
+    }))
+    const [refYear, refMonthNum] = month.split('-').map(Number)
+    const lastDay = new Date(refYear, refMonthNum, 0).getDate()
+    const vigencia = `01/${String(refMonthNum).padStart(2, '0')} a ${lastDay}/${String(refMonthNum).padStart(2, '0')}`
+
+    const groups = roles.map((role) => {
+      const roleCriterios = criterios.filter((c) => c.role === role)
+      const users = usersList.filter((u) => u.role === role).map((user) => {
+        const userLancamentos = lancamentos.filter((l) => l.userId === user.id)
+        const avgFill = userLancamentos.length
+          ? Math.round(userLancamentos.reduce((sum, l) => sum + (l.status === 'concluido' ? 100 : l.frequencyPct || 0), 0) / userLancamentos.length)
+          : 0
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          avatar: user.avatar,
+          avgFill,
+          criteria: userLancamentos.map((l) => ({
+            lancamentoId: l.id,
+            criterioId: l.criterioId,
+            title: l.criterioTitle,
+            createdBy: creatorLabelById.get(roleCriterios.find((c) => c.id === l.criterioId)?.createdBy) || '—',
+            vigencia,
+            frequencyPct: l.frequencyPct,
+            status: l.status,
+          })),
+        }
+      })
+      const groupAvg = users.length ? Math.round(users.reduce((sum, u) => sum + u.avgFill, 0) / users.length) : 0
+
+      return {
+        role,
+        label: FREQUENCIA_ROLE_LABELS[role],
+        userCount: users.length,
+        criteriaCount: roleCriterios.length * users.length,
+        avgFill: groupAvg,
+        canCreate: canCreateFrequenciaCriterio(actor, role),
+        users,
+      }
+    })
+
+    const criteriosRealizados = lancamentos.filter((l) => l.status === 'concluido').length
+    const withFrequency = lancamentos.filter((l) => l.frequencyPct !== null)
+    const frequenciaMedia = withFrequency.length
+      ? Math.round(withFrequency.reduce((sum, l) => sum + l.frequencyPct, 0) / withFrequency.length)
+      : 0
+
+    res.json({ month, stats: { criteriosRealizados, frequenciaMedia }, groups })
+  } catch (err) {
+    console.error('[GET /api/frequencia/overview]', err)
+    res.status(500).json({ message: 'Erro ao carregar visao geral de frequencia.' })
+  }
+})
+
+app.get('/api/frequencia/lancamentos', auth, async (req, res) => {
+  try {
+    const actor = await findUserById(req.user.id)
+    if (!canAccessFrequencia(actor)) return res.status(403).json({ message: 'Sem acesso ao modulo de Frequencia.' })
+
+    const month = /^\d{4}-\d{2}$/.test(req.query.month) ? req.query.month : new Date().toISOString().slice(0, 7)
+    const allowedRoles = frequenciaRolesForActor(actor)
+    const requestedRole = req.query.role ? String(req.query.role) : null
+    const roles = requestedRole ? allowedRoles.filter((r) => r === requestedRole) : allowedRoles
+    const status = req.query.status ? String(req.query.status) : null
+    const search = req.query.search ? String(req.query.search) : null
+
+    const lancamentos = await store.listFrequenciaLancamentos({ month, roles, status, search })
+    res.json(lancamentos.map((l) => ({ ...l, canEdit: canCreateFrequenciaCriterio(actor, l.role) })))
+  } catch (err) {
+    console.error('[GET /api/frequencia/lancamentos]', err)
+    res.status(500).json({ message: 'Erro ao carregar lancamentos.' })
+  }
+})
+
+app.post('/api/frequencia/criterios', auth, async (req, res) => {
+  try {
+    const actor = await findUserById(req.user.id)
+    const { payload, error } = frequenciaCriterioPayload(req.body)
+    if (error) return res.status(400).json({ message: error })
+
+    if (!canCreateFrequenciaCriterio(actor, payload.role)) {
+      return res.status(403).json({ message: 'Voce nao tem permissao para criar criterio para esse perfil.' })
+    }
+
+    const criterio = await store.createFrequenciaCriterio({ ...payload, createdBy: actor.id })
+    res.status(201).json(criterio)
+  } catch (err) {
+    console.error('[POST /api/frequencia/criterios]', err)
+    res.status(500).json({ message: 'Erro ao criar criterio.' })
+  }
+})
+
+app.put('/api/frequencia/criterios/:id', auth, async (req, res) => {
+  try {
+    const actor = await findUserById(req.user.id)
+    const current = await store.getFrequenciaCriterioById(req.params.id)
+    if (!current) return res.status(404).json({ message: 'Criterio nao encontrado.' })
+    if (!canCreateFrequenciaCriterio(actor, current.role)) {
+      return res.status(403).json({ message: 'Voce nao tem permissao para editar esse criterio.' })
+    }
+
+    const updates = {}
+    if (req.body.title !== undefined) updates.title = String(req.body.title).trim()
+    if (req.body.unit !== undefined) updates.unit = String(req.body.unit || '').trim() || null
+    if (req.body.target !== undefined) updates.target = Number(req.body.target) || null
+
+    const updated = await store.updateFrequenciaCriterio(req.params.id, updates)
+    res.json(updated)
+  } catch (err) {
+    console.error('[PUT /api/frequencia/criterios/:id]', err)
+    res.status(500).json({ message: 'Erro ao atualizar criterio.' })
+  }
+})
+
+app.delete('/api/frequencia/criterios/:id', auth, async (req, res) => {
+  try {
+    const actor = await findUserById(req.user.id)
+    const current = await store.getFrequenciaCriterioById(req.params.id)
+    if (!current) return res.status(404).json({ message: 'Criterio nao encontrado.' })
+    if (!canCreateFrequenciaCriterio(actor, current.role)) {
+      return res.status(403).json({ message: 'Voce nao tem permissao para excluir esse criterio.' })
+    }
+
+    await store.deleteFrequenciaCriterio(req.params.id)
+    res.status(204).end()
+  } catch (err) {
+    console.error('[DELETE /api/frequencia/criterios/:id]', err)
+    res.status(500).json({ message: 'Erro ao excluir criterio.' })
+  }
+})
+
+app.put('/api/frequencia/lancamentos/:id', auth, async (req, res) => {
+  try {
+    const actor = await findUserById(req.user.id)
+    const current = await store.getFrequenciaLancamentoById(req.params.id)
+    if (!current) return res.status(404).json({ message: 'Lancamento nao encontrado.' })
+
+    const criterio = await store.getFrequenciaCriterioById(current.criterioId)
+    if (!criterio || !canCreateFrequenciaCriterio(actor, criterio.role)) {
+      return res.status(403).json({ message: 'Voce nao tem permissao para registrar esse lancamento.' })
+    }
+
+    const updates = { registeredBy: actor.id }
+    if (req.body.target !== undefined) updates.target = req.body.target === '' ? null : Number(req.body.target)
+    if (req.body.realized !== undefined) updates.realized = req.body.realized === '' ? null : Number(req.body.realized)
+    if (req.body.status !== undefined) updates.status = req.body.status
+    if (req.body.notes !== undefined) updates.notes = req.body.notes || null
+    if (req.body.attachmentNote !== undefined) updates.attachmentNote = req.body.attachmentNote || null
+    if (req.body.registeredAt !== undefined) updates.registeredAt = req.body.registeredAt || null
+
+    const updated = await store.updateFrequenciaLancamento(req.params.id, updates)
+    res.json(updated)
+  } catch (err) {
+    console.error('[PUT /api/frequencia/lancamentos/:id]', err)
+    res.status(500).json({ message: 'Erro ao salvar lancamento.' })
   }
 })
 

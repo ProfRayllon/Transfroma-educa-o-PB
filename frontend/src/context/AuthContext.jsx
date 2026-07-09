@@ -129,4 +129,7 @@ const PERMISSIONS = {
   revisor: [
     'view_producao', 'view_review_status',
   ],
+  supervisor_tutoria: [
+    'view_pessoas',
+  ],
 }
