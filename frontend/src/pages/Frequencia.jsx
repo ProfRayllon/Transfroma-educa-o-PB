@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Plus, Lock, Calendar, CheckCircle, TrendingUp, Filter, Search, X,
-  ChevronDown, ChevronUp, Eye, Pencil, Users, UserCheck, Headphones, UserCog, GraduationCap, BookOpen,
+  Eye, Pencil, Users, UserCheck, Headphones, UserCog, GraduationCap, BookOpen,
   FileText, Clock, AlertTriangle, LayoutGrid, ListChecks, History, Check,
 } from 'lucide-react'
 import Badge from '../components/ui/Badge'
@@ -9,7 +9,6 @@ import StatCard from '../components/ui/StatCard'
 import Modal from '../components/ui/Modal'
 import { useAuth } from '../context/AuthContext'
 import api, { getApiErrorMessage } from '../lib/api'
-import { MiniAvatar } from '../components/producao/shared'
 
 const FREQUENCIA_ROLE_LABELS = {
   supervisor: 'Supervisor',
@@ -472,7 +471,7 @@ function CriterioDetailModal({ open, onClose, target, mode, onSaved, showToast }
 
 /* ─── perfil tile ─── */
 
-function PerfilTile({ icon: Icon, label, userCount, criteriaCount, criteriosCriados, active, onClick }) {
+function PerfilTile({ icon: Icon, label, userCount, secondaryCount, secondaryLabel, badgeCount, badgeLabel, active, onClick }) {
   return (
     <button
       onClick={onClick}
@@ -481,14 +480,14 @@ function PerfilTile({ icon: Icon, label, userCount, criteriaCount, criteriosCria
       }`}
     >
       <span className="absolute -top-2.5 left-3 bg-white border border-brand-200 text-brand-700 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap">
-        {criteriosCriados} critério{criteriosCriados !== 1 ? 's' : ''} criado{criteriosCriados !== 1 ? 's' : ''}
+        {badgeCount} {badgeLabel}
       </span>
       <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${active ? 'bg-brand-600 text-white' : 'bg-brand-50 text-brand-600'}`}>
         <Icon size={16} />
       </div>
       <div className="min-w-0">
         <div className="text-sm font-semibold text-gray-800 truncate">{label}</div>
-        <div className="text-[11px] text-gray-500 whitespace-nowrap">{userCount} usuário{userCount !== 1 ? 's' : ''} · {criteriaCount} vinculado{criteriaCount !== 1 ? 's' : ''}</div>
+        <div className="text-[11px] text-gray-500 whitespace-nowrap">{userCount} usuário{userCount !== 1 ? 's' : ''} · {secondaryCount} {secondaryLabel}</div>
       </div>
       {active && (
         <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-brand-600 text-white flex items-center justify-center">
@@ -600,8 +599,10 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
             icon={Users}
             label="Todos"
             userCount={allUsers.length}
-            criteriaCount={totalCriteria}
-            criteriosCriados={data.stats.criteriosAtivos}
+            secondaryCount={totalCriteria}
+            secondaryLabel={`vinculado${totalCriteria !== 1 ? 's' : ''}`}
+            badgeCount={data.stats.criteriosAtivos}
+            badgeLabel={`critério${data.stats.criteriosAtivos !== 1 ? 's' : ''} criado${data.stats.criteriosAtivos !== 1 ? 's' : ''}`}
             active={!roleFilter}
             onClick={() => setRoleFilter('')}
           />
@@ -611,8 +612,10 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
               icon={PERFIL_ICONS[g.role] || Users}
               label={g.label}
               userCount={g.userCount}
-              criteriaCount={g.criteriaCount}
-              criteriosCriados={g.criteriosCriados}
+              secondaryCount={g.criteriaCount}
+              secondaryLabel={`vinculado${g.criteriaCount !== 1 ? 's' : ''}`}
+              badgeCount={g.criteriosCriados}
+              badgeLabel={`critério${g.criteriosCriados !== 1 ? 's' : ''} criado${g.criteriosCriados !== 1 ? 's' : ''}`}
               active={roleFilter === g.role}
               onClick={() => setRoleFilter(g.role)}
             />
@@ -719,206 +722,146 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
 
 /* ─── Lançamentos ─── */
 
-function RegistrarLancamentoPanel({ items, selected, onSelect, onSave, saving }) {
-  const [responsavelId, setResponsavelId] = useState('')
-  const [criterioId, setCriterioId] = useState('')
+function LancamentoModal({ open, onClose, item, mode, onSave, saving }) {
   const [form, setForm] = useState(null)
 
-  const responsaveis = useMemo(() => {
-    const map = new Map()
-    items.forEach(item => {
-      if (!map.has(item.userId)) map.set(item.userId, { id: item.userId, name: item.userName, avatar: item.userAvatar, role: item.role })
-    })
-    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name))
-  }, [items])
-
-  const criteriosDoResponsavel = useMemo(
-    () => items.filter(i => i.userId === Number(responsavelId)),
-    [items, responsavelId]
-  )
-
   useEffect(() => {
-    if (!selected) return
-    setResponsavelId(String(selected.userId))
-    setCriterioId(String(selected.criterioId))
-  }, [selected])
-
-  useEffect(() => {
-    const item = items.find(i => i.userId === Number(responsavelId) && i.criterioId === Number(criterioId))
-    if (!item) { setForm(null); return }
+    if (!open || !item) { setForm(null); return }
     setForm({
-      id: item.id,
       target: item.target ?? '',
       realized: item.realized ?? '',
       status: item.status || 'pendente',
       notes: item.notes || '',
       attachmentNote: item.attachmentNote || '',
       registeredAt: item.registeredAt || new Date().toISOString().slice(0, 10),
-      criterioType: item.criterioType,
-      criterioUnit: item.criterioUnit,
-      canEdit: item.canEdit,
     })
-  }, [responsavelId, criterioId, items])
+  }, [open, item])
 
-  const frequenciaCalculada = form && form.criterioType === 'quantitativo' && Number(form.target) > 0 && form.realized !== ''
+  if (!item || !form) return null
+
+  const editable = mode === 'edit' && item.canEdit
+  const frequenciaCalculada = item.criterioType === 'quantitativo' && Number(form.target) > 0 && form.realized !== ''
     ? Math.round((Number(form.realized) / Number(form.target)) * 10000) / 100
     : null
 
-  const handleResponsavelChange = (id) => {
-    setResponsavelId(id)
-    setCriterioId('')
-    setForm(null)
-  }
-
-  const handleCancel = () => {
-    setResponsavelId('')
-    setCriterioId('')
-    setForm(null)
-    onSelect(null)
-  }
-
-  const responsavelAtual = responsaveis.find(r => r.id === Number(responsavelId))
-
   return (
-    <div className="card p-5 space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold text-gray-800">Registrar lançamento</h3>
-        <p className="text-xs text-gray-400 mt-0.5">Selecione o responsável e preencha o resultado do critério do mês.</p>
-      </div>
-
-      <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1.5">Responsável <span className="text-red-500">*</span></label>
-        <select value={responsavelId} onChange={e => handleResponsavelChange(e.target.value)} className="select-field">
-          <option value="">Selecionar responsável...</option>
-          {responsaveis.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-        </select>
-      </div>
-
-      {responsavelId && (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={mode === 'edit' ? 'Registrar lançamento' : 'Lançamento'}
+      size="md"
+      footer={editable ? (
         <>
-          <div className="flex items-center gap-2 -mt-1">
-            <MiniAvatar name={responsavelAtual?.name} avatar={responsavelAtual?.avatar} roleLabel={FREQUENCIA_ROLE_LABELS[responsavelAtual?.role]} />
-            <Badge status={responsavelAtual?.role} />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">Critério mensal <span className="text-red-500">*</span></label>
-            <select value={criterioId} onChange={e => setCriterioId(e.target.value)} className="select-field">
-              <option value="">Selecionar critério...</option>
-              {criteriosDoResponsavel.map(c => <option key={c.criterioId} value={c.criterioId}>{c.criterioTitle}</option>)}
-            </select>
-          </div>
+          <button onClick={onClose} className="btn-secondary" disabled={saving}>Cancelar</button>
+          <button onClick={() => onSave(form)} className="btn-primary" disabled={saving}>
+            <CheckCircle size={15} /> {saving ? 'Salvando...' : 'Salvar lançamento'}
+          </button>
         </>
+      ) : (
+        <button onClick={onClose} className="btn-secondary">Fechar</button>
       )}
+    >
+      <div className="space-y-4">
+        <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
+          <BigAvatar name={item.userName} avatar={item.userAvatar} size={56} />
+          <div className="min-w-0 flex-1">
+            <div className="font-bold text-gray-900 text-base truncate">{item.userName}</div>
+            <div className="text-xs text-gray-400 truncate">{item.criterioTitle}</div>
+          </div>
+          <Badge status={item.role} />
+        </div>
 
-      {form && (
-        <>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Tipo de lançamento</label>
+            <div className="input-field bg-gray-50 text-gray-500">{criterioTypeLabel(item.criterioType)}</div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Unidade</label>
+            <div className="input-field bg-gray-50 text-gray-500">{item.criterioUnit || '—'}</div>
+          </div>
+        </div>
+
+        {item.criterioType === 'quantitativo' && (
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Tipo de lançamento</label>
-              <div className="input-field bg-gray-50 text-gray-500 capitalize">{form.criterioType}</div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Meta definida</label>
+              <input
+                type="number" min="0" value={form.target}
+                onChange={e => setForm(f => ({ ...f, target: e.target.value }))}
+                disabled={!editable}
+                className="input-field disabled:bg-gray-50 disabled:text-gray-400"
+              />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Unidade</label>
-              <div className="input-field bg-gray-50 text-gray-500">{form.criterioUnit || '—'}</div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Quantidade realizada</label>
+              <input
+                type="number" min="0" value={form.realized}
+                onChange={e => setForm(f => ({ ...f, realized: e.target.value }))}
+                disabled={!editable}
+                className="input-field disabled:bg-gray-50 disabled:text-gray-400"
+              />
             </div>
           </div>
+        )}
 
-          {form.criterioType === 'quantitativo' && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Meta definida</label>
-                <input
-                  type="number" min="0" value={form.target}
-                  onChange={e => setForm(f => ({ ...f, target: e.target.value }))}
-                  disabled={!form.canEdit}
-                  className="input-field disabled:bg-gray-50 disabled:text-gray-400"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Quantidade realizada</label>
-                <input
-                  type="number" min="0" value={form.realized}
-                  onChange={e => setForm(f => ({ ...f, realized: e.target.value }))}
-                  disabled={!form.canEdit}
-                  className="input-field disabled:bg-gray-50 disabled:text-gray-400"
-                />
-              </div>
-            </div>
-          )}
-
-          {frequenciaCalculada !== null && (
-            <div className="rounded-xl border border-brand-100 bg-brand-50 px-4 py-3 flex items-center justify-between">
-              <span className="text-xs font-medium text-brand-700">Frequência calculada</span>
-              <span className="text-lg font-bold text-brand-800">{frequenciaCalculada}%</span>
-            </div>
-          )}
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">Status</label>
-            <select
-              value={form.status}
-              onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
-              disabled={!form.canEdit}
-              className="select-field disabled:bg-gray-50 disabled:text-gray-400"
-            >
-              {LANCAMENTO_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+        {frequenciaCalculada !== null && (
+          <div className="rounded-xl border border-brand-100 bg-brand-50 px-4 py-3 flex items-center justify-between">
+            <span className="text-xs font-medium text-brand-700">Frequência calculada</span>
+            <span className="text-lg font-bold text-brand-800">{frequenciaCalculada}%</span>
           </div>
+        )}
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">Data do registro</label>
-            <input
-              type="date" value={form.registeredAt}
-              onChange={e => setForm(f => ({ ...f, registeredAt: e.target.value }))}
-              disabled={!form.canEdit}
-              className="input-field disabled:bg-gray-50 disabled:text-gray-400"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">Observação</label>
-            <textarea
-              value={form.notes}
-              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-              disabled={!form.canEdit}
-              rows={2}
-              className="input-field resize-none disabled:bg-gray-50 disabled:text-gray-400"
-              placeholder="Observações sobre o lançamento..."
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">Anexar comprovante (opcional)</label>
-            <input
-              value={form.attachmentNote}
-              onChange={e => setForm(f => ({ ...f, attachmentNote: e.target.value }))}
-              disabled={!form.canEdit}
-              className="input-field disabled:bg-gray-50 disabled:text-gray-400"
-              placeholder="Link ou referência do comprovante"
-            />
-          </div>
-
-          {!form.canEdit && (
-            <p className="text-xs text-amber-600 flex items-center gap-1.5"><AlertTriangle size={12} /> Você não tem permissão para editar este lançamento.</p>
-          )}
-
-          <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
-            <button onClick={handleCancel} className="btn-secondary text-sm" disabled={saving}>Cancelar</button>
-            <button onClick={() => onSave(form)} className="btn-primary text-sm" disabled={saving || !form.canEdit}>
-              <CheckCircle size={14} /> {saving ? 'Salvando...' : 'Salvar lançamento'}
-            </button>
-          </div>
-        </>
-      )}
-
-      {!responsavelId && (
-        <div className="flex flex-col items-center justify-center text-center py-8 gap-2">
-          <FileText size={22} className="text-gray-300" />
-          <p className="text-sm text-gray-400">Selecione um responsável para começar.</p>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Status</label>
+          <select
+            value={form.status}
+            onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+            disabled={!editable}
+            className="select-field disabled:bg-gray-50 disabled:text-gray-400"
+          >
+            {LANCAMENTO_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
         </div>
-      )}
-    </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Data do registro</label>
+          <input
+            type="date" value={form.registeredAt}
+            onChange={e => setForm(f => ({ ...f, registeredAt: e.target.value }))}
+            disabled={!editable}
+            className="input-field disabled:bg-gray-50 disabled:text-gray-400"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Observação</label>
+          <textarea
+            value={form.notes}
+            onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+            disabled={!editable}
+            rows={2}
+            className="input-field resize-none disabled:bg-gray-50 disabled:text-gray-400"
+            placeholder="Observações sobre o lançamento..."
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Anexar comprovante (opcional)</label>
+          <input
+            value={form.attachmentNote}
+            onChange={e => setForm(f => ({ ...f, attachmentNote: e.target.value }))}
+            disabled={!editable}
+            className="input-field disabled:bg-gray-50 disabled:text-gray-400"
+            placeholder="Link ou referência do comprovante"
+          />
+        </div>
+
+        {mode === 'edit' && !item.canEdit && (
+          <p className="text-xs text-amber-600 flex items-center gap-1.5"><AlertTriangle size={12} /> Você não tem permissão para editar este lançamento.</p>
+        )}
+      </div>
+    </Modal>
   )
 }
 
@@ -930,9 +873,11 @@ function LancamentosTab({ allowedRoles, showToast }) {
   const [tick, setTick] = useState(0)
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
-  const [expanded, setExpanded] = useState(() => new Set())
-  const [selectedLancamento, setSelectedLancamento] = useState(null)
+  const [page, setPage] = useState(1)
+  const [modalItem, setModalItem] = useState(null)
+  const [modalMode, setModalMode] = useState('view')
   const [saving, setSaving] = useState(false)
+  const perPage = 8
 
   useEffect(() => {
     let active = true
@@ -942,18 +887,12 @@ function LancamentosTab({ allowedRoles, showToast }) {
         const { data } = await api.get('/frequencia/lancamentos', {
           params: {
             month,
-            ...(roleFilter ? { role: roleFilter } : {}),
             ...(statusFilter ? { status: statusFilter } : {}),
             ...(search ? { search } : {}),
           },
         })
         if (!active) return
         setItems(data)
-        setExpanded(prev => {
-          if (prev.size > 0) return prev
-          const roles = [...new Set(data.map(i => i.role))]
-          return roles.length ? new Set([roles[0]]) : prev
-        })
       } catch (err) {
         if (active) showToast(getApiErrorMessage(err, 'Erro ao carregar lançamentos.'), 'error')
       } finally {
@@ -962,20 +901,17 @@ function LancamentosTab({ allowedRoles, showToast }) {
     }
     load()
     return () => { active = false }
-  }, [month, roleFilter, statusFilter, search, tick])
+  }, [month, statusFilter, search, tick])
 
-  const grouped = useMemo(() => {
-    const map = new Map()
-    items.forEach(item => {
-      if (!map.has(item.role)) map.set(item.role, [])
-      map.get(item.role).push(item)
+  useEffect(() => { setPage(1) }, [roleFilter, month, statusFilter, search])
+
+  // Mantem o popup com dados atualizados apos salvar.
+  useEffect(() => {
+    setModalItem(prev => {
+      if (!prev) return prev
+      const fresh = items.find(i => i.id === prev.id)
+      return fresh || prev
     })
-    return [...map.entries()].map(([role, list]) => ({
-      role,
-      label: FREQUENCIA_ROLE_LABELS[role] || role,
-      users: new Set(list.map(i => i.userId)).size,
-      list,
-    }))
   }, [items])
 
   const stats = useMemo(() => ({
@@ -985,18 +921,32 @@ function LancamentosTab({ allowedRoles, showToast }) {
     emRevisao: items.filter(i => i.status === 'em_revisao').length,
   }), [items])
 
-  const toggleExpanded = (role) => {
-    setExpanded(prev => {
-      const next = new Set(prev)
-      if (next.has(role)) next.delete(role); else next.add(role)
-      return next
+  const roleTileStats = useMemo(() => {
+    const map = new Map()
+    items.forEach(item => {
+      if (!map.has(item.role)) map.set(item.role, { users: new Set(), criterios: new Set(), count: 0 })
+      const entry = map.get(item.role)
+      entry.users.add(item.userId)
+      entry.criterios.add(item.criterioId)
+      entry.count += 1
     })
+    return map
+  }, [items])
+
+  const visibleItems = roleFilter ? items.filter(i => i.role === roleFilter) : items
+  const totalPages = Math.max(1, Math.ceil(visibleItems.length / perPage))
+  const paged = visibleItems.slice((page - 1) * perPage, page * perPage)
+  const selectedLabel = roleFilter ? (FREQUENCIA_ROLE_LABELS[roleFilter] || roleFilter) : 'Todos os perfis'
+
+  const openModal = (item, mode) => {
+    setModalItem(item)
+    setModalMode(mode)
   }
 
   const handleSaveLancamento = async (form) => {
     setSaving(true)
     try {
-      await api.put(`/frequencia/lancamentos/${form.id}`, {
+      await api.put(`/frequencia/lancamentos/${modalItem.id}`, {
         target: form.target === '' ? null : Number(form.target),
         realized: form.realized === '' ? null : Number(form.realized),
         status: form.status,
@@ -1006,6 +956,7 @@ function LancamentosTab({ allowedRoles, showToast }) {
       })
       showToast('Lançamento registrado!')
       setTick(t => t + 1)
+      setModalItem(null)
     } catch (err) {
       showToast(getApiErrorMessage(err, 'Erro ao salvar lançamento.'), 'error')
     } finally {
@@ -1013,7 +964,7 @@ function LancamentosTab({ allowedRoles, showToast }) {
     }
   }
 
-  if (loading && items.length === 0 && !search && !statusFilter && !roleFilter) {
+  if (loading && items.length === 0) {
     return <div className="flex items-center justify-center h-48"><div className="animate-spin rounded-full h-8 w-8 border-4 border-brand-700 border-t-transparent" /></div>
   }
 
@@ -1026,7 +977,7 @@ function LancamentosTab({ allowedRoles, showToast }) {
         <StatCard icon={Eye} iconBg="bg-purple-100" iconColor="text-purple-700" value={stats.emRevisao} label="Em revisão" />
       </div>
 
-      <div className="card p-4">
+      <div className="card p-4 space-y-3">
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-44">
             <label className="block text-xs font-medium text-gray-500 mb-1.5">Mês/ano</label>
@@ -1053,101 +1004,128 @@ function LancamentosTab({ allowedRoles, showToast }) {
             <Filter size={14} /> Limpar filtros
           </button>
         </div>
-        <div className="relative mt-3">
+        <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar responsável ou critério..." className="input-field pl-9" />
         </div>
+
+        <div className="flex flex-wrap gap-3 pt-2">
+          <PerfilTile
+            icon={Users}
+            label="Todos"
+            userCount={new Set(items.map(i => i.userId)).size}
+            secondaryCount={items.length}
+            secondaryLabel={`lançamento${items.length !== 1 ? 's' : ''}`}
+            badgeCount={new Set(items.map(i => i.criterioId)).size}
+            badgeLabel={`critério${new Set(items.map(i => i.criterioId)).size !== 1 ? 's' : ''}`}
+            active={!roleFilter}
+            onClick={() => setRoleFilter('')}
+          />
+          {allowedRoles.map(role => {
+            const entry = roleTileStats.get(role) || { users: new Set(), criterios: new Set(), count: 0 }
+            return (
+              <PerfilTile
+                key={role}
+                icon={PERFIL_ICONS[role] || Users}
+                label={FREQUENCIA_ROLE_LABELS[role]}
+                userCount={entry.users.size}
+                secondaryCount={entry.count}
+                secondaryLabel={`lançamento${entry.count !== 1 ? 's' : ''}`}
+                badgeCount={entry.criterios.size}
+                badgeLabel={`critério${entry.criterios.size !== 1 ? 's' : ''}`}
+                active={roleFilter === role}
+                onClick={() => setRoleFilter(role)}
+              />
+            )
+          })}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 items-start">
-        <div className="xl:col-span-2 card p-0 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h3 className="text-sm font-semibold text-gray-800">Lançamentos por perfil</h3>
-          </div>
-          {grouped.length === 0 ? (
-            <div className="text-center py-14 text-gray-400 text-sm">Nenhum lançamento encontrado para os filtros selecionados.</div>
-          ) : (
-            grouped.map(group => {
-              const isExpanded = expanded.has(group.role)
-              return (
-                <div key={group.role} className="border-b border-gray-100 last:border-0">
-                  <button
-                    onClick={() => toggleExpanded(group.role)}
-                    className="w-full flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-gray-50/60 transition-colors text-left"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
-                      <Users size={15} className="text-brand-600 flex-shrink-0" />
-                      <span className="font-semibold text-gray-800">{group.label}</span>
-                      <span className="text-[11px] font-medium text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full">{group.users} usuário{group.users !== 1 ? 's' : ''}</span>
-                      <span className="text-[11px] font-medium text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">{group.list.length} critérios</span>
-                    </div>
-                    {isExpanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
-                  </button>
-                  {isExpanded && (
-                    <div className="table-container">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-gray-100">
-                            <th className="table-header px-2">Usuário</th>
-                            <th className="table-header px-2">Critério</th>
-                            <th className="table-header px-2 w-20">Meta</th>
-                            <th className="table-header px-2 w-24">Realizado</th>
-                            <th className="table-header px-2 w-24">Unidade</th>
-                            <th className="table-header px-2 w-20">Frequência</th>
-                            <th className="table-header px-2 w-28">Status</th>
-                            <th className="table-header px-2 w-20">Ações</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {group.list.map(item => {
-                            const isSelected = selectedLancamento?.id === item.id
-                            return (
-                              <tr key={item.id} className={`border-b border-gray-50 transition-colors ${isSelected ? 'bg-brand-50/60' : 'hover:bg-gray-50/50'}`}>
-                                <td className="table-cell px-2">
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <MiniAvatar name={item.userName} roleLabel={group.label} avatar={item.userAvatar} />
-                                    <span className="font-medium text-gray-700 truncate max-w-[130px]">{item.userName}</span>
-                                  </div>
-                                </td>
-                                <td className="table-cell px-2 truncate max-w-[160px]" title={item.criterioTitle}>{item.criterioTitle}</td>
-                                <td className="table-cell px-2">{item.target ?? '—'}</td>
-                                <td className="table-cell px-2">{item.realized ?? '—'}</td>
-                                <td className="table-cell px-2 text-gray-500">{item.criterioUnit || '—'}</td>
-                                <td className="table-cell px-2 font-medium text-gray-700">{item.frequencyPct !== null ? `${Math.round(item.frequencyPct)}%` : '—'}</td>
-                                <td className="table-cell px-2"><Badge status={item.status} /></td>
-                                <td className="table-cell px-2">
-                                  <div className="flex items-center gap-0.5">
-                                    <button onClick={() => setSelectedLancamento(item)} title="Visualizar" className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
-                                      <Eye size={14} />
-                                    </button>
-                                    {item.canEdit && (
-                                      <button onClick={() => setSelectedLancamento(item)} title="Registrar" className="p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors">
-                                        <Pencil size={14} />
-                                      </button>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )
-            })
-          )}
+      <div className="card p-0 overflow-hidden">
+        <div className="flex items-center justify-between flex-wrap gap-2 px-5 py-4 border-b border-gray-100">
+          <h3 className="text-sm font-semibold text-gray-800">Lançamentos do perfil selecionado: {selectedLabel}</h3>
+          <span className="text-[11px] font-medium text-brand-700 bg-brand-50 px-2.5 py-1 rounded-full">{visibleItems.length} lançamento{visibleItems.length !== 1 ? 's' : ''}</span>
         </div>
 
-        <RegistrarLancamentoPanel
-          items={items}
-          selected={selectedLancamento}
-          onSelect={setSelectedLancamento}
-          onSave={handleSaveLancamento}
-          saving={saving}
-        />
+        <div className="table-container">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className="table-header px-3">Usuário</th>
+                <th className="table-header px-3">Critério</th>
+                <th className="table-header px-3 w-24">Meta</th>
+                <th className="table-header px-3 w-24">Realizado</th>
+                <th className="table-header px-3 w-24">Unidade</th>
+                <th className="table-header px-3 w-24">Frequência</th>
+                <th className="table-header px-3 w-28">Status</th>
+                <th className="table-header px-3 w-20">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paged.map(item => (
+                <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                  <td className="table-cell px-3 py-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <BigAvatar name={item.userName} avatar={item.userAvatar} />
+                      <div className="min-w-0">
+                        <div className="font-semibold text-gray-800 truncate max-w-[180px]">{item.userName}</div>
+                        <div className="text-xs text-gray-400 truncate max-w-[180px]">{FREQUENCIA_ROLE_LABELS[item.role] || item.role}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="table-cell px-3 truncate max-w-[200px]" title={item.criterioTitle}>{item.criterioTitle}</td>
+                  <td className="table-cell px-3">{item.target ?? '—'}</td>
+                  <td className="table-cell px-3">{item.realized ?? '—'}</td>
+                  <td className="table-cell px-3 text-gray-500">{item.criterioUnit || '—'}</td>
+                  <td className="table-cell px-3 font-medium text-gray-700">{item.frequencyPct !== null ? `${Math.round(item.frequencyPct)}%` : '—'}</td>
+                  <td className="table-cell px-3"><Badge status={item.status} /></td>
+                  <td className="table-cell px-3">
+                    <div className="flex items-center gap-0.5">
+                      <button onClick={() => openModal(item, 'view')} title="Visualizar" className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
+                        <Eye size={14} />
+                      </button>
+                      {item.canEdit && (
+                        <button onClick={() => openModal(item, 'edit')} title="Registrar" className="p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors">
+                          <Pencil size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {paged.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="table-cell text-center py-10 text-gray-400 text-sm">Nenhum lançamento encontrado para os filtros selecionados.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {visibleItems.length > 0 && (
+          <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
+            <span className="text-xs text-gray-500">
+              Exibindo {Math.min((page - 1) * perPage + 1, visibleItems.length)} a {Math.min(page * perPage, visibleItems.length)} de {visibleItems.length} resultados
+            </span>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500">‹</button>
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map(n => (
+                <button key={n} onClick={() => setPage(n)} className={`w-8 h-8 rounded-lg text-xs font-medium transition-colors ${page === n ? 'bg-brand-800 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>{n}</button>
+              ))}
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500">›</button>
+            </div>
+          </div>
+        )}
       </div>
+
+      <LancamentoModal
+        open={!!modalItem}
+        onClose={() => setModalItem(null)}
+        item={modalItem}
+        mode={modalMode}
+        onSave={handleSaveLancamento}
+        saving={saving}
+      />
     </div>
   )
 }

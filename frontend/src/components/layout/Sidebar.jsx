@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import { useAvatar } from '../../context/AvatarContext'
 import {
-  LayoutDashboard, BookOpen, FileText, Users, ShieldCheck, CalendarCheck,
+  LayoutDashboard, BookOpen, FileText, ShieldCheck, CalendarCheck,
   LogOut, ChevronLeft, ChevronRight, Camera, Sun, Moon, Globe,
 } from 'lucide-react'
 
@@ -11,8 +11,7 @@ const isCoordinatorRole = (user) => user?.role === 'coordenador' || (user?.funct
 
 // Menu reduzido ao que cada perfil realmente usa no dia a dia: professor só
 // acompanha os proprios cursos; supervisor/coordenador tambem cuidam da producao;
-// Gestao de Pessoas e Acessos ficam restritos a quem administra o sistema
-// (admin, e Gestao de Pessoas tambem para o perfil "gestao", dono dessa area).
+// Acessos fica restrito a quem administra o sistema.
 const navItems = [
   { to: '/painel', icon: LayoutDashboard, label: 'Painel', visible: (user) => user?.role === 'administrador' },
   { to: '/cursos', icon: BookOpen, label: 'Cursos' },
@@ -21,12 +20,6 @@ const navItems = [
     icon: FileText,
     label: 'Produção',
     visible: (user) => user?.role === 'administrador' || user?.role === 'supervisor' || user?.role === 'revisor' || isCoordinatorRole(user),
-  },
-  {
-    to: '/gestao-pessoas',
-    icon: Users,
-    label: 'Gestão de Pessoas',
-    visible: (user) => user?.role === 'administrador' || user?.role === 'gestao',
   },
   {
     to: '/frequencia',

@@ -17,8 +17,4 @@ export const mockUsers = [
 
 export const mockMaterials = []
 
-export const mockPeople = []
-
-export const mockOccurrences = []
-
 export const mockNotifications = []
