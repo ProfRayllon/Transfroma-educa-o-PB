@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Plus, Lock, Calendar, CheckCircle, TrendingUp, Filter, Search, X,
-  ChevronDown, ChevronUp, Eye, Pencil, Users, UserCheck, Headphones, UserCog, GraduationCap,
+  ChevronDown, ChevronUp, Eye, Pencil, Users, UserCheck, Headphones, UserCog, GraduationCap, BookOpen,
   FileText, Clock, AlertTriangle, LayoutGrid, ListChecks, History, Check,
 } from 'lucide-react'
 import Badge from '../components/ui/Badge'
@@ -17,8 +17,9 @@ const FREQUENCIA_ROLE_LABELS = {
   tecnico: 'Apoio tecnico',
   supervisor_tutoria: 'Supervisor de tutoria',
   professor: 'Professor(a)',
+  tutor: 'Tutor(a)',
 }
-const FREQUENCIA_ROLES_ORDER = ['supervisor', 'revisor', 'tecnico', 'supervisor_tutoria', 'professor']
+const FREQUENCIA_ROLES_ORDER = ['supervisor', 'revisor', 'tecnico', 'supervisor_tutoria', 'professor', 'tutor']
 
 const PERFIL_ICONS = {
   supervisor: Users,
@@ -26,6 +27,7 @@ const PERFIL_ICONS = {
   tecnico: Headphones,
   supervisor_tutoria: UserCog,
   professor: GraduationCap,
+  tutor: BookOpen,
 }
 
 const LANCAMENTO_STATUS_OPTIONS = [
@@ -470,20 +472,23 @@ function CriterioDetailModal({ open, onClose, target, mode, onSaved, showToast }
 
 /* ─── perfil tile ─── */
 
-function PerfilTile({ icon: Icon, label, userCount, criteriaCount, active, onClick }) {
+function PerfilTile({ icon: Icon, label, userCount, criteriaCount, criteriosCriados, active, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`relative flex items-center gap-3 px-4 py-3 rounded-2xl border text-left transition-all ${
+      className={`relative flex items-center gap-3 px-4 pt-4 pb-3 rounded-2xl border text-left transition-all ${
         active ? 'border-brand-500 bg-brand-50/60 ring-1 ring-brand-200' : 'border-gray-200 bg-white hover:border-brand-300 hover:bg-gray-50'
       }`}
     >
+      <span className="absolute -top-2.5 left-3 bg-white border border-brand-200 text-brand-700 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap">
+        {criteriosCriados} critério{criteriosCriados !== 1 ? 's' : ''} criado{criteriosCriados !== 1 ? 's' : ''}
+      </span>
       <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${active ? 'bg-brand-600 text-white' : 'bg-brand-50 text-brand-600'}`}>
         <Icon size={16} />
       </div>
       <div className="min-w-0">
         <div className="text-sm font-semibold text-gray-800 truncate">{label}</div>
-        <div className="text-[11px] text-gray-500 whitespace-nowrap">{userCount} usuário{userCount !== 1 ? 's' : ''} · {criteriaCount} critério{criteriaCount !== 1 ? 's' : ''}</div>
+        <div className="text-[11px] text-gray-500 whitespace-nowrap">{userCount} usuário{userCount !== 1 ? 's' : ''} · {criteriaCount} vinculado{criteriaCount !== 1 ? 's' : ''}</div>
       </div>
       {active && (
         <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-brand-600 text-white flex items-center justify-center">
@@ -590,8 +595,16 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
           </button>
         </div>
 
-        <div className="flex flex-wrap gap-3">
-          <PerfilTile icon={Users} label="Todos" userCount={allUsers.length} criteriaCount={totalCriteria} active={!roleFilter} onClick={() => setRoleFilter('')} />
+        <div className="flex flex-wrap gap-3 pt-2">
+          <PerfilTile
+            icon={Users}
+            label="Todos"
+            userCount={allUsers.length}
+            criteriaCount={totalCriteria}
+            criteriosCriados={data.stats.criteriosAtivos}
+            active={!roleFilter}
+            onClick={() => setRoleFilter('')}
+          />
           {data.groups.map(g => (
             <PerfilTile
               key={g.role}
@@ -599,6 +612,7 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
               label={g.label}
               userCount={g.userCount}
               criteriaCount={g.criteriaCount}
+              criteriosCriados={g.criteriosCriados}
               active={roleFilter === g.role}
               onClick={() => setRoleFilter(g.role)}
             />

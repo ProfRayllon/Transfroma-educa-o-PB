@@ -39,15 +39,15 @@ const COURSE_TRAILS = {
 const USER_ROLES = ['administrador', 'coordenador', 'supervisor', 'professor', 'tutor', 'tecnico', 'gestao', 'revisor', 'supervisor_tutoria']
 const USER_STATUSES = ['ativo', 'inativo', 'pendente', 'desligado', 'substituido']
 
-// Perfis avaliados pelo modulo de Frequencia (metas/criterios mensais) -- distinto do
-// USER_ROLES completo: "tutor" fica de fora aqui (nao e usado no dia a dia do sistema hoje).
-const FREQUENCIA_ROLES = ['supervisor', 'revisor', 'tecnico', 'supervisor_tutoria', 'professor']
+// Perfis avaliados pelo modulo de Frequencia (metas/criterios mensais).
+const FREQUENCIA_ROLES = ['supervisor', 'revisor', 'tecnico', 'supervisor_tutoria', 'professor', 'tutor']
 const FREQUENCIA_ROLE_LABELS = {
   supervisor: 'Supervisor',
   revisor: 'Revisor(a)',
   tecnico: 'Apoio tecnico',
   supervisor_tutoria: 'Supervisor de tutoria',
   professor: 'Professor(a)',
+  tutor: 'Tutor(a)',
 }
 
 app.set('trust proxy', 1)
@@ -1485,7 +1485,10 @@ app.get('/api/frequencia/overview', auth, async (req, res) => {
         role,
         label: FREQUENCIA_ROLE_LABELS[role],
         userCount: users.length,
+        // criteriaCount = vinculados (usuarios x criterios); criteriosCriados = quantidade
+        // de criterios distintos definidos para esse perfil no mes, sem multiplicar por usuario.
         criteriaCount: roleCriterios.length * users.length,
+        criteriosCriados: roleCriterios.length,
         avgFill: groupAvg,
         canCreate: canCreateFrequenciaCriterio(actor, role),
         users,
