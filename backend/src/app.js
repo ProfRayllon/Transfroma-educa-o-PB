@@ -1361,6 +1361,12 @@ function frequenciaCriterioPayload(body) {
   const activities = type === 'qualitativo' ? normalizeActivities(body.activities) : null
   if (type === 'qualitativo' && activities.length === 0) missing.push('atividades')
 
+  // userIds e opcional: quando informado, restringe o criterio a um subconjunto do perfil
+  // (em vez de todos os usuarios daquele perfil, comportamento anterior e ainda o padrao
+  // quando null/vazio).
+  const userIds = Array.isArray(body.userIds) ? [...new Set(body.userIds.map(Number).filter(Boolean))] : null
+  if (userIds && userIds.length === 0) missing.push('profissionais selecionados')
+
   if (missing.length > 0) {
     return { error: `Preencha os campos obrigatorios: ${missing.join(', ')}.` }
   }
@@ -1386,6 +1392,7 @@ function frequenciaCriterioPayload(body) {
       target: type === 'quantitativo' ? Number(body.target) : null,
       activities,
       referenceMonth,
+      userIds,
     },
   }
 }
@@ -1542,6 +1549,14 @@ app.post('/api/frequencia/criterios', auth, async (req, res) => {
 
     if (!canCreateFrequenciaCriterio(actor, payload.role)) {
       return res.status(403).json({ message: 'Voce nao tem permissao para criar criterio para esse perfil.' })
+    }
+
+    if (payload.userIds) {
+      const eligibleIds = new Set((await store.listUsersByRoles([payload.role])).map((u) => Number(u.id)))
+      payload.userIds = payload.userIds.filter((id) => eligibleIds.has(id))
+      if (payload.userIds.length === 0) {
+        return res.status(400).json({ message: 'Nenhum dos profissionais selecionados pertence a esse perfil.' })
+      }
     }
 
     const criterio = await store.createFrequenciaCriterio({ ...payload, createdBy: actor.id })

@@ -2288,11 +2288,14 @@ async function getFrequenciaCriterioById(id) {
 // Um criterio vale para todo usuario ativo do perfil no mes -- ao criar o criterio,
 // provisiona (idempotente) um lancamento "pendente" para cada usuario elegivel, o que
 // explica os lancamentos ja existirem antes de qualquer preenchimento manual.
-async function provisionFrequenciaLancamentos(criterio) {
+async function provisionFrequenciaLancamentos(criterio, targetUserIds = null) {
   const eligibleUsers = await listUsersByRoles([criterio.role])
+  const users = targetUserIds?.length
+    ? eligibleUsers.filter((user) => targetUserIds.includes(Number(user.id)))
+    : eligibleUsers
 
   if (!isMysqlMode()) {
-    eligibleUsers.forEach((user, index) => {
+    users.forEach((user, index) => {
       const alreadyExists = frequenciaLancamentos.some(
         (lancamento) => lancamento.criterioId === criterio.id && lancamento.userId === user.id
       )
@@ -2316,7 +2319,7 @@ async function provisionFrequenciaLancamentos(criterio) {
     return
   }
 
-  for (const user of eligibleUsers) {
+  for (const user of users) {
     await pool.execute(
       `INSERT IGNORE INTO frequencia_lancamentos (criterio_id, user_id, target, status)
        VALUES (?, ?, ?, 'pendente')`,
@@ -2341,7 +2344,7 @@ async function createFrequenciaCriterio(payload) {
       createdAt: new Date().toISOString().slice(0, 19),
     }
     frequenciaCriterios.push(criterio)
-    await provisionFrequenciaLancamentos(criterio)
+    await provisionFrequenciaLancamentos(criterio, payload.userIds)
     return criterio
   }
 
@@ -2361,7 +2364,7 @@ async function createFrequenciaCriterio(payload) {
     ]
   )
   const criterio = await getFrequenciaCriterioById(result.insertId)
-  await provisionFrequenciaLancamentos(criterio)
+  await provisionFrequenciaLancamentos(criterio, payload.userIds)
   return criterio
 }
 

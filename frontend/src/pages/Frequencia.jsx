@@ -159,6 +159,7 @@ function NovoCriterioModal({ open, onClose, onSaved, showToast, allowedRoles }) 
   const [saving, setSaving] = useState(false)
   const [previewUsers, setPreviewUsers] = useState([])
   const [loadingPreview, setLoadingPreview] = useState(false)
+  const [selectedUserIds, setSelectedUserIds] = useState(new Set())
 
   useEffect(() => {
     if (!open) return
@@ -167,18 +168,36 @@ function NovoCriterioModal({ open, onClose, onSaved, showToast, allowedRoles }) 
   }, [open, allowedRoles])
 
   useEffect(() => {
-    if (!open || !form.role) { setPreviewUsers([]); return }
+    if (!open || !form.role) { setPreviewUsers([]); setSelectedUserIds(new Set()); return }
     let active = true
     setLoadingPreview(true)
     api.get('/frequencia/usuarios', { params: { role: form.role } })
-      .then(({ data }) => { if (active) setPreviewUsers(data) })
+      .then(({ data }) => {
+        if (!active) return
+        setPreviewUsers(data)
+        // por padrao comeca com todos marcados, igual ao comportamento anterior (perfil inteiro)
+        setSelectedUserIds(new Set(data.map(u => u.id)))
+      })
       .catch(() => { if (active) setPreviewUsers([]) })
       .finally(() => { if (active) setLoadingPreview(false) })
     return () => { active = false }
   }, [open, form.role])
 
+  const toggleUser = (userId) => {
+    setSelectedUserIds(prev => {
+      const next = new Set(prev)
+      if (next.has(userId)) next.delete(userId); else next.add(userId)
+      return next
+    })
+  }
+
+  const toggleAllUsers = () => {
+    setSelectedUserIds(prev => prev.size === previewUsers.length ? new Set() : new Set(previewUsers.map(u => u.id)))
+  }
+
   const handleSubmit = async () => {
     if (!form.role) { setError('Selecione o perfil avaliado.'); return }
+    if (selectedUserIds.size === 0) { setError('Selecione ao menos um profissional desse perfil.'); return }
     if (!form.title.trim()) { setError('Informe o título do critério.'); return }
     if (!form.referenceMonth) { setError('Defina a vigência (mês).'); return }
     if (form.type === 'quantitativo' && !(Number(form.target) > 0)) { setError('Informe uma meta do mês válida.'); return }
@@ -202,6 +221,7 @@ function NovoCriterioModal({ open, onClose, onSaved, showToast, allowedRoles }) 
         target: form.type === 'quantitativo' ? Number(form.target) : null,
         activities,
         referenceMonth: form.referenceMonth,
+        userIds: Array.from(selectedUserIds),
       })
       showToast('Critério mensal criado!')
       onSaved()
@@ -245,22 +265,43 @@ function NovoCriterioModal({ open, onClose, onSaved, showToast, allowedRoles }) 
 
         {form.role && (
           <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
-            <div className="text-[11px] font-medium text-gray-500 mb-1.5">
-              {loadingPreview
-                ? 'Carregando usuários...'
-                : `Vai valer para ${previewUsers.length} usuário${previewUsers.length !== 1 ? 's' : ''} do perfil ${FREQUENCIA_ROLE_LABELS[form.role]}:`}
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <div className="text-[11px] font-medium text-gray-500">
+                {loadingPreview
+                  ? 'Carregando usuários...'
+                  : `Selecionado${selectedUserIds.size !== 1 ? 's' : ''} ${selectedUserIds.size} de ${previewUsers.length} do perfil ${FREQUENCIA_ROLE_LABELS[form.role]}`}
+              </div>
+              {!loadingPreview && previewUsers.length > 0 && (
+                <button
+                  type="button"
+                  onClick={toggleAllUsers}
+                  className="text-[11px] font-medium text-brand-600 hover:text-brand-800 flex-shrink-0"
+                >
+                  {selectedUserIds.size === previewUsers.length ? 'Desmarcar todos' : 'Marcar todos'}
+                </button>
+              )}
             </div>
             {!loadingPreview && (
-              <div className="flex flex-wrap gap-1.5">
-                {previewUsers.slice(0, 8).map(u => (
-                  <span key={u.id} className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-full pl-1 pr-2.5 py-0.5">
-                    <span className="w-5 h-5 rounded-full bg-brand-600 text-white text-[9px] font-bold flex items-center justify-center overflow-hidden flex-shrink-0">
-                      {u.avatar ? <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" /> : getInitials(u.name)}
-                    </span>
-                    <span className="text-[11px] text-gray-700">{u.name}</span>
-                  </span>
-                ))}
-                {previewUsers.length > 8 && <span className="text-[11px] text-gray-400 self-center">+{previewUsers.length - 8}</span>}
+              <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+                {previewUsers.map(u => {
+                  const checked = selectedUserIds.has(u.id)
+                  return (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => toggleUser(u.id)}
+                      className={`flex items-center gap-1.5 border rounded-full pl-1 pr-2.5 py-0.5 transition-colors ${
+                        checked ? 'bg-white border-brand-200' : 'bg-transparent border-gray-200 opacity-50 hover:opacity-80'
+                      }`}
+                    >
+                      <span className="w-5 h-5 rounded-full bg-brand-600 text-white text-[9px] font-bold flex items-center justify-center overflow-hidden flex-shrink-0">
+                        {u.avatar ? <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" /> : getInitials(u.name)}
+                      </span>
+                      <span className="text-[11px] text-gray-700">{u.name}</span>
+                      {checked && <CheckCircle size={12} className="text-green-600 flex-shrink-0" />}
+                    </button>
+                  )
+                })}
                 {previewUsers.length === 0 && <span className="text-[11px] text-gray-400">Nenhum usuário ativo nesse perfil ainda.</span>}
               </div>
             )}
