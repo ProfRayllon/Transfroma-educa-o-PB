@@ -1339,34 +1339,52 @@ app.patch('/api/ementas/:courseId/status', auth, async (req, res) => {
 
 /* ─── Frequencia: criterios mensais por perfil + lancamentos ─── */
 
+function normalizeActivities(rawActivities) {
+  return (Array.isArray(rawActivities) ? rawActivities : [])
+    .map((a) => ({ title: String(a?.title || '').trim(), weight: Number(a?.weight) || 0 }))
+    .filter((a) => a.title)
+}
+
 function frequenciaCriterioPayload(body) {
   const role = String(body.role || '').trim()
   const title = String(body.title || '').trim()
+  const details = String(body.details || '').trim()
   const type = body.type === 'qualitativo' ? 'qualitativo' : 'quantitativo'
   const referenceMonth = String(body.referenceMonth || '').trim()
 
   const missing = []
   if (!FREQUENCIA_ROLES.includes(role)) missing.push('perfil avaliado')
   if (!title) missing.push('titulo')
-  if (!referenceMonth) missing.push('mes de referencia')
-  if (type === 'quantitativo' && !String(body.unit || '').trim()) missing.push('unidade')
-  if (type === 'quantitativo' && !(Number(body.target) > 0)) missing.push('meta')
+  if (!referenceMonth) missing.push('mes de referencia (vigencia)')
+  if (type === 'quantitativo' && !(Number(body.target) > 0)) missing.push('meta do mes')
+
+  const activities = type === 'qualitativo' ? normalizeActivities(body.activities) : null
+  if (type === 'qualitativo' && activities.length === 0) missing.push('atividades')
 
   if (missing.length > 0) {
     return { error: `Preencha os campos obrigatorios: ${missing.join(', ')}.` }
   }
 
   if (!/^\d{4}-\d{2}$/.test(referenceMonth)) {
-    return { error: 'Mes de referencia invalido.' }
+    return { error: 'Mes de referencia (vigencia) invalido.' }
+  }
+
+  if (type === 'qualitativo') {
+    const totalWeight = activities.reduce((sum, a) => sum + a.weight, 0)
+    if (Math.abs(totalWeight - 100) > 0.5) {
+      return { error: `A soma dos pesos das atividades deve ser 100% (atual: ${totalWeight}%).` }
+    }
   }
 
   return {
     payload: {
       role,
       title,
+      details: details || null,
       type,
-      unit: type === 'quantitativo' ? String(body.unit).trim() : null,
+      unit: type === 'quantitativo' ? String(body.unit || '').trim() || null : null,
       target: type === 'quantitativo' ? Number(body.target) : null,
+      activities,
       referenceMonth,
     },
   }
@@ -1431,21 +1449,34 @@ app.get('/api/frequencia/overview', auth, async (req, res) => {
         const avgFill = userLancamentos.length
           ? Math.round(userLancamentos.reduce((sum, l) => sum + (l.status === 'concluido' ? 100 : l.frequencyPct || 0), 0) / userLancamentos.length)
           : 0
+        const metaTotal = userLancamentos.reduce((sum, l) => {
+          const criterio = roleCriterios.find((c) => c.id === l.criterioId)
+          return sum + (criterio?.type === 'quantitativo' ? Number(criterio.target) || 0 : 0)
+        }, 0)
         return {
           id: user.id,
           name: user.name,
           email: user.email,
           avatar: user.avatar,
           avgFill,
-          criteria: userLancamentos.map((l) => ({
-            lancamentoId: l.id,
-            criterioId: l.criterioId,
-            title: l.criterioTitle,
-            createdBy: creatorLabelById.get(roleCriterios.find((c) => c.id === l.criterioId)?.createdBy) || '—',
-            vigencia,
-            frequencyPct: l.frequencyPct,
-            status: l.status,
-          })),
+          metaTotal,
+          criteria: userLancamentos.map((l) => {
+            const criterio = roleCriterios.find((c) => c.id === l.criterioId)
+            return {
+              lancamentoId: l.id,
+              criterioId: l.criterioId,
+              title: l.criterioTitle,
+              details: criterio?.details || null,
+              type: criterio?.type || l.criterioType,
+              unit: criterio?.unit ?? l.criterioUnit,
+              target: criterio?.target ?? null,
+              activities: criterio?.activities || null,
+              createdBy: creatorLabelById.get(criterio?.createdBy) || '—',
+              vigencia,
+              frequencyPct: l.frequencyPct,
+              status: l.status,
+            }
+          }),
         }
       })
       const groupAvg = users.length ? Math.round(users.reduce((sum, u) => sum + u.avgFill, 0) / users.length) : 0
@@ -1461,13 +1492,15 @@ app.get('/api/frequencia/overview', auth, async (req, res) => {
       }
     })
 
-    const criteriosRealizados = lancamentos.filter((l) => l.status === 'concluido').length
+    // "Criterios ativos" = quantidade de criterios distintos definidos no mes (nao multiplicado
+    // por usuario, diferente do "criteriaCount" de cada grupo que ja e usuarios x criterios).
+    const criteriosAtivos = criterios.length
     const withFrequency = lancamentos.filter((l) => l.frequencyPct !== null)
     const frequenciaMedia = withFrequency.length
       ? Math.round(withFrequency.reduce((sum, l) => sum + l.frequencyPct, 0) / withFrequency.length)
       : 0
 
-    res.json({ month, stats: { criteriosRealizados, frequenciaMedia }, groups })
+    res.json({ month, stats: { criteriosAtivos, frequenciaMedia }, groups })
   } catch (err) {
     console.error('[GET /api/frequencia/overview]', err)
     res.status(500).json({ message: 'Erro ao carregar visao geral de frequencia.' })
@@ -1523,8 +1556,19 @@ app.put('/api/frequencia/criterios/:id', auth, async (req, res) => {
 
     const updates = {}
     if (req.body.title !== undefined) updates.title = String(req.body.title).trim()
+    if (req.body.details !== undefined) updates.details = String(req.body.details || '').trim() || null
     if (req.body.unit !== undefined) updates.unit = String(req.body.unit || '').trim() || null
     if (req.body.target !== undefined) updates.target = Number(req.body.target) || null
+    if (req.body.activities !== undefined) {
+      const activities = normalizeActivities(req.body.activities)
+      if (current.type === 'qualitativo' && activities.length > 0) {
+        const totalWeight = activities.reduce((sum, a) => sum + a.weight, 0)
+        if (Math.abs(totalWeight - 100) > 0.5) {
+          return res.status(400).json({ message: `A soma dos pesos das atividades deve ser 100% (atual: ${totalWeight}%).` })
+        }
+      }
+      updates.activities = activities
+    }
 
     const updated = await store.updateFrequenciaCriterio(req.params.id, updates)
     res.json(updated)

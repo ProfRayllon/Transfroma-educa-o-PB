@@ -252,9 +252,11 @@ function mapFrequenciaCriterioRow(row) {
     id: row.id,
     role: row.role,
     title: row.title,
+    details: row.details ?? null,
     type: row.type,
     unit: row.unit,
     target: row.target === null || row.target === undefined ? null : Number(row.target),
+    activities: parseJsonArray(row.activities),
     referenceMonth: row.reference_month,
     createdBy: row.created_by,
     createdAt: formatDate(row.created_at, true),
@@ -630,6 +632,22 @@ async function ensureMysqlSchema() {
         ON DELETE SET NULL
     ) ENGINE=InnoDB
   `)
+
+  // "details" (texto livre sobre o criterio) e "activities" (lista de atividades com peso,
+  // usada nos criterios qualitativos) foram adicionadas depois -- checagem idempotente igual
+  // ao resto do arquivo, pra nao quebrar bancos que ja tem a tabela sem essas colunas.
+  const [freqCriterioColumns] = await pool.execute(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'frequencia_criterios'
+       AND COLUMN_NAME IN ('details', 'activities')`
+  )
+  const existingFreqCriterioCols = new Set(freqCriterioColumns.map((c) => c.COLUMN_NAME))
+  if (!existingFreqCriterioCols.has('details')) {
+    await pool.execute('ALTER TABLE frequencia_criterios ADD COLUMN details TEXT DEFAULT NULL AFTER title')
+  }
+  if (!existingFreqCriterioCols.has('activities')) {
+    await pool.execute('ALTER TABLE frequencia_criterios ADD COLUMN activities TEXT DEFAULT NULL AFTER unit')
+  }
 
   await pool.execute(`
     CREATE TABLE IF NOT EXISTS frequencia_lancamentos (
@@ -2313,9 +2331,11 @@ async function createFrequenciaCriterio(payload) {
       id: Date.now(),
       role: payload.role,
       title: payload.title,
+      details: payload.details || null,
       type: payload.type,
       unit: payload.unit || null,
       target: payload.target ?? null,
+      activities: payload.activities || [],
       referenceMonth: payload.referenceMonth,
       createdBy: payload.createdBy || null,
       createdAt: new Date().toISOString().slice(0, 19),
@@ -2326,14 +2346,16 @@ async function createFrequenciaCriterio(payload) {
   }
 
   const [result] = await pool.execute(
-    `INSERT INTO frequencia_criterios (role, title, type, unit, target, reference_month, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO frequencia_criterios (role, title, details, type, unit, target, activities, reference_month, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       payload.role,
       payload.title,
+      payload.details || null,
       payload.type,
       payload.unit || null,
       payload.target ?? null,
+      payload.activities?.length ? JSON.stringify(payload.activities) : null,
       payload.referenceMonth,
       payload.createdBy || null,
     ]
@@ -2353,13 +2375,17 @@ async function updateFrequenciaCriterio(id, updates) {
 
   const fields = []
   const values = []
-  const mapped = { title: updates.title, type: updates.type, unit: updates.unit, target: updates.target }
+  const mapped = { title: updates.title, details: updates.details, type: updates.type, unit: updates.unit, target: updates.target }
   Object.entries(mapped).forEach(([key, value]) => {
     if (value !== undefined) {
       fields.push(`${key} = ?`)
       values.push(value)
     }
   })
+  if (updates.activities !== undefined) {
+    fields.push('activities = ?')
+    values.push(updates.activities?.length ? JSON.stringify(updates.activities) : null)
+  }
   if (fields.length > 0) {
     values.push(id)
     await pool.execute(`UPDATE frequencia_criterios SET ${fields.join(', ')} WHERE id = ?`, values)
