@@ -1473,8 +1473,12 @@ app.get('/api/frequencia/overview', auth, async (req, res) => {
               activities: criterio?.activities || null,
               createdBy: creatorLabelById.get(criterio?.createdBy) || '—',
               vigencia,
+              realized: l.realized,
               frequencyPct: l.frequencyPct,
               status: l.status,
+              notes: l.notes || null,
+              attachmentNote: l.attachmentNote || null,
+              registeredAt: l.registeredAt || null,
             }
           }),
         }

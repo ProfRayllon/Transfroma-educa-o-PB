@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import {
   Plus, Lock, Calendar, CheckCircle, TrendingUp, Filter, Search, X,
   Eye, Pencil, Users, UserCheck, Headphones, UserCog, GraduationCap, BookOpen,
@@ -335,133 +335,493 @@ function NovoCriterioModal({ open, onClose, onSaved, showToast, allowedRoles }) 
 
 /* ─── popup de critérios do usuário (ver / editar) ─── */
 
+function todayDate() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function formatAmount(value) {
+  if (value === null || value === undefined || value === '') return '—'
+  const numeric = Number(value)
+  if (Number.isNaN(numeric)) return String(value)
+  return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(numeric)
+}
+
+function getCriteriaCompletion(criteria = []) {
+  const total = criteria.length
+  const completed = criteria.filter((criterio) => criterio.status === 'concluido').length
+  return { total, completed, open: Math.max(0, total - completed) }
+}
+
+function getCriteriaTypeSummary(criteria = []) {
+  const types = [...new Set(criteria.map((criterio) => criterio.type).filter(Boolean))]
+  if (types.length === 0) return 'Sem criterio'
+  if (types.length === 1) return criterioTypeLabel(types[0])
+  return 'Misto'
+}
+
+function getCriterioProgressPct(criterio) {
+  if (criterio.type === 'quantitativo') {
+    return criterio.frequencyPct === null ? 0 : Math.max(0, Math.min(100, Number(criterio.frequencyPct) || 0))
+  }
+  if (criterio.status === 'concluido') return 100
+  if (criterio.status === 'em_revisao') return 85
+  if (criterio.status === 'em_andamento') return 60
+  return 0
+}
+
+function getCriterioMetaLabel(criterio) {
+  if (criterio.type === 'quantitativo') {
+    const amount = formatAmount(criterio.target)
+    return [amount === '—' ? null : amount, criterio.unit || null].filter(Boolean).join(' ') || '—'
+  }
+  const totalActivities = criterio.activities?.length || 0
+  return `${totalActivities} atividade${totalActivities !== 1 ? 's' : ''}`
+}
+
+function getCriterioLaunchLabel(criterio) {
+  if (criterio.type === 'quantitativo') {
+    if (criterio.realized === null || criterio.realized === undefined || criterio.realized === '') return 'Sem quantidade'
+    return [formatAmount(criterio.realized), criterio.unit || null].filter(Boolean).join(' ')
+  }
+  return criterio.status === 'concluido' ? 'Marcado como feito' : 'Aguardando marcacao'
+}
+
+function getQuickQuantitativeStatus(target, realized) {
+  if (realized === '' || realized === null || realized === undefined) return 'pendente'
+  const numericRealized = Number(realized)
+  if (Number.isNaN(numericRealized)) return 'pendente'
+  const numericTarget = Number(target)
+  if (numericTarget > 0 && numericRealized >= numericTarget) return 'concluido'
+  return numericRealized > 0 ? 'em_andamento' : 'pendente'
+}
+
 function CriterioEditCard({ criterio, mode, onSaved, showToast }) {
-  const [form, setForm] = useState(() => ({
+  const [ruleForm, setRuleForm] = useState(() => ({
     title: criterio.title || '',
     details: criterio.details || '',
     unit: criterio.unit || '',
     target: criterio.target ?? '',
     activities: criterio.activities?.length ? criterio.activities : [{ title: '', weight: '' }],
   }))
-  const [saving, setSaving] = useState(false)
-  const editable = mode === 'edit'
+  const [launchForm, setLaunchForm] = useState(() => ({
+    realized: criterio.realized ?? '',
+    status: criterio.status || 'pendente',
+    notes: criterio.notes || '',
+    attachmentNote: criterio.attachmentNote || '',
+    registeredAt: criterio.registeredAt || '',
+  }))
+  const [savingRule, setSavingRule] = useState(false)
+  const [savingLaunch, setSavingLaunch] = useState(false)
+  const [editingRule, setEditingRule] = useState(mode === 'edit')
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const canEditRule = mode === 'edit'
 
-  const handleSave = async () => {
+  useEffect(() => {
+    setRuleForm({
+      title: criterio.title || '',
+      details: criterio.details || '',
+      unit: criterio.unit || '',
+      target: criterio.target ?? '',
+      activities: criterio.activities?.length ? criterio.activities : [{ title: '', weight: '' }],
+    })
+    setLaunchForm({
+      realized: criterio.realized ?? '',
+      status: criterio.status || 'pendente',
+      notes: criterio.notes || '',
+      attachmentNote: criterio.attachmentNote || '',
+      registeredAt: criterio.registeredAt || '',
+    })
+    setEditingRule(mode === 'edit')
+    setShowAdvanced(false)
+  }, [criterio, mode])
+
+  const handleSaveRule = async () => {
     if (criterio.type === 'qualitativo') {
-      const activities = form.activities.filter(a => a.title.trim())
-      const total = activities.reduce((sum, a) => sum + (Number(a.weight) || 0), 0)
+      const activities = ruleForm.activities.filter((activity) => activity.title.trim())
+      const total = activities.reduce((sum, activity) => sum + (Number(activity.weight) || 0), 0)
       if (activities.length === 0) { showToast('Adicione ao menos uma atividade.', 'error'); return }
       if (Math.abs(total - 100) > 0.5) { showToast(`A soma dos pesos deve ser 100% (atual: ${total}%).`, 'error'); return }
     }
 
-    setSaving(true)
+    setSavingRule(true)
     try {
       await api.put(`/frequencia/criterios/${criterio.criterioId}`, {
-        title: form.title.trim(),
-        details: form.details.trim() || null,
+        title: ruleForm.title.trim(),
+        details: ruleForm.details.trim() || null,
         ...(criterio.type === 'quantitativo'
-          ? { unit: form.unit.trim() || null, target: Number(form.target) || null }
-          : { activities: form.activities.filter(a => a.title.trim()) }),
+          ? { unit: ruleForm.unit.trim() || null, target: Number(ruleForm.target) || null }
+          : { activities: ruleForm.activities.filter((activity) => activity.title.trim()) }),
       })
-      showToast('Critério atualizado!')
+      showToast('Criterio atualizado!')
       onSaved()
     } catch (err) {
-      showToast(getApiErrorMessage(err, 'Erro ao atualizar critério.'), 'error')
+      showToast(getApiErrorMessage(err, 'Erro ao atualizar criterio.'), 'error')
     } finally {
-      setSaving(false)
+      setSavingRule(false)
     }
   }
 
+  const saveLaunch = async (nextForm, successMessage) => {
+    if (criterio.type === 'quantitativo' && nextForm.realized !== '' && Number.isNaN(Number(nextForm.realized))) {
+      showToast('Informe uma quantidade valida.', 'error')
+      return
+    }
+
+    setLaunchForm(nextForm)
+    setSavingLaunch(true)
+    try {
+      await api.put(`/frequencia/lancamentos/${criterio.lancamentoId}`, {
+        ...(criterio.type === 'quantitativo'
+          ? {
+              target: criterio.target === null || criterio.target === undefined ? null : Number(criterio.target),
+              realized: nextForm.realized === '' ? null : Number(nextForm.realized),
+            }
+          : {}),
+        status: nextForm.status,
+        notes: nextForm.notes.trim() || null,
+        attachmentNote: nextForm.attachmentNote.trim() || null,
+        registeredAt: nextForm.registeredAt || null,
+      })
+      showToast(successMessage)
+      onSaved()
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'Erro ao salvar lancamento.'), 'error')
+    } finally {
+      setSavingLaunch(false)
+    }
+  }
+
+  const handleSaveQuantity = () => {
+    const status = getQuickQuantitativeStatus(criterio.target, launchForm.realized)
+    saveLaunch({
+      ...launchForm,
+      status,
+      registeredAt: launchForm.realized === '' ? '' : (launchForm.registeredAt || todayDate()),
+    }, status === 'concluido' ? 'Quantidade salva e criterio concluido.' : 'Quantidade salva.')
+  }
+
+  const handleClearQuantity = () => {
+    saveLaunch({
+      ...launchForm,
+      realized: '',
+      status: 'pendente',
+      registeredAt: '',
+    }, 'Quantidade removida.')
+  }
+
+  const handleMarkDone = () => {
+    saveLaunch({
+      ...launchForm,
+      status: 'concluido',
+      registeredAt: launchForm.registeredAt || todayDate(),
+    }, 'Criterio marcado como feito.')
+  }
+
+  const handleResetLaunch = () => {
+    saveLaunch({
+      ...launchForm,
+      status: 'pendente',
+      registeredAt: '',
+    }, 'Criterio voltou para pendente.')
+  }
+
+  const handleSaveAdvanced = () => {
+    saveLaunch({
+      ...launchForm,
+      registeredAt: launchForm.status === 'pendente' && (criterio.type !== 'quantitativo' || launchForm.realized === '')
+        ? ''
+        : (launchForm.registeredAt || todayDate()),
+    }, 'Lancamento atualizado.')
+  }
+
+  const progressPct = criterio.type === 'quantitativo' && launchForm.realized !== '' && Number(criterio.target) > 0
+    ? Math.max(0, Math.min(100, (Number(launchForm.realized) / Number(criterio.target)) * 100))
+    : getCriterioProgressPct(criterio)
+
   return (
-    <div className="border border-gray-100 rounded-xl p-4 space-y-2.5">
-      <div className="flex items-center justify-between gap-2">
-        {editable ? (
-          <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} className="input-field text-sm font-medium flex-1" />
-        ) : (
-          <span className="font-medium text-gray-800 text-sm">{criterio.title}</span>
-        )}
-        <Badge status={criterio.status} />
+    <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 space-y-4 shadow-sm">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1">
+          {editingRule ? (
+            <input value={ruleForm.title} onChange={e => setRuleForm(f => ({ ...f, title: e.target.value }))} className="input-field text-sm font-medium" />
+          ) : (
+            <span className="font-semibold text-gray-900 text-base">{criterio.title}</span>
+          )}
+
+          {editingRule ? (
+            <textarea
+              value={ruleForm.details}
+              onChange={e => setRuleForm(f => ({ ...f, details: e.target.value }))}
+              rows={2}
+              className="input-field resize-none text-sm mt-2"
+              placeholder="Detalhes do criterio (opcional)"
+            />
+          ) : criterio.details ? (
+            <p className="text-sm text-gray-500 mt-1.5">{criterio.details}</p>
+          ) : (
+            <p className="text-sm text-gray-400 mt-1.5">Sem detalhes adicionais para este criterio.</p>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge status={criterio.status} showDot />
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">
+            {criterioTypeLabel(criterio.type)}
+          </span>
+          {canEditRule && (
+            <button
+              type="button"
+              onClick={() => setEditingRule((value) => !value)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 text-xs font-medium text-gray-600 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 transition-colors"
+            >
+              <Pencil size={13} />
+              {editingRule ? 'Fechar edicao' : 'Editar regra'}
+            </button>
+          )}
+        </div>
       </div>
 
-      {editable ? (
-        <textarea
-          value={form.details}
-          onChange={e => setForm(f => ({ ...f, details: e.target.value }))}
-          rows={2}
-          className="input-field resize-none text-xs"
-          placeholder="Detalhes do critério (opcional)"
-        />
-      ) : criterio.details ? (
-        <p className="text-xs text-gray-500">{criterio.details}</p>
-      ) : null}
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Meta</div>
+          <div className="text-sm font-semibold text-gray-800 mt-1">{getCriterioMetaLabel(criterio)}</div>
+        </div>
+        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Lancamento atual</div>
+          <div className="text-sm font-semibold text-gray-800 mt-1">{getCriterioLaunchLabel(criterio)}</div>
+        </div>
+        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Registro</div>
+          <div className="text-sm font-semibold text-gray-800 mt-1">{criterio.registeredAt || 'Nao lancado'}</div>
+        </div>
+        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Criado por</div>
+          <div className="text-sm font-semibold text-gray-800 mt-1">{criterio.createdBy}</div>
+        </div>
+      </div>
 
       {criterio.type === 'quantitativo' ? (
-        editable ? (
-          <div className="grid grid-cols-2 gap-2">
-            <input value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} className="input-field text-xs" placeholder="Unidade" />
-            <input type="number" min="0" value={form.target} onChange={e => setForm(f => ({ ...f, target: e.target.value }))} className="input-field text-xs" placeholder="Meta do mês" />
+        editingRule ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Unidade</label>
+              <input value={ruleForm.unit} onChange={e => setRuleForm(f => ({ ...f, unit: e.target.value }))} className="input-field text-sm" placeholder="Ex: aulas, atendimentos" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Meta do mes</label>
+              <input type="number" min="0" value={ruleForm.target} onChange={e => setRuleForm(f => ({ ...f, target: e.target.value }))} className="input-field text-sm" placeholder="Ex: 10" />
+            </div>
           </div>
         ) : (
-          <div className="text-xs text-gray-500">Meta: <strong className="text-gray-700">{criterio.target ?? '—'} {criterio.unit || ''}</strong></div>
+          <div className="rounded-xl border border-gray-100 bg-white px-3 py-3">
+            <div className="text-xs text-gray-500">Meta do mes</div>
+            <div className="text-sm font-semibold text-gray-800 mt-1">{getCriterioMetaLabel(criterio)}</div>
+          </div>
         )
-      ) : editable ? (
-        <ActivitiesEditor activities={form.activities} onChange={activities => setForm(f => ({ ...f, activities }))} />
+      ) : editingRule ? (
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1.5">Atividades e pesos</label>
+          <ActivitiesEditor activities={ruleForm.activities} onChange={activities => setRuleForm(f => ({ ...f, activities }))} />
+        </div>
       ) : (
-        <div className="space-y-1">
-          {(criterio.activities || []).map((a, i) => (
-            <div key={i} className="flex items-center justify-between text-xs text-gray-500">
-              <span>{a.title}</span>
-              <span className="font-medium text-gray-600">{a.weight}%</span>
+        <div className="rounded-xl border border-gray-100 bg-white px-3 py-3 space-y-2">
+          <div className="text-xs font-medium text-gray-500">Atividades previstas</div>
+          {(criterio.activities || []).length === 0 && <div className="text-sm text-gray-400">Nenhuma atividade cadastrada.</div>}
+          {(criterio.activities || []).map((activity, index) => (
+            <div key={`${criterio.lancamentoId}-${index}`} className="flex items-center justify-between text-sm text-gray-700">
+              <span>{activity.title}</span>
+              <span className="font-semibold text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full text-xs">{activity.weight}%</span>
             </div>
           ))}
         </div>
       )}
 
-      <div className="flex items-center justify-between text-[11px] text-gray-400 pt-1 border-t border-gray-50">
-        <span>Criado por: {criterio.createdBy}</span>
-        <span>Vigência: {criterio.vigencia}</span>
-      </div>
-
-      {criterio.frequencyPct !== null && (
-        <div className="flex items-center gap-2">
-          <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-            <div className="h-full bg-brand-600 rounded-full" style={{ width: `${Math.min(100, criterio.frequencyPct)}%` }} />
-          </div>
-          <span className="text-[11px] font-medium text-gray-600">{Math.round(criterio.frequencyPct)}%</span>
-        </div>
-      )}
-
-      {editable && (
-        <div className="flex justify-end pt-1">
-          <button onClick={handleSave} disabled={saving} className="btn-primary text-xs py-1.5 px-3">
-            {saving ? 'Salvando...' : 'Salvar'}
+      {editingRule && (
+        <div className="flex justify-end">
+          <button onClick={handleSaveRule} disabled={savingRule} className="btn-primary text-sm py-2 px-3">
+            {savingRule ? 'Salvando regra...' : 'Salvar regra'}
           </button>
         </div>
       )}
+
+      <div className="rounded-2xl border border-brand-100 bg-gradient-to-br from-brand-50 via-white to-white p-4 space-y-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="text-sm font-semibold text-gray-900">Lancamento da frequencia</div>
+            <div className="text-xs text-gray-500 mt-1">Marque como feito ou informe a quantidade nesta mesma tela.</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((value) => !value)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-brand-200 text-xs font-medium text-brand-700 hover:bg-brand-100 transition-colors"
+          >
+            <FileText size={13} />
+            {showAdvanced ? 'Ocultar detalhes' : 'Mais opcoes'}
+          </button>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-[11px] font-medium text-gray-500">
+            <span>Andamento deste criterio</span>
+            <span>{Math.round(progressPct)}%</span>
+          </div>
+          <div className="h-2 rounded-full bg-white overflow-hidden border border-brand-100">
+            <div className="h-full bg-brand-600 rounded-full" style={{ width: `${progressPct}%` }} />
+          </div>
+        </div>
+
+        {criterio.type === 'quantitativo' ? (
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Quantidade realizada</label>
+              <input
+                type="number"
+                min="0"
+                value={launchForm.realized}
+                onChange={e => setLaunchForm(f => ({ ...f, realized: e.target.value }))}
+                className="input-field"
+                placeholder="Informe a quantidade do mes"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={handleSaveQuantity} disabled={savingLaunch} className="btn-primary text-sm">
+                <CheckCircle size={14} />
+                {savingLaunch ? 'Salvando...' : 'Salvar quantidade'}
+              </button>
+              <button onClick={handleClearQuantity} disabled={savingLaunch} className="btn-secondary text-sm">
+                Limpar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <button onClick={handleMarkDone} disabled={savingLaunch} className="btn-primary text-sm">
+              <CheckCircle size={14} />
+              {savingLaunch ? 'Salvando...' : 'Marcar como feito'}
+            </button>
+            <button onClick={handleResetLaunch} disabled={savingLaunch} className="btn-secondary text-sm">
+              Deixar pendente
+            </button>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-white border border-gray-200">Vigencia: {criterio.vigencia}</span>
+          {criterio.type === 'quantitativo' && Number(criterio.target) <= 0 && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+              <AlertTriangle size={12} />
+              Defina uma meta para calcular a frequencia automaticamente.
+            </span>
+          )}
+        </div>
+
+        {showAdvanced && (
+          <div className="border-t border-brand-100 pt-4 space-y-3">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
+                <select
+                  value={launchForm.status}
+                  onChange={e => setLaunchForm(f => ({ ...f, status: e.target.value }))}
+                  className="select-field"
+                >
+                  {LANCAMENTO_STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Data do registro</label>
+                <input
+                  type="date"
+                  value={launchForm.registeredAt}
+                  onChange={e => setLaunchForm(f => ({ ...f, registeredAt: e.target.value }))}
+                  className="input-field"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Observacao</label>
+                <textarea
+                  value={launchForm.notes}
+                  onChange={e => setLaunchForm(f => ({ ...f, notes: e.target.value }))}
+                  rows={2}
+                  className="input-field resize-none"
+                  placeholder="Descreva o que foi entregue ou o que ficou pendente."
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Comprovante (opcional)</label>
+                <input
+                  value={launchForm.attachmentNote}
+                  onChange={e => setLaunchForm(f => ({ ...f, attachmentNote: e.target.value }))}
+                  className="input-field"
+                  placeholder="Link, protocolo ou referencia do comprovante"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <button onClick={handleSaveAdvanced} disabled={savingLaunch} className="btn-primary text-sm">
+                {savingLaunch ? 'Salvando...' : 'Salvar lancamento'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
 function CriterioDetailModal({ open, onClose, target, mode, onSaved, showToast }) {
   if (!target) return null
+  const summary = getCriteriaCompletion(target.criteria)
+
   return (
-    <Modal open={open} onClose={onClose} title={mode === 'edit' ? 'Editar critérios do usuário' : 'Critérios do usuário'} size="lg">
+    <Modal open={open} onClose={onClose} title={mode === 'edit' ? 'Criterios e lancamento' : 'Criterios do usuario'} size="xl">
       <div className="space-y-4">
-        <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
-          <BigAvatar name={target.name} avatar={target.avatar} size={56} />
-          <div className="min-w-0 flex-1">
-            <div className="font-bold text-gray-900 text-base truncate">{target.name}</div>
-            <div className="text-xs text-gray-400 truncate">{target.email}</div>
+        <div className="rounded-2xl border border-gray-100 bg-gradient-to-r from-brand-50 via-white to-green-50 p-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-3 min-w-0">
+              <BigAvatar name={target.name} avatar={target.avatar} size={60} />
+              <div className="min-w-0">
+                <div className="font-bold text-gray-900 text-lg truncate">{target.name}</div>
+                <div className="text-sm text-gray-500 truncate">{target.email}</div>
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                  <Badge status={target.role} />
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-white border border-brand-100 text-xs font-medium text-brand-700">
+                    {summary.total} criterio{summary.total !== 1 ? 's' : ''} no mes
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 sm:min-w-[320px]">
+              <div className="rounded-xl bg-white/90 border border-white px-3 py-3 text-center">
+                <div className="text-[11px] uppercase tracking-wide text-gray-400">Total</div>
+                <div className="text-lg font-bold text-gray-900 mt-1">{summary.total}</div>
+              </div>
+              <div className="rounded-xl bg-white/90 border border-white px-3 py-3 text-center">
+                <div className="text-[11px] uppercase tracking-wide text-gray-400">Concluidos</div>
+                <div className="text-lg font-bold text-green-600 mt-1">{summary.completed}</div>
+              </div>
+              <div className="rounded-xl bg-white/90 border border-white px-3 py-3 text-center">
+                <div className="text-[11px] uppercase tracking-wide text-gray-400">Frequencia</div>
+                <div className="text-lg font-bold text-brand-700 mt-1">{target.avgFill}%</div>
+              </div>
+            </div>
           </div>
-          <Badge status={target.role} />
+
+          <p className="text-xs text-gray-500 mt-4">
+            Visualize os criterios, marque o que foi feito e registre a quantidade sem sair desta tela.
+          </p>
         </div>
 
-        <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
+        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
           {target.criteria.length === 0 && (
-            <div className="text-center py-8 text-gray-400 text-sm">Nenhum critério vinculado neste mês.</div>
+            <div className="text-center py-8 text-gray-400 text-sm">Nenhum criterio vinculado neste mes.</div>
           )}
-          {target.criteria.map(c => (
-            <CriterioEditCard key={c.lancamentoId} criterio={c} mode={mode} onSaved={onSaved} showToast={showToast} />
+          {target.criteria.map((criterio) => (
+            <CriterioEditCard key={criterio.lancamentoId} criterio={criterio} mode={mode} onSaved={onSaved} showToast={showToast} />
           ))}
         </div>
       </div>
@@ -503,6 +863,7 @@ function PerfilTile({ icon: Icon, label, userCount, secondaryCount, secondaryLab
 function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
   const [month, setMonth] = useState(currentMonth())
   const [roleFilter, setRoleFilter] = useState('')
+  const [search, setSearch] = useState('')
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
@@ -520,7 +881,7 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
         if (!active) return
         setData(response)
       } catch (err) {
-        if (active) showToast(getApiErrorMessage(err, 'Erro ao carregar critérios.'), 'error')
+        if (active) showToast(getApiErrorMessage(err, 'Erro ao carregar criterios.'), 'error')
       } finally {
         if (active) setLoading(false)
       }
@@ -529,15 +890,14 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
     return () => { active = false }
   }, [month, reloadToken, innerReload])
 
-  useEffect(() => { setPage(1) }, [roleFilter, month])
+  useEffect(() => { setPage(1) }, [roleFilter, month, search])
 
-  // Mantem o popup aberto com dados atualizados apos salvar um criterio dentro dele.
   useEffect(() => {
     if (!data) return
-    setDetailTarget(prev => {
+    setDetailTarget((prev) => {
       if (!prev) return prev
-      const group = data.groups.find(g => g.role === prev.role)
-      const fresh = group?.users.find(u => u.id === prev.id)
+      const group = data.groups.find((item) => item.role === prev.role)
+      const fresh = group?.users.find((user) => user.id === prev.id)
       return fresh ? { ...fresh, role: prev.role, roleLabel: prev.roleLabel } : prev
     })
   }, [data])
@@ -547,47 +907,62 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
   }
   if (!data) return null
 
-  const allUsers = data.groups.flatMap(g => g.users.map(u => ({ ...u, role: g.role, roleLabel: g.label })))
-  const totalCriteria = data.groups.reduce((sum, g) => sum + g.criteriaCount, 0)
-  const visibleUsers = roleFilter ? allUsers.filter(u => u.role === roleFilter) : allUsers
-  const visibleCriteriaCount = visibleUsers.reduce((sum, u) => sum + u.criteria.length, 0)
+  const allUsers = data.groups.flatMap((group) => group.users.map((user) => ({ ...user, role: group.role, roleLabel: group.label })))
+  const totalCriteria = data.groups.reduce((sum, group) => sum + group.criteriaCount, 0)
+  const normalizedSearch = search.trim().toLowerCase()
+  const visibleUsers = allUsers
+    .filter((user) => !roleFilter || user.role === roleFilter)
+    .filter((user) => {
+      if (!normalizedSearch) return true
+      return [user.name, user.email, ...user.criteria.map((criterio) => criterio.title)]
+        .filter(Boolean)
+        .some((value) => value.toLowerCase().includes(normalizedSearch))
+    })
+  const visibleCriteriaCount = visibleUsers.reduce((sum, user) => sum + user.criteria.length, 0)
+  const completedCriteriaCount = visibleUsers.reduce((sum, user) => sum + user.criteria.filter((criterio) => criterio.status === 'concluido').length, 0)
+  const openCriteriaCount = Math.max(0, visibleCriteriaCount - completedCriteriaCount)
   const totalPages = Math.max(1, Math.ceil(visibleUsers.length / perPage))
   const paged = visibleUsers.slice((page - 1) * perPage, page * perPage)
   const selectedLabel = roleFilter ? FREQUENCIA_ROLE_LABELS[roleFilter] : 'Todos os perfis'
 
-  const openDetail = (user, mode) => {
+  const openDetail = (user, nextMode) => {
     setDetailTarget(user)
-    setDetailMode(mode)
+    setDetailMode(nextMode)
   }
 
-  const handleDetailSaved = () => setInnerReload(t => t + 1)
+  const handleDetailSaved = () => setInnerReload((tick) => tick + 1)
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard icon={Calendar} iconBg="bg-brand-100" iconColor="text-brand-700"
-          value={formatMonthLabel(month)} label="Mês atual" sublabel={`Período: ${monthRangeLabel(month)}`} />
-        <StatCard icon={CheckCircle} iconBg="bg-green-100" iconColor="text-green-600"
-          value={data.stats.criteriosAtivos} label="Critérios ativos" sublabel="Vinculados no mês" />
-        <StatCard icon={TrendingUp} iconBg="bg-purple-100" iconColor="text-purple-700"
-          value={`${data.stats.frequenciaMedia}%`} label="Frequência média" sublabel="Média geral do mês" />
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <StatCard icon={Calendar} iconBg="bg-brand-100" iconColor="text-brand-700" value={formatMonthLabel(month)} label="Mes atual" sublabel={`Periodo: ${monthRangeLabel(month)}`} />
+        <StatCard icon={CheckCircle} iconBg="bg-green-100" iconColor="text-green-600" value={visibleCriteriaCount} label="Criterios visiveis" sublabel="Itens do filtro atual" />
+        <StatCard icon={Clock} iconBg="bg-amber-100" iconColor="text-amber-600" value={openCriteriaCount} label="Em aberto" sublabel="Precisam de marcacao ou quantidade" />
+        <StatCard icon={TrendingUp} iconBg="bg-purple-100" iconColor="text-purple-700" value={`${data.stats.frequenciaMedia}%`} label="Frequencia media" sublabel={`${completedCriteriaCount} criterio${completedCriteriaCount !== 1 ? 's' : ''} concluido${completedCriteriaCount !== 1 ? 's' : ''}`} />
       </div>
 
       <div className="card p-4 space-y-3">
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-44">
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">Mês/Ano</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Mes/Ano</label>
             <input type="month" value={month} onChange={e => setMonth(e.target.value)} className="input-field" />
           </div>
           <div className="flex-1 min-w-[180px]">
             <label className="block text-xs font-medium text-gray-500 mb-1.5">Perfil avaliado</label>
             <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)} className="select-field">
               <option value="">Todos os perfis</option>
-              {allowedRoles.map(role => <option key={role} value={role}>{FREQUENCIA_ROLE_LABELS[role]}</option>)}
+              {allowedRoles.map((role) => <option key={role} value={role}>{FREQUENCIA_ROLE_LABELS[role]}</option>)}
             </select>
           </div>
+          <div className="flex-1 min-w-[220px]">
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Buscar usuario ou criterio</label>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input value={search} onChange={e => setSearch(e.target.value)} className="input-field pl-9" placeholder="Digite um nome, email ou titulo" />
+            </div>
+          </div>
           <button
-            onClick={() => { setMonth(currentMonth()); setRoleFilter('') }}
+            onClick={() => { setMonth(currentMonth()); setRoleFilter(''); setSearch('') }}
             className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600 px-3 py-2.5 rounded-xl border border-gray-200 hover:border-red-200 hover:bg-red-50 transition-all"
           >
             <Filter size={14} /> Limpar filtros
@@ -602,24 +977,36 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
             secondaryCount={totalCriteria}
             secondaryLabel={`vinculado${totalCriteria !== 1 ? 's' : ''}`}
             badgeCount={data.stats.criteriosAtivos}
-            badgeLabel={`critério${data.stats.criteriosAtivos !== 1 ? 's' : ''} criado${data.stats.criteriosAtivos !== 1 ? 's' : ''}`}
+            badgeLabel={`criterio${data.stats.criteriosAtivos !== 1 ? 's' : ''} criado${data.stats.criteriosAtivos !== 1 ? 's' : ''}`}
             active={!roleFilter}
             onClick={() => setRoleFilter('')}
           />
-          {data.groups.map(g => (
+          {data.groups.map((group) => (
             <PerfilTile
-              key={g.role}
-              icon={PERFIL_ICONS[g.role] || Users}
-              label={g.label}
-              userCount={g.userCount}
-              secondaryCount={g.criteriaCount}
-              secondaryLabel={`vinculado${g.criteriaCount !== 1 ? 's' : ''}`}
-              badgeCount={g.criteriosCriados}
-              badgeLabel={`critério${g.criteriosCriados !== 1 ? 's' : ''} criado${g.criteriosCriados !== 1 ? 's' : ''}`}
-              active={roleFilter === g.role}
-              onClick={() => setRoleFilter(g.role)}
+              key={group.role}
+              icon={PERFIL_ICONS[group.role] || Users}
+              label={group.label}
+              userCount={group.userCount}
+              secondaryCount={group.criteriaCount}
+              secondaryLabel={`vinculado${group.criteriaCount !== 1 ? 's' : ''}`}
+              badgeCount={group.criteriosCriados}
+              badgeLabel={`criterio${group.criteriosCriados !== 1 ? 's' : ''} criado${group.criteriosCriados !== 1 ? 's' : ''}`}
+              active={roleFilter === group.role}
+              onClick={() => setRoleFilter(group.role)}
             />
           ))}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-brand-100 bg-gradient-to-r from-brand-50 via-white to-green-50 px-4 py-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <div className="text-sm font-semibold text-gray-900">Tudo da frequencia fica nesta tela</div>
+          <div className="text-xs text-gray-500 mt-1">Abra o usuario para visualizar os criterios e fazer o lancamento por feito ou por quantidade.</div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-medium text-brand-700 bg-white border border-brand-100 px-2.5 py-1 rounded-full">{selectedLabel}</span>
+          <span className="text-[11px] font-medium text-gray-600 bg-white border border-gray-200 px-2.5 py-1 rounded-full">{visibleUsers.length} usuario{visibleUsers.length !== 1 ? 's' : ''}</span>
+          <span className="text-[11px] font-medium text-gray-600 bg-white border border-gray-200 px-2.5 py-1 rounded-full">{visibleCriteriaCount} criterio{visibleCriteriaCount !== 1 ? 's' : ''}</span>
         </div>
       </div>
 
@@ -627,8 +1014,8 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
         <div className="flex items-center justify-between flex-wrap gap-2 px-5 py-4 border-b border-gray-100">
           <h3 className="text-sm font-semibold text-gray-800">Profissionais do perfil selecionado: {selectedLabel}</h3>
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-medium text-brand-700 bg-brand-50 px-2.5 py-1 rounded-full">{visibleUsers.length} usuário{visibleUsers.length !== 1 ? 's' : ''}</span>
-            <span className="text-[11px] font-medium text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">{visibleCriteriaCount} critérios vinculados</span>
+            <span className="text-[11px] font-medium text-brand-700 bg-brand-50 px-2.5 py-1 rounded-full">{visibleUsers.length} usuario{visibleUsers.length !== 1 ? 's' : ''}</span>
+            <span className="text-[11px] font-medium text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">{completedCriteriaCount} concluidos</span>
           </div>
         </div>
 
@@ -636,47 +1023,63 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-100">
-                <th className="table-header px-3">Usuário</th>
-                <th className="table-header px-3 w-36">Critérios vinculados</th>
-                <th className="table-header px-3 w-24">Meta total</th>
-                <th className="table-header px-3 w-36">Tipo de lançamento</th>
-                <th className="table-header px-3 w-40">Frequência prevista</th>
+                <th className="table-header px-3">Usuario</th>
+                <th className="table-header px-3 w-44">Criterios do mes</th>
+                <th className="table-header px-3 w-36">Andamento</th>
+                <th className="table-header px-3 w-44">Frequencia prevista</th>
                 <th className="table-header px-3 w-28">Status</th>
-                <th className="table-header px-3 w-20">Ações</th>
+                <th className="table-header px-3 w-52">Acoes</th>
               </tr>
             </thead>
             <tbody>
-              {paged.map(u => {
-                const status = fillStatusInfo(u.avgFill)
-                const firstType = u.criteria[0]?.type
+              {paged.map((user) => {
+                const status = fillStatusInfo(user.avgFill)
+                const summary = getCriteriaCompletion(user.criteria)
                 return (
-                  <tr key={`${u.role}-${u.id}`} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                  <tr key={`${user.role}-${user.id}`} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                     <td className="table-cell px-3 py-3">
                       <div className="flex items-center gap-3 min-w-0">
-                        <BigAvatar name={u.name} avatar={u.avatar} />
+                        <BigAvatar name={user.name} avatar={user.avatar} />
                         <div className="min-w-0">
-                          <div className="font-semibold text-gray-800 truncate max-w-[200px]">{u.name}</div>
-                          <div className="text-xs text-gray-400 truncate max-w-[200px]">{u.email}</div>
+                          <div className="font-semibold text-gray-800 truncate max-w-[200px]">{user.name}</div>
+                          <div className="text-xs text-gray-400 truncate max-w-[200px]">{user.email}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="table-cell px-3">{u.criteria.length}</td>
-                    <td className="table-cell px-3">{u.metaTotal || '—'}</td>
-                    <td className="table-cell px-3 text-gray-500">{firstType ? criterioTypeLabel(firstType) : '—'}</td>
                     <td className="table-cell px-3">
-                      <div className="font-medium text-gray-700">{u.avgFill}%</div>
-                      <div className="text-[11px] text-gray-400">({monthRangeLabel(month)})</div>
+                      <div className="font-semibold text-gray-800">{user.criteria.length} criterio{user.criteria.length !== 1 ? 's' : ''}</div>
+                      <div className="text-xs text-gray-400 mt-1">{getCriteriaTypeSummary(user.criteria)}</div>
+                      <div className="text-xs text-gray-400 mt-1">Meta total: {user.metaTotal ? formatAmount(user.metaTotal) : 'â€”'}</div>
+                    </td>
+                    <td className="table-cell px-3">
+                      <div className="font-semibold text-gray-800">{summary.completed}/{summary.total} concluidos</div>
+                      <div className="text-xs text-gray-400 mt-1">{summary.open} em aberto neste mes</div>
+                    </td>
+                    <td className="table-cell px-3">
+                      <div className="font-medium text-gray-700">{user.avgFill}%</div>
+                      <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden max-w-[160px]">
+                        <div className="h-full bg-brand-600 rounded-full" style={{ width: `${Math.min(100, user.avgFill)}%` }} />
+                      </div>
+                      <div className="text-[11px] text-gray-400 mt-1">Periodo: {monthRangeLabel(month)}</div>
                     </td>
                     <td className="table-cell px-3">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status.cls}`}>{status.label}</span>
                     </td>
                     <td className="table-cell px-3">
-                      <div className="flex items-center gap-0.5">
-                        <button onClick={() => openDetail(u, 'edit')} title="Editar" className="p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors">
-                          <Pencil size={14} />
-                        </button>
-                        <button onClick={() => openDetail(u, 'view')} title="Visualizar" className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <button
+                          onClick={() => openDetail(user, 'view')}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-brand-200 bg-brand-50 text-brand-700 text-xs font-medium hover:bg-brand-100 transition-colors"
+                        >
                           <Eye size={14} />
+                          Ver criterios
+                        </button>
+                        <button
+                          onClick={() => openDetail(user, 'edit')}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-medium hover:border-gray-300 hover:bg-gray-100 transition-colors"
+                        >
+                          <Pencil size={14} />
+                          Editar regras
                         </button>
                       </div>
                     </td>
@@ -685,7 +1088,7 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
               })}
               {paged.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="table-cell text-center py-10 text-gray-400 text-sm">Nenhum usuário encontrado para os filtros selecionados.</td>
+                  <td colSpan={6} className="table-cell text-center py-10 text-gray-400 text-sm">Nenhum usuario encontrado para os filtros selecionados.</td>
                 </tr>
               )}
             </tbody>
@@ -698,11 +1101,11 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
               Exibindo {Math.min((page - 1) * perPage + 1, visibleUsers.length)} a {Math.min(page * perPage, visibleUsers.length)} de {visibleUsers.length} resultados
             </span>
             <div className="flex items-center gap-1">
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500">‹</button>
-              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map(n => (
-                <button key={n} onClick={() => setPage(n)} className={`w-8 h-8 rounded-lg text-xs font-medium transition-colors ${page === n ? 'bg-brand-800 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>{n}</button>
+              <button onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page === 1} className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500">â€¹</button>
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, index) => index + 1).map((item) => (
+                <button key={item} onClick={() => setPage(item)} className={`w-8 h-8 rounded-lg text-xs font-medium transition-colors ${page === item ? 'bg-brand-800 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>{item}</button>
               ))}
-              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500">›</button>
+              <button onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page === totalPages} className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500">â€º</button>
             </div>
           </div>
         )}
@@ -720,7 +1123,7 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
   )
 }
 
-/* ─── Lançamentos ─── */
+/* lancamentos */
 
 function LancamentoModal({ open, onClose, item, mode, onSave, saving }) {
   const [form, setForm] = useState(null)
@@ -1133,10 +1536,8 @@ function LancamentosTab({ allowedRoles, showToast }) {
 /* ─── main page ─── */
 
 const TABS = [
-  { id: 'visao-geral', label: 'Visão geral', icon: LayoutGrid },
-  { id: 'criterios', label: 'Critérios do mês', icon: ListChecks },
-  { id: 'lancamentos', label: 'Lançamentos', icon: FileText },
-  { id: 'historico', label: 'Histórico', icon: History },
+  { id: 'criterios', label: 'Criterios e lancamentos', icon: ListChecks },
+  { id: 'historico', label: 'Historico', icon: History },
 ]
 
 export default function Frequencia() {
@@ -1159,7 +1560,7 @@ export default function Frequencia() {
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="page-title">Frequência</h1>
-          <p className="page-subtitle">Defina critérios mensais por perfil, vincule usuários e acompanhe a geração da frequência.</p>
+          <p className="page-subtitle">Defina os criterios do mes, abra cada usuario e lance a frequencia sem sair desta tela.</p>
         </div>
         <div className="flex items-center gap-2">
           {canCreateCriterio && (
@@ -1190,18 +1591,8 @@ export default function Frequencia() {
         </div>
 
         <div className="p-5">
-          {activeTab === 'visao-geral' && (
-            <PlaceholderTab
-              icon={LayoutGrid}
-              title="Visão geral em breve"
-              description="Um resumo consolidado de todos os perfis e meses vai aparecer aqui em uma próxima etapa."
-            />
-          )}
           {activeTab === 'criterios' && (
             <CriteriosTab allowedRoles={allowedRoles} reloadToken={reloadToken} showToast={showToast} />
-          )}
-          {activeTab === 'lancamentos' && (
-            <LancamentosTab allowedRoles={allowedRoles} showToast={showToast} />
           )}
           {activeTab === 'historico' && (
             <PlaceholderTab
@@ -1231,3 +1622,4 @@ export default function Frequencia() {
     </div>
   )
 }
+
