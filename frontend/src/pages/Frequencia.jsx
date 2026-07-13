@@ -560,15 +560,6 @@ function CriterioEditCard({ criterio, mode, onSaved, showToast }) {
     }, status === 'concluido' ? 'Quantidade salva e criterio concluido.' : 'Quantidade salva.')
   }
 
-  const handleClearQuantity = () => {
-    saveLaunch({
-      ...launchForm,
-      realized: '',
-      status: 'pendente',
-      registeredAt: '',
-    }, 'Quantidade removida.')
-  }
-
   const handleMarkDone = () => {
     saveLaunch({
       ...launchForm,
@@ -641,23 +632,11 @@ function CriterioEditCard({ criterio, mode, onSaved, showToast }) {
         </div>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
-          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Meta</div>
-          <div className="text-sm font-semibold text-gray-800 mt-1">{getCriterioMetaLabel(criterio)}</div>
-        </div>
-        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
-          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Lancamento atual</div>
-          <div className="text-sm font-semibold text-gray-800 mt-1">{getCriterioLaunchLabel(criterio)}</div>
-        </div>
-        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
-          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Registro</div>
-          <div className="text-sm font-semibold text-gray-800 mt-1">{criterio.registeredAt || 'Nao lancado'}</div>
-        </div>
-        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3">
-          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Criado por</div>
-          <div className="text-sm font-semibold text-gray-800 mt-1">{criterio.createdBy}</div>
-        </div>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+        <span><span className="text-gray-400">Meta:</span> <span className="font-medium text-gray-600">{getCriterioMetaLabel(criterio)}</span></span>
+        <span><span className="text-gray-400">Lançamento atual:</span> <span className="font-medium text-gray-600">{getCriterioLaunchLabel(criterio)}</span></span>
+        <span><span className="text-gray-400">Registro:</span> <span className="font-medium text-gray-600">{criterio.registeredAt || 'Não lançado'}</span></span>
+        <span><span className="text-gray-400">Criado por:</span> <span className="font-medium text-gray-600">{criterio.createdBy}</span></span>
       </div>
 
       {criterio.type === 'quantitativo' ? (
@@ -726,27 +705,32 @@ function CriterioEditCard({ criterio, mode, onSaved, showToast }) {
         </div>
 
         {criterio.type === 'quantitativo' ? (
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+          <div className="flex items-end gap-3">
             <div className="flex-1">
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Quantidade realizada</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-medium text-gray-500">Quantidade realizada</label>
+                <span className="text-xs font-semibold text-gray-700">
+                  {launchForm.realized || 0}{Number(criterio.target) > 0 ? `/${criterio.target}` : ''} {criterio.unit || ''}
+                </span>
+              </div>
               <input
-                type="number"
+                type="range"
                 min="0"
-                value={launchForm.realized}
+                max={Math.max(Number(criterio.target) || 0, Number(launchForm.realized) || 0, 1)}
+                step="1"
+                value={launchForm.realized || 0}
                 onChange={e => setLaunchForm(f => ({ ...f, realized: e.target.value }))}
-                className="input-field"
-                placeholder="Informe a quantidade do mes"
+                className="w-full accent-brand-600 cursor-pointer"
               />
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button onClick={handleSaveQuantity} disabled={savingLaunch} className="btn-primary text-sm">
-                <CheckCircle size={14} />
-                {savingLaunch ? 'Salvando...' : 'Salvar quantidade'}
-              </button>
-              <button onClick={handleClearQuantity} disabled={savingLaunch} className="btn-secondary text-sm">
-                Limpar
-              </button>
-            </div>
+            <button
+              onClick={handleSaveQuantity}
+              disabled={savingLaunch}
+              title="Salvar quantidade"
+              className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl bg-brand-700 hover:bg-brand-800 text-white transition-colors disabled:opacity-50"
+            >
+              <CheckCircle size={16} />
+            </button>
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">
@@ -834,7 +818,7 @@ function CriterioDetailModal({ open, onClose, target, mode, onSaved, showToast }
   return (
     <Modal open={open} onClose={onClose} title={mode === 'edit' ? 'Criterios e lancamento' : 'Criterios do usuario'} size="xl">
       <div className="space-y-4">
-        <div className="rounded-2xl border border-gray-100 bg-gradient-to-r from-brand-50 via-white to-green-50 p-4">
+        <div className="rounded-2xl border border-brand-100 bg-brand-50 p-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3 min-w-0">
               <BigAvatar name={target.name} avatar={target.avatar} size={60} />
@@ -843,7 +827,7 @@ function CriterioDetailModal({ open, onClose, target, mode, onSaved, showToast }
                 <div className="text-sm text-gray-500 truncate">{target.email}</div>
                 <div className="flex flex-wrap items-center gap-2 mt-2">
                   <Badge status={target.role} />
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-white border border-brand-100 text-xs font-medium text-brand-700">
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-white border border-brand-200 text-xs font-medium text-brand-700">
                     {summary.total} criterio{summary.total !== 1 ? 's' : ''} no mes
                   </span>
                 </div>
@@ -851,15 +835,15 @@ function CriterioDetailModal({ open, onClose, target, mode, onSaved, showToast }
             </div>
 
             <div className="grid grid-cols-3 gap-2 sm:min-w-[320px]">
-              <div className="rounded-xl bg-white/90 border border-white px-3 py-3 text-center">
+              <div className="rounded-xl bg-white border border-brand-100 px-3 py-3 text-center">
                 <div className="text-[11px] uppercase tracking-wide text-gray-400">Total</div>
                 <div className="text-lg font-bold text-gray-900 mt-1">{summary.total}</div>
               </div>
-              <div className="rounded-xl bg-white/90 border border-white px-3 py-3 text-center">
+              <div className="rounded-xl bg-white border border-brand-100 px-3 py-3 text-center">
                 <div className="text-[11px] uppercase tracking-wide text-gray-400">Concluidos</div>
                 <div className="text-lg font-bold text-green-600 mt-1">{summary.completed}</div>
               </div>
-              <div className="rounded-xl bg-white/90 border border-white px-3 py-3 text-center">
+              <div className="rounded-xl bg-white border border-brand-100 px-3 py-3 text-center">
                 <div className="text-[11px] uppercase tracking-wide text-gray-400">Frequencia</div>
                 <div className="text-lg font-bold text-brand-700 mt-1">{target.avgFill}%</div>
               </div>
