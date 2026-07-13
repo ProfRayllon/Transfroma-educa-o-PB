@@ -1123,18 +1123,6 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-brand-100 bg-gradient-to-r from-brand-50 via-white to-green-50 px-4 py-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <div className="text-sm font-semibold text-gray-900">Tudo da frequencia fica nesta tela</div>
-          <div className="text-xs text-gray-500 mt-1">Abra o usuario para visualizar os criterios e fazer o lancamento por feito ou por quantidade.</div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-medium text-brand-700 bg-white border border-brand-100 px-2.5 py-1 rounded-full">{selectedLabel}</span>
-          <span className="text-[11px] font-medium text-gray-600 bg-white border border-gray-200 px-2.5 py-1 rounded-full">{visibleUsers.length} usuario{visibleUsers.length !== 1 ? 's' : ''}</span>
-          <span className="text-[11px] font-medium text-gray-600 bg-white border border-gray-200 px-2.5 py-1 rounded-full">{visibleCriteriaCount} criterio{visibleCriteriaCount !== 1 ? 's' : ''}</span>
-        </div>
-      </div>
-
       <div className="card p-0 overflow-hidden">
         <div className="flex items-center justify-between flex-wrap gap-2 px-5 py-4 border-b border-gray-100">
           <h3 className="text-sm font-semibold text-gray-800">Profissionais do perfil selecionado: {selectedLabel}</h3>
