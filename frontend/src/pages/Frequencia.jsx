@@ -162,12 +162,27 @@ function NovoCriterioModal({ open, onClose, onSaved, showToast, allowedRoles }) 
   const [previewUsers, setPreviewUsers] = useState([])
   const [loadingPreview, setLoadingPreview] = useState(false)
   const [selectedUserIds, setSelectedUserIds] = useState(new Set())
+  const [existingCriterio, setExistingCriterio] = useState(null)
+  const [checkingExisting, setCheckingExisting] = useState(false)
 
   useEffect(() => {
     if (!open) return
     setForm({ ...EMPTY_CRITERIO_FORM, role: allowedRoles[0] || '', referenceMonth: currentMonth(), activities: [{ title: '', weight: '' }, { title: '', weight: '' }] })
     setError('')
   }, [open, allowedRoles])
+
+  // Avisa ANTES de preencher o formulario inteiro se ja existe criterio pra esse perfil+mes
+  // (regra de 1 criterio por perfil+mes), em vez do usuario so descobrir no 409 ao salvar.
+  useEffect(() => {
+    if (!open || !form.role || !form.referenceMonth) { setExistingCriterio(null); return }
+    let active = true
+    setCheckingExisting(true)
+    api.get('/frequencia/criterios/existente', { params: { role: form.role, month: form.referenceMonth } })
+      .then(({ data }) => { if (active) setExistingCriterio(data.criterio) })
+      .catch(() => { if (active) setExistingCriterio(null) })
+      .finally(() => { if (active) setCheckingExisting(false) })
+    return () => { active = false }
+  }, [open, form.role, form.referenceMonth])
 
   useEffect(() => {
     if (!open || !form.role) { setPreviewUsers([]); setSelectedUserIds(new Set()); return }
@@ -199,6 +214,7 @@ function NovoCriterioModal({ open, onClose, onSaved, showToast, allowedRoles }) 
 
   const handleSubmit = async () => {
     if (!form.role) { setError('Selecione o perfil avaliado.'); return }
+    if (existingCriterio) { setError(`Já existe o critério "${existingCriterio.title}" para esse perfil neste mês. Edite o critério existente em vez de criar outro.`); return }
     if (selectedUserIds.size === 0) { setError('Selecione ao menos um profissional desse perfil.'); return }
     if (!form.title.trim()) { setError('Informe o título do critério.'); return }
     if (!form.referenceMonth) { setError('Defina a vigência (mês).'); return }
@@ -244,7 +260,7 @@ function NovoCriterioModal({ open, onClose, onSaved, showToast, allowedRoles }) 
       footer={
         <>
           <button onClick={onClose} className="btn-secondary" disabled={saving}>Cancelar</button>
-          <button onClick={handleSubmit} className="btn-primary" disabled={saving}>
+          <button onClick={handleSubmit} className="btn-primary" disabled={saving || !!existingCriterio}>
             <CheckCircle size={15} />
             {saving ? 'Salvando...' : 'Criar critério'}
           </button>
@@ -262,6 +278,12 @@ function NovoCriterioModal({ open, onClose, onSaved, showToast, allowedRoles }) 
               <option key={role} value={role}>{FREQUENCIA_ROLE_LABELS[role]}</option>
             ))}
           </select>
+          {checkingExisting && <p className="text-xs text-gray-400 mt-1.5">Verificando critérios existentes...</p>}
+          {!checkingExisting && existingCriterio && (
+            <div className="mt-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+              Já existe o critério <span className="font-semibold">"{existingCriterio.title}"</span> para {FREQUENCIA_ROLE_LABELS[form.role]} em {form.referenceMonth}. Feche este modal e use "Editar regras" para ajustá-lo em vez de criar outro.
+            </div>
+          )}
           {allowedRoles.length === 0 && <p className="text-xs text-amber-600 mt-1">Você não tem permissão para criar critérios.</p>}
         </div>
 
@@ -1162,7 +1184,7 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
                     <td className="table-cell px-3">
                       <div className="font-semibold text-gray-800">{user.criteria.length} criterio{user.criteria.length !== 1 ? 's' : ''}</div>
                       <div className="text-xs text-gray-400 mt-1">{getCriteriaTypeSummary(user.criteria)}</div>
-                      <div className="text-xs text-gray-400 mt-1">Meta total: {user.metaTotal ? formatAmount(user.metaTotal) : 'â€”'}</div>
+                      <div className="text-xs text-gray-400 mt-1">Meta total: {user.metaTotal ? formatAmount(user.metaTotal) : '—'}</div>
                     </td>
                     <td className="table-cell px-3">
                       <div className="font-semibold text-gray-800">{summary.completed}/{summary.total} concluidos</div>
@@ -1222,11 +1244,11 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
               Exibindo {Math.min((page - 1) * perPage + 1, visibleUsers.length)} a {Math.min(page * perPage, visibleUsers.length)} de {visibleUsers.length} resultados
             </span>
             <div className="flex items-center gap-1">
-              <button onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page === 1} className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500">â€¹</button>
+              <button onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page === 1} className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500">‹</button>
               {Array.from({ length: Math.min(totalPages, 5) }, (_, index) => index + 1).map((item) => (
                 <button key={item} onClick={() => setPage(item)} className={`w-8 h-8 rounded-lg text-xs font-medium transition-colors ${page === item ? 'bg-brand-800 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>{item}</button>
               ))}
-              <button onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page === totalPages} className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500">â€º</button>
+              <button onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page === totalPages} className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500">›</button>
             </div>
           </div>
         )}

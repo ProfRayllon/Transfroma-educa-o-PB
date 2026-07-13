@@ -1397,6 +1397,28 @@ function frequenciaCriterioPayload(body) {
   }
 }
 
+// Checagem leve pra UI avisar ANTES de tentar criar (regra de 1 criterio por perfil+mes),
+// em vez do usuario so descobrir depois de preencher o formulario inteiro.
+app.get('/api/frequencia/criterios/existente', auth, async (req, res) => {
+  try {
+    const actor = await findUserById(req.user.id)
+    const role = String(req.query.role || '')
+    const month = String(req.query.month || '')
+    if (!FREQUENCIA_ROLES.includes(role) || !/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ message: 'Informe perfil e mes validos.' })
+    }
+    if (!canCreateFrequenciaCriterio(actor, role)) {
+      return res.status(403).json({ message: 'Voce nao tem permissao para esse perfil.' })
+    }
+
+    const [criterio] = await store.listFrequenciaCriterios({ roles: [role], month })
+    res.json({ criterio: criterio || null })
+  } catch (err) {
+    console.error('[GET /api/frequencia/criterios/existente]', err)
+    res.status(500).json({ message: 'Erro ao verificar criterio existente.' })
+  }
+})
+
 app.get('/api/frequencia/usuarios', auth, async (req, res) => {
   try {
     const actor = await findUserById(req.user.id)
@@ -1555,7 +1577,7 @@ app.post('/api/frequencia/criterios', auth, async (req, res) => {
     // o tipo qualitativo (checklist de atividades) dentro desse unico criterio.
     const existing = await store.listFrequenciaCriterios({ roles: [payload.role], month: payload.referenceMonth })
     if (existing.length > 0) {
-      return res.status(409).json({ message: `Ja existe um criterio para ${FREQUENCIA_ROLE_LABELS[payload.role]} em ${payload.referenceMonth}. Edite o criterio existente em vez de criar outro.` })
+      return res.status(409).json({ message: `Ja existe o criterio "${existing[0].title}" para ${FREQUENCIA_ROLE_LABELS[payload.role]} em ${payload.referenceMonth}. Edite o criterio existente em vez de criar outro.` })
     }
 
     if (payload.userIds) {
