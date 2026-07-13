@@ -574,7 +574,7 @@ export default function Ementa() {
     try {
       const { data } = await api.put(`/ementas/${courseId}`, form)
       setEmenta(data)
-      showToast('Rascunho salvo!')
+      showToast(isFinalizado ? 'Alterações salvas!' : 'Rascunho salvo!')
     } catch (err) {
       showToast(getApiErrorMessage(err, 'Erro ao salvar.'), 'error')
     } finally {
@@ -583,7 +583,7 @@ export default function Ementa() {
   }
 
   const handleNext = async () => {
-    if (canEdit && !isFinalizado) await saveDraft()
+    if (!formDisabled) await saveDraft()
     setStep((s) => Math.min(8, s + 1))
   }
 
@@ -842,9 +842,9 @@ export default function Ementa() {
           </button>
 
           <div className="flex items-center gap-2">
-            {canEdit && !isFinalizado && (
+            {!formDisabled && (
               <button onClick={saveDraft} disabled={saving} className="btn-secondary">
-                {saving ? 'Salvando...' : 'Salvar rascunho'}
+                {saving ? 'Salvando...' : (isFinalizado ? 'Salvar alterações' : 'Salvar rascunho')}
               </button>
             )}
 
