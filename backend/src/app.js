@@ -1397,28 +1397,6 @@ function frequenciaCriterioPayload(body) {
   }
 }
 
-// Checagem leve pra UI avisar ANTES de tentar criar (regra de 1 criterio por perfil+mes),
-// em vez do usuario so descobrir depois de preencher o formulario inteiro.
-app.get('/api/frequencia/criterios/existente', auth, async (req, res) => {
-  try {
-    const actor = await findUserById(req.user.id)
-    const role = String(req.query.role || '')
-    const month = String(req.query.month || '')
-    if (!FREQUENCIA_ROLES.includes(role) || !/^\d{4}-\d{2}$/.test(month)) {
-      return res.status(400).json({ message: 'Informe perfil e mes validos.' })
-    }
-    if (!canCreateFrequenciaCriterio(actor, role)) {
-      return res.status(403).json({ message: 'Voce nao tem permissao para esse perfil.' })
-    }
-
-    const [criterio] = await store.listFrequenciaCriterios({ roles: [role], month })
-    res.json({ criterio: criterio || null })
-  } catch (err) {
-    console.error('[GET /api/frequencia/criterios/existente]', err)
-    res.status(500).json({ message: 'Erro ao verificar criterio existente.' })
-  }
-})
-
 app.get('/api/frequencia/usuarios', auth, async (req, res) => {
   try {
     const actor = await findUserById(req.user.id)
@@ -1432,7 +1410,16 @@ app.get('/api/frequencia/usuarios', auth, async (req, res) => {
 
     const roles = requestedRole ? [requestedRole] : allowedRoles
     const usersList = await store.listUsersByRoles(roles)
-    res.json(usersList)
+
+    // Com "month" informado, anota cada usuario com o criterio que ja tem nesse mes (se algum) --
+    // a trava e por PESSOA, nao por perfil: varias pessoas podem compartilhar o mesmo criterio,
+    // mas ninguem pode ter 2 criterios diferentes no mesmo mes.
+    const month = /^\d{4}-\d{2}$/.test(req.query.month) ? String(req.query.month) : null
+    if (!month) return res.json(usersList.map((u) => ({ ...u, existingCriterioTitle: null })))
+
+    const monthLancamentos = await store.listFrequenciaLancamentos({ roles, month })
+    const titleByUserId = new Map(monthLancamentos.map((l) => [Number(l.userId), l.criterioTitle]))
+    res.json(usersList.map((u) => ({ ...u, existingCriterioTitle: titleByUserId.get(Number(u.id)) || null })))
   } catch (err) {
     console.error('[GET /api/frequencia/usuarios]', err)
     res.status(500).json({ message: 'Erro ao carregar usuarios.' })
@@ -1573,19 +1560,24 @@ app.post('/api/frequencia/criterios', auth, async (req, res) => {
       return res.status(403).json({ message: 'Voce nao tem permissao para criar criterio para esse perfil.' })
     }
 
-    // So um criterio ativo por perfil+mes -- quem precisar acompanhar mais de uma coisa usa
-    // o tipo qualitativo (checklist de atividades) dentro desse unico criterio.
-    const existing = await store.listFrequenciaCriterios({ roles: [payload.role], month: payload.referenceMonth })
-    if (existing.length > 0) {
-      return res.status(409).json({ message: `Ja existe o criterio "${existing[0].title}" para ${FREQUENCIA_ROLE_LABELS[payload.role]} em ${payload.referenceMonth}. Edite o criterio existente em vez de criar outro.` })
-    }
+    const eligibleIds = new Set((await store.listUsersByRoles([payload.role])).map((u) => Number(u.id)))
 
     if (payload.userIds) {
-      const eligibleIds = new Set((await store.listUsersByRoles([payload.role])).map((u) => Number(u.id)))
       payload.userIds = payload.userIds.filter((id) => eligibleIds.has(id))
       if (payload.userIds.length === 0) {
         return res.status(400).json({ message: 'Nenhum dos profissionais selecionados pertence a esse perfil.' })
       }
+    }
+
+    // 1 criterio por PESSOA por mes -- varias pessoas podem compartilhar o mesmo criterio
+    // (o perfil pode ter mais de um criterio no mes), mas ninguem pode ter 2 criterios
+    // diferentes no mesmo mes.
+    const targetIds = payload.userIds?.length ? payload.userIds : Array.from(eligibleIds)
+    const monthLancamentos = await store.listFrequenciaLancamentos({ roles: [payload.role], month: payload.referenceMonth })
+    const conflicts = monthLancamentos.filter((l) => targetIds.includes(Number(l.userId)))
+    if (conflicts.length > 0) {
+      const names = [...new Set(conflicts.map((l) => l.userName).filter(Boolean))]
+      return res.status(409).json({ message: `Os seguintes profissionais ja tem um criterio neste mes: ${names.join(', ')}. Remova-os da selecao ou edite o criterio existente deles.` })
     }
 
     const criterio = await store.createFrequenciaCriterio({ ...payload, createdBy: actor.id })

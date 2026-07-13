@@ -162,8 +162,6 @@ function NovoCriterioModal({ open, onClose, onSaved, showToast, allowedRoles }) 
   const [previewUsers, setPreviewUsers] = useState([])
   const [loadingPreview, setLoadingPreview] = useState(false)
   const [selectedUserIds, setSelectedUserIds] = useState(new Set())
-  const [existingCriterio, setExistingCriterio] = useState(null)
-  const [checkingExisting, setCheckingExisting] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -171,50 +169,43 @@ function NovoCriterioModal({ open, onClose, onSaved, showToast, allowedRoles }) 
     setError('')
   }, [open, allowedRoles])
 
-  // Avisa ANTES de preencher o formulario inteiro se ja existe criterio pra esse perfil+mes
-  // (regra de 1 criterio por perfil+mes), em vez do usuario so descobrir no 409 ao salvar.
+  // A trava e por PESSOA, nao por perfil: varias pessoas podem compartilhar o mesmo criterio
+  // (o perfil pode ter mais de um criterio no mes), mas ninguem pode ter 2 criterios diferentes
+  // no mesmo mes -- por isso o preview ja vem anotado com quem ja tem criterio nesse mes.
   useEffect(() => {
-    if (!open || !form.role || !form.referenceMonth) { setExistingCriterio(null); return }
-    let active = true
-    setCheckingExisting(true)
-    api.get('/frequencia/criterios/existente', { params: { role: form.role, month: form.referenceMonth } })
-      .then(({ data }) => { if (active) setExistingCriterio(data.criterio) })
-      .catch(() => { if (active) setExistingCriterio(null) })
-      .finally(() => { if (active) setCheckingExisting(false) })
-    return () => { active = false }
-  }, [open, form.role, form.referenceMonth])
-
-  useEffect(() => {
-    if (!open || !form.role) { setPreviewUsers([]); setSelectedUserIds(new Set()); return }
+    if (!open || !form.role || !form.referenceMonth) { setPreviewUsers([]); setSelectedUserIds(new Set()); return }
     let active = true
     setLoadingPreview(true)
-    api.get('/frequencia/usuarios', { params: { role: form.role } })
+    api.get('/frequencia/usuarios', { params: { role: form.role, month: form.referenceMonth } })
       .then(({ data }) => {
         if (!active) return
         setPreviewUsers(data)
-        // por padrao comeca com todos marcados, igual ao comportamento anterior (perfil inteiro)
-        setSelectedUserIds(new Set(data.map(u => u.id)))
+        // por padrao marca so quem ainda nao tem criterio neste mes
+        setSelectedUserIds(new Set(data.filter(u => !u.existingCriterioTitle).map(u => u.id)))
       })
       .catch(() => { if (active) setPreviewUsers([]) })
       .finally(() => { if (active) setLoadingPreview(false) })
     return () => { active = false }
-  }, [open, form.role])
+  }, [open, form.role, form.referenceMonth])
 
-  const toggleUser = (userId) => {
+  const toggleUser = (user) => {
+    if (user.existingCriterioTitle) return
     setSelectedUserIds(prev => {
       const next = new Set(prev)
-      if (next.has(userId)) next.delete(userId); else next.add(userId)
+      if (next.has(user.id)) next.delete(user.id); else next.add(user.id)
       return next
     })
   }
 
+  const availableUsers = previewUsers.filter(u => !u.existingCriterioTitle)
+  const blockedUsers = previewUsers.filter(u => u.existingCriterioTitle)
+
   const toggleAllUsers = () => {
-    setSelectedUserIds(prev => prev.size === previewUsers.length ? new Set() : new Set(previewUsers.map(u => u.id)))
+    setSelectedUserIds(prev => prev.size === availableUsers.length ? new Set() : new Set(availableUsers.map(u => u.id)))
   }
 
   const handleSubmit = async () => {
     if (!form.role) { setError('Selecione o perfil avaliado.'); return }
-    if (existingCriterio) { setError(`Já existe o critério "${existingCriterio.title}" para esse perfil neste mês. Edite o critério existente em vez de criar outro.`); return }
     if (selectedUserIds.size === 0) { setError('Selecione ao menos um profissional desse perfil.'); return }
     if (!form.title.trim()) { setError('Informe o título do critério.'); return }
     if (!form.referenceMonth) { setError('Defina a vigência (mês).'); return }
@@ -260,7 +251,7 @@ function NovoCriterioModal({ open, onClose, onSaved, showToast, allowedRoles }) 
       footer={
         <>
           <button onClick={onClose} className="btn-secondary" disabled={saving}>Cancelar</button>
-          <button onClick={handleSubmit} className="btn-primary" disabled={saving || !!existingCriterio}>
+          <button onClick={handleSubmit} className="btn-primary" disabled={saving}>
             <CheckCircle size={15} />
             {saving ? 'Salvando...' : 'Criar critério'}
           </button>
@@ -278,12 +269,6 @@ function NovoCriterioModal({ open, onClose, onSaved, showToast, allowedRoles }) 
               <option key={role} value={role}>{FREQUENCIA_ROLE_LABELS[role]}</option>
             ))}
           </select>
-          {checkingExisting && <p className="text-xs text-gray-400 mt-1.5">Verificando critérios existentes...</p>}
-          {!checkingExisting && existingCriterio && (
-            <div className="mt-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
-              Já existe o critério <span className="font-semibold">"{existingCriterio.title}"</span> para {FREQUENCIA_ROLE_LABELS[form.role]} em {form.referenceMonth}. Feche este modal e use "Editar regras" para ajustá-lo em vez de criar outro.
-            </div>
-          )}
           {allowedRoles.length === 0 && <p className="text-xs text-amber-600 mt-1">Você não tem permissão para criar critérios.</p>}
         </div>
 
@@ -293,36 +278,46 @@ function NovoCriterioModal({ open, onClose, onSaved, showToast, allowedRoles }) 
               <div className="text-[11px] font-medium text-gray-500">
                 {loadingPreview
                   ? 'Carregando usuários...'
-                  : `Selecionado${selectedUserIds.size !== 1 ? 's' : ''} ${selectedUserIds.size} de ${previewUsers.length} do perfil ${FREQUENCIA_ROLE_LABELS[form.role]}`}
+                  : `Selecionado${selectedUserIds.size !== 1 ? 's' : ''} ${selectedUserIds.size} de ${availableUsers.length} disponíve${availableUsers.length !== 1 ? 'is' : 'l'} do perfil ${FREQUENCIA_ROLE_LABELS[form.role]}`}
               </div>
-              {!loadingPreview && previewUsers.length > 0 && (
+              {!loadingPreview && availableUsers.length > 0 && (
                 <button
                   type="button"
                   onClick={toggleAllUsers}
                   className="text-[11px] font-medium text-brand-600 hover:text-brand-800 flex-shrink-0"
                 >
-                  {selectedUserIds.size === previewUsers.length ? 'Desmarcar todos' : 'Marcar todos'}
+                  {selectedUserIds.size === availableUsers.length ? 'Desmarcar todos' : 'Marcar todos'}
                 </button>
               )}
             </div>
+            {!loadingPreview && blockedUsers.length > 0 && (
+              <p className="text-[11px] text-amber-600 mb-1.5">
+                {blockedUsers.length} já tem{blockedUsers.length !== 1 ? 'm' : ''} um critério neste mês e não pode{blockedUsers.length !== 1 ? 'm' : ''} ser selecionado{blockedUsers.length !== 1 ? 's' : ''} de novo (bloqueados abaixo).
+              </p>
+            )}
             {!loadingPreview && (
               <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
                 {previewUsers.map(u => {
                   const checked = selectedUserIds.has(u.id)
+                  const blocked = !!u.existingCriterioTitle
                   return (
                     <button
                       key={u.id}
                       type="button"
-                      onClick={() => toggleUser(u.id)}
+                      disabled={blocked}
+                      onClick={() => toggleUser(u)}
+                      title={blocked ? `Já tem o critério "${u.existingCriterioTitle}" neste mês` : undefined}
                       className={`flex items-center gap-1.5 border rounded-full pl-1 pr-2.5 py-0.5 transition-colors ${
-                        checked ? 'bg-white border-brand-200' : 'bg-transparent border-gray-200 opacity-50 hover:opacity-80'
+                        blocked
+                          ? 'bg-gray-100 border-gray-200 opacity-60 cursor-not-allowed'
+                          : checked ? 'bg-white border-brand-200' : 'bg-transparent border-gray-200 opacity-50 hover:opacity-80'
                       }`}
                     >
                       <span className="w-5 h-5 rounded-full bg-brand-600 text-white text-[9px] font-bold flex items-center justify-center overflow-hidden flex-shrink-0">
                         {u.avatar ? <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" /> : getInitials(u.name)}
                       </span>
                       <span className="text-[11px] text-gray-700">{u.name}</span>
-                      {checked && <CheckCircle size={12} className="text-green-600 flex-shrink-0" />}
+                      {blocked ? <Lock size={11} className="text-gray-400 flex-shrink-0" /> : checked && <CheckCircle size={12} className="text-green-600 flex-shrink-0" />}
                     </button>
                   )
                 })}
