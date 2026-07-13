@@ -1551,6 +1551,13 @@ app.post('/api/frequencia/criterios', auth, async (req, res) => {
       return res.status(403).json({ message: 'Voce nao tem permissao para criar criterio para esse perfil.' })
     }
 
+    // So um criterio ativo por perfil+mes -- quem precisar acompanhar mais de uma coisa usa
+    // o tipo qualitativo (checklist de atividades) dentro desse unico criterio.
+    const existing = await store.listFrequenciaCriterios({ roles: [payload.role], month: payload.referenceMonth })
+    if (existing.length > 0) {
+      return res.status(409).json({ message: `Ja existe um criterio para ${FREQUENCIA_ROLE_LABELS[payload.role]} em ${payload.referenceMonth}. Edite o criterio existente em vez de criar outro.` })
+    }
+
     if (payload.userIds) {
       const eligibleIds = new Set((await store.listUsersByRoles([payload.role])).map((u) => Number(u.id)))
       payload.userIds = payload.userIds.filter((id) => eligibleIds.has(id))

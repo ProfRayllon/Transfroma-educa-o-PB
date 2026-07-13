@@ -1,12 +1,13 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
 import {
   Plus, Lock, Calendar, CheckCircle, TrendingUp, Filter, Search, X,
-  Eye, Pencil, Users, UserCheck, Headphones, UserCog, GraduationCap, BookOpen,
+  Eye, Pencil, Trash2, Users, UserCheck, Headphones, UserCog, GraduationCap, BookOpen,
   FileText, Clock, AlertTriangle, LayoutGrid, ListChecks, History, Check,
 } from 'lucide-react'
 import Badge from '../components/ui/Badge'
 import StatCard from '../components/ui/StatCard'
 import Modal from '../components/ui/Modal'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { useAuth } from '../context/AuthContext'
 import api, { getApiErrorMessage } from '../lib/api'
 
@@ -73,6 +74,7 @@ function frequenciaRolesForUser(user) {
 }
 
 function fillStatusInfo(avgFill) {
+  if (avgFill >= 100) return { label: 'Concluído', cls: 'bg-green-50 text-green-700 border border-green-200' }
   if (avgFill >= 70) return { label: 'Ativo', cls: 'bg-green-50 text-green-700 border border-green-200' }
   if (avgFill > 0) return { label: 'Em andamento', cls: 'bg-blue-50 text-blue-700 border border-blue-200' }
   return { label: 'Pendente', cls: 'bg-amber-50 text-amber-700 border border-amber-200' }
@@ -642,7 +644,7 @@ function CriterioEditCard({ criterio, mode, onSaved, showToast }) {
       </div>
 
       {criterio.type === 'quantitativo' ? (
-        editingRule ? (
+        editingRule && (
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Unidade</label>
@@ -652,11 +654,6 @@ function CriterioEditCard({ criterio, mode, onSaved, showToast }) {
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Meta do mes</label>
               <input type="number" min="0" value={ruleForm.target} onChange={e => setRuleForm(f => ({ ...f, target: e.target.value }))} className="input-field text-sm" placeholder="Ex: 10" />
             </div>
-          </div>
-        ) : (
-          <div className="rounded-xl border border-gray-100 bg-white px-3 py-3">
-            <div className="text-xs text-gray-500">Meta do mes</div>
-            <div className="text-sm font-semibold text-gray-800 mt-1">{getCriterioMetaLabel(criterio)}</div>
           </div>
         )
       ) : editingRule ? (
@@ -899,6 +896,78 @@ function PerfilTile({ icon: Icon, label, userCount, secondaryCount, secondaryLab
   )
 }
 
+/* ─── slider de lancamento direto na tabela ─── */
+
+// So arrasta um criterio quantitativo por vez -- com mais de um vinculado ao mesmo
+// usuario (dado legado de antes da trava de 1 criterio por perfil/mes) ou tipo
+// qualitativo (nao da pra "arrastar" um checklist), cai pra barra somente leitura.
+function FrequenciaSliderCell({ user, month, onSaved, showToast }) {
+  const criterio = user.criteria.length === 1 ? user.criteria[0] : null
+  const isQuantitativo = criterio?.type === 'quantitativo'
+  const target = Math.max(Number(criterio?.target) || 0, 0)
+  const [localValue, setLocalValue] = useState(Number(criterio?.realized) || 0)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    setLocalValue(Number(criterio?.realized) || 0)
+  }, [criterio?.lancamentoId, criterio?.realized])
+
+  if (!criterio || !isQuantitativo) {
+    return (
+      <div>
+        <div className="font-medium text-gray-700">{user.avgFill}%</div>
+        <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden max-w-[160px]">
+          <div className="h-full bg-brand-600 rounded-full" style={{ width: `${Math.min(100, user.avgFill)}%` }} />
+        </div>
+        <div className="text-[11px] text-gray-400 mt-1">Periodo: {monthRangeLabel(month)}</div>
+      </div>
+    )
+  }
+
+  const commit = async (value) => {
+    setSaving(true)
+    try {
+      const status = getQuickQuantitativeStatus(target, value)
+      await api.put(`/frequencia/lancamentos/${criterio.lancamentoId}`, {
+        target: target || null,
+        realized: value,
+        status,
+        registeredAt: value > 0 ? todayDate() : null,
+      })
+      onSaved()
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'Erro ao salvar quantidade.'), 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const pct = target > 0 ? Math.min(100, Math.round((localValue / target) * 100)) : 0
+
+  return (
+    <div className="min-w-[150px] max-w-[170px]">
+      <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+        <span className="font-semibold text-gray-800">{localValue}{target > 0 ? `/${target}` : ''} {criterio.unit || ''}</span>
+        <span className="text-gray-400">{pct}%</span>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={Math.max(target, localValue, 1)}
+        step={1}
+        value={localValue}
+        disabled={saving}
+        onChange={(e) => setLocalValue(Number(e.target.value))}
+        onMouseUp={(e) => commit(Number(e.target.value))}
+        onTouchEnd={(e) => commit(Number(e.target.value))}
+        onKeyUp={(e) => commit(Number(e.target.value))}
+        className="w-full accent-brand-600 cursor-pointer disabled:opacity-50"
+      />
+      <div className="text-[11px] text-gray-400 mt-0.5">Arraste para lancar a quantidade</div>
+    </div>
+  )
+}
+
 /* ─── Critérios do mês ─── */
 
 function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
@@ -911,6 +980,7 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
   const [detailTarget, setDetailTarget] = useState(null)
   const [detailMode, setDetailMode] = useState('view')
   const [innerReload, setInnerReload] = useState(0)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const perPage = 8
 
   useEffect(() => {
@@ -972,6 +1042,20 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
   }
 
   const handleDetailSaved = () => setInnerReload((tick) => tick + 1)
+
+  const handleDeleteCriterio = async () => {
+    const criterioId = deleteTarget?.criteria?.[0]?.criterioId
+    if (!criterioId) { setDeleteTarget(null); return }
+    try {
+      await api.delete(`/frequencia/criterios/${criterioId}`)
+      showToast('Critério excluído com sucesso!')
+      setInnerReload((tick) => tick + 1)
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'Erro ao excluir critério.'), 'error')
+    } finally {
+      setDeleteTarget(null)
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -1097,31 +1181,39 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
                       <div className="text-xs text-gray-400 mt-1">{summary.open} em aberto neste mes</div>
                     </td>
                     <td className="table-cell px-3">
-                      <div className="font-medium text-gray-700">{user.avgFill}%</div>
-                      <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden max-w-[160px]">
-                        <div className="h-full bg-brand-600 rounded-full" style={{ width: `${Math.min(100, user.avgFill)}%` }} />
-                      </div>
-                      <div className="text-[11px] text-gray-400 mt-1">Periodo: {monthRangeLabel(month)}</div>
+                      <FrequenciaSliderCell user={user} month={month} onSaved={handleDetailSaved} showToast={showToast} />
                     </td>
                     <td className="table-cell px-3">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status.cls}`}>{status.label}</span>
                     </td>
                     <td className="table-cell px-3">
-                      <div className="flex flex-wrap justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => openDetail(user, 'view')}
-                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-brand-200 bg-brand-50 text-brand-700 text-xs font-medium hover:bg-brand-100 transition-colors"
+                          title="Ver critérios"
+                          className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
                         >
                           <Eye size={14} />
-                          Ver criterios
                         </button>
-                        <button
-                          onClick={() => openDetail(user, 'edit')}
-                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-gray-600 text-xs font-medium hover:border-gray-300 hover:bg-gray-100 transition-colors"
-                        >
-                          <Pencil size={14} />
-                          Editar regras
-                        </button>
+                        {allowedRoles.includes(user.role) && (
+                          <>
+                            <button
+                              onClick={() => openDetail(user, 'edit')}
+                              title="Editar regras"
+                              className="p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              onClick={() => setDeleteTarget(user)}
+                              title="Excluir critério"
+                              disabled={user.criteria.length !== 1}
+                              className="p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1159,6 +1251,19 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
         mode={detailMode}
         onSaved={handleDetailSaved}
         showToast={showToast}
+      />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteCriterio}
+        title="Excluir critério"
+        message={
+          deleteTarget
+            ? `Tem certeza que deseja excluir o critério "${deleteTarget.criteria[0]?.title}"? Isso remove o critério e o lançamento de todos os usuários do perfil ${deleteTarget.roleLabel} vinculados a ele (${allUsers.filter((u) => u.criteria.some((c) => c.criterioId === deleteTarget.criteria[0]?.criterioId)).length} no total). Essa ação não pode ser desfeita.`
+            : ''
+        }
+        confirmLabel="Excluir"
       />
     </div>
   )
