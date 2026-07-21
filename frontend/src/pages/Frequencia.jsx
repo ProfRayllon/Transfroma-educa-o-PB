@@ -1020,7 +1020,6 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
   if (!data) return null
 
   const allUsers = data.groups.flatMap((group) => group.users.map((user) => ({ ...user, role: group.role, roleLabel: group.label })))
-  const totalCriteria = data.groups.reduce((sum, group) => sum + group.criteriaCount, 0)
   const normalizedSearch = search.trim().toLowerCase()
   const visibleUsers = allUsers
     .filter((user) => !roleFilter || user.role === roleFilter)
@@ -1093,34 +1092,6 @@ function CriteriosTab({ allowedRoles, reloadToken, showToast }) {
           >
             <Filter size={14} /> Limpar filtros
           </button>
-        </div>
-
-        <div className="flex flex-wrap gap-3 pt-2">
-          <PerfilTile
-            icon={Users}
-            label="Todos"
-            userCount={allUsers.length}
-            secondaryCount={totalCriteria}
-            secondaryLabel={`vinculado${totalCriteria !== 1 ? 's' : ''}`}
-            badgeCount={data.stats.criteriosAtivos}
-            badgeLabel={`criterio${data.stats.criteriosAtivos !== 1 ? 's' : ''} criado${data.stats.criteriosAtivos !== 1 ? 's' : ''}`}
-            active={!roleFilter}
-            onClick={() => setRoleFilter('')}
-          />
-          {data.groups.map((group) => (
-            <PerfilTile
-              key={group.role}
-              icon={PERFIL_ICONS[group.role] || Users}
-              label={group.label}
-              userCount={group.userCount}
-              secondaryCount={group.criteriaCount}
-              secondaryLabel={`vinculado${group.criteriaCount !== 1 ? 's' : ''}`}
-              badgeCount={group.criteriosCriados}
-              badgeLabel={`criterio${group.criteriosCriados !== 1 ? 's' : ''} criado${group.criteriosCriados !== 1 ? 's' : ''}`}
-              active={roleFilter === group.role}
-              onClick={() => setRoleFilter(group.role)}
-            />
-          ))}
         </div>
       </div>
 
