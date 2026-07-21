@@ -175,9 +175,9 @@ function UserFormModal({ user: editUser, open, onClose, onSave, saving, error })
 
   const functionOptions = ROLE_FUNCTIONS[form.role] || []
   const areaOptions = getAreaOptions(form.role)
-  const roleOptions = editUser?.role === 'administrador'
-    ? [{ value: 'administrador', label: 'Administrador' }, ...MANAGED_ROLES]
-    : MANAGED_ROLES
+  // Criar/editar usuario ja e restrito a administradores no backend (POST/PUT /api/users),
+  // entao nao ha risco em sempre oferecer a opcao de definir alguem como administrador aqui.
+  const roleOptions = [{ value: 'administrador', label: 'Administrador' }, ...MANAGED_ROLES]
 
   const handleChange = (e) => {
     const { name, value } = e.target
