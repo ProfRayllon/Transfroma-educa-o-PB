@@ -1,6 +1,7 @@
 import {
   FileText, ExternalLink, Link2, Video, Presentation, ClipboardList,
   Paperclip, MousePointerClick, Award, ListChecks, HelpCircle, BookOpen, File,
+  MessageSquare, Podcast,
 } from 'lucide-react'
 
 export const PROFESSOR_STATUS_OPTIONS = [
@@ -45,6 +46,8 @@ export const MATERIAL_TYPE_OPTIONS = [
   { value: 'avaliacao_final', label: 'Avaliação final' },
   { value: 'atividade_objetiva', label: 'Quiz' },
   { value: 'pdf', label: 'PDF' },
+  { value: 'forum', label: 'Fórum' },
+  { value: 'podcast', label: 'Podcast' },
 ]
 
 const TYPE_ICONS = {
@@ -58,6 +61,8 @@ const TYPE_ICONS = {
   avaliacao_final: Award,
   atividade_objetiva: ListChecks,
   pdf: File,
+  forum: MessageSquare,
+  podcast: Podcast,
   Aula: Video,
 }
 
@@ -72,7 +77,7 @@ export function getMaterialResponsibles(material) {
 }
 
 export function TypeBadge({ type, iconOnly = false }) {
-  const documentTypes = ['videoaula', 'apresentacao', 'ebook', 'pdf', 'Aula']
+  const documentTypes = ['videoaula', 'apresentacao', 'ebook', 'pdf', 'podcast', 'Aula']
   const types = Array.isArray(type) ? type.filter(Boolean).slice(0, 1) : (type ? [type] : [])
   if (!types.length) return <span className="text-gray-300 text-xs">—</span>
   return (
