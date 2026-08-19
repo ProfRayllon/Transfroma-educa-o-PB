@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import {
   Plus, Search, CheckCircle, Send, Rocket, Trash2, Pencil, Eye,
   Link2, AlertTriangle, ArrowLeft, ChevronDown, ChevronRight, MoreVertical, Filter, Info,
-  Layers, FileText, Clock, X, MessageSquare, ChevronUp, Columns, ClipboardCopy,
+  Layers, FileText, X, MessageSquare, ChevronUp, Columns, ClipboardCopy,
+  Monitor, Users,
 } from 'lucide-react'
 import Badge from '../ui/Badge'
-import StatCard from '../ui/StatCard'
 import Modal from '../ui/Modal'
 import ConfirmDialog from '../ui/ConfirmDialog'
 import { useAuth } from '../../context/AuthContext'
@@ -428,6 +428,84 @@ function ModuleModal({ open, onClose, onSave, saving, editing }) {
 
 /* ─── main component ─── */
 
+// Donut de progresso em SVG puro (o projeto nao usa lib de grafico).
+function ProgressDonut({ segments, total, percent }) {
+  const size = 132
+  const stroke = 16
+  const radius = (size - stroke) / 2
+  const circumference = 2 * Math.PI * radius
+
+  let cursor = 0
+  const arcs = segments
+    .filter(segment => segment.value > 0)
+    .map(segment => {
+      const length = (segment.value / total) * circumference
+      const arc = { ...segment, length, offset: cursor }
+      cursor += length
+      return arc
+    })
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="flex-shrink-0">
+      <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#f1f5f9" strokeWidth={stroke} />
+        {total > 0 && arcs.map(arc => (
+          <circle
+            key={arc.key}
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke={arc.color}
+            strokeWidth={stroke}
+            strokeDasharray={`${arc.length} ${circumference - arc.length}`}
+            strokeDashoffset={-arc.offset}
+          />
+        ))}
+      </g>
+      <text x="50%" y="46%" textAnchor="middle" dominantBaseline="middle" fill="#111827" style={{ fontSize: 27, fontWeight: 800 }}>
+        {percent}%
+      </text>
+      <text x="50%" y="63%" textAnchor="middle" dominantBaseline="middle" fill="#9ca3af" style={{ fontSize: 11 }}>
+        Concluído
+      </text>
+    </svg>
+  )
+}
+
+function TeamMember({ label, name, avatar, icon: Icon, extra = 0, hint }) {
+  const initials = (name || '').split(' ').filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase()
+  const tooltip = name || hint
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <div className="relative group">
+        <div className={`w-14 h-14 rounded-full flex items-center justify-center overflow-hidden select-none ${
+          Icon ? 'bg-brand-50 text-brand-600' : 'bg-brand-700 text-white font-semibold'
+        }`}>
+          {Icon
+            ? <Icon size={22} />
+            : avatar
+              ? <img src={avatar} alt={name} className="w-full h-full object-cover" />
+              : (initials || <span className="text-white/60 text-lg">—</span>)}
+        </div>
+        {extra > 0 && (
+          <span className="absolute -right-1 bottom-0 px-1.5 h-5 min-w-5 rounded-full bg-gray-200 text-gray-700 text-[10px] font-bold flex items-center justify-center border-2 border-white">
+            +{extra}
+          </span>
+        )}
+        {tooltip && (
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none">
+            <div className="bg-gray-800 text-white text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-lg">{tooltip}</div>
+            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+          </div>
+        )}
+      </div>
+      <span className="text-xs text-gray-500 whitespace-nowrap">{label}</span>
+    </div>
+  )
+}
+
 export default function ModulosWorkspace({ course }) {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -551,19 +629,44 @@ export default function ModulosWorkspace({ course }) {
     return counts
   }, [contentsByModuleId])
 
-  // Cards refletem o status de cada CONTEUDO (nao do modulo), acompanhando o mesmo
-  // fluxo professor -> supervisor -> coordenacao usado na tabela abaixo.
-  const stats = useMemo(() => ({
-    modulos: modules.length,
-    conteudos: courseMaterials.length,
-    emProducao: courseMaterials.filter(m => m.status === 'em_execucao' || m.status === 'em_ajustes').length,
-    aguardando: courseMaterials.filter(m =>
-      (m.status === 'concluido' && m.supervisorStatus !== 'aprovado') ||
-      (m.supervisorStatus === 'aprovado' && m.coordinatorStatus !== 'aprovado')
-    ).length,
-    aprovados: courseMaterials.filter(m => m.supervisorStatus === 'aprovado' && m.coordinatorStatus === 'aprovado').length,
-    revisado: courseMaterials.filter(m => m.revisorStatus === 'aprovado').length,
-  }), [modules, courseMaterials])
+  // Progresso geral por CONTEUDO (nao por modulo), seguindo o fluxo
+  // professor -> supervisor -> coordenacao (-> revisor, quando o curso tem revisores).
+  // As quatro faixas sao mutuamente exclusivas para o donut fechar em 100%.
+  const progress = useMemo(() => {
+    const total = courseMaterials.length
+    let concluidos = 0
+    let emRevisao = 0
+    let emProducao = 0
+    let pendentes = 0
+
+    courseMaterials.forEach(m => {
+      const aprovado = m.supervisorStatus === 'aprovado'
+        && m.coordinatorStatus === 'aprovado'
+        && (!hasRevisors || m.revisorStatus === 'aprovado')
+      if (aprovado) { concluidos += 1; return }
+      // Entregue pelo professor, aguardando supervisao/coordenacao/revisao.
+      if (m.status === 'concluido') { emRevisao += 1; return }
+      if (m.status === 'em_execucao' || m.status === 'em_ajustes') { emProducao += 1; return }
+      pendentes += 1
+    })
+
+    const pct = (value) => (total > 0 ? Math.round((value / total) * 100) : 0)
+
+    return {
+      total,
+      concluidos,
+      emRevisao,
+      emProducao,
+      pendentes,
+      percent: pct(concluidos),
+      segments: [
+        { key: 'concluidos', label: 'Concluídos', value: concluidos, pct: pct(concluidos), color: '#16a34a' },
+        { key: 'emProducao', label: 'Em produção', value: emProducao, pct: pct(emProducao), color: '#eab308' },
+        { key: 'emRevisao', label: 'Em revisão', value: emRevisao, pct: pct(emRevisao), color: '#4f46e5' },
+        { key: 'pendentes', label: 'Pendentes', value: pendentes, pct: pct(pendentes), color: '#f97316' },
+      ],
+    }
+  }, [courseMaterials, hasRevisors])
 
   const sortedModules = useMemo(() => [...modules].sort((a, b) => (a.order || 0) - (b.order || 0)), [modules])
 
@@ -927,8 +1030,8 @@ export default function ModulosWorkspace({ course }) {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      {/* Header: identificacao do curso + busca, colunas, filtros e acoes */}
+      <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <button
             onClick={() => navigate('/cursos')}
@@ -940,59 +1043,9 @@ export default function ModulosWorkspace({ course }) {
           <h1 className="page-title">Produção do curso</h1>
           <p className="page-subtitle">Curso: {course.name}</p>
         </div>
-        <div className="flex items-center gap-2">
-          {canManageModules && (
-            <button onClick={() => { setEditingModule(null); setNewModuleOpen(true) }} className="btn-secondary text-sm">
-              <Plus size={14} />
-              Novo módulo
-            </button>
-          )}
-          {canEditContent && (
-            <button
-              onClick={() => openNewContentFor(sortedModules[0]?.id || '')}
-              disabled={modules.length === 0}
-              title={modules.length === 0 ? 'Crie um módulo antes de adicionar conteúdo.' : undefined}
-              className="btn-primary text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Plus size={14} />
-              Novo conteúdo
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <StatCard icon={Layers} iconBg="bg-brand-100" iconColor="text-brand-700" value={stats.modulos} label="Módulos" />
-        <StatCard icon={FileText} iconBg="bg-blue-100" iconColor="text-blue-700" value={stats.conteudos} label="Conteúdos" />
-        <StatCard icon={Clock} iconBg="bg-amber-100" iconColor="text-amber-600" value={stats.emProducao} label="Em produção" />
-        <StatCard icon={Eye} iconBg="bg-purple-100" iconColor="text-purple-700" value={stats.aguardando} label="Aguardando validação" />
-        <StatCard icon={CheckCircle} iconBg="bg-green-100" iconColor="text-green-600" value={stats.aprovados} label="Aprovados" />
-        <StatCard icon={CheckCircle} iconBg="bg-rose-100" iconColor="text-rose-700" value={stats.revisado} label="Revisado" />
-      </div>
-
-      {modules.length === 0 ? (
-        <div className="card flex flex-col items-center justify-center text-center py-14 gap-3">
-          <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center">
-            <Plus size={22} />
-          </div>
-          <div>
-            <p className="font-semibold text-gray-800">Nenhum módulo cadastrado ainda</p>
-            <p className="text-sm text-gray-500 mt-1">Crie o primeiro módulo para começar a estruturar o curso.</p>
-          </div>
-          {canManageModules && (
-            <button onClick={() => { setEditingModule(null); setNewModuleOpen(true) }} className="btn-primary mt-2">
-              <Plus size={14} />
-              Criar primeiro módulo
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="card p-0 overflow-hidden">
-          {/* Estrutura do curso: cabecalho com busca e filtro */}
-          <div className="flex items-center justify-between flex-wrap gap-3 px-5 py-4 border-b border-gray-100">
-            <h3 className="text-sm font-semibold text-gray-800">Estrutura do curso</h3>
-            <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {modules.length > 0 && (
+            <>
               <div className="relative">
                 <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
@@ -1003,9 +1056,9 @@ export default function ModulosWorkspace({ course }) {
                 />
               </div>
               <div className="relative">
-                <button onClick={() => setColumnsOpen(v => !v)} className="btn-secondary text-xs py-2">
-                  <Columns size={13} />
-                  Colunas{hiddenColumns.size ? ` (${hiddenColumns.size} oculta${hiddenColumns.size > 1 ? 's' : ''})` : ''}
+                <button onClick={() => setColumnsOpen(v => !v)} className="btn-secondary text-sm">
+                  <Columns size={14} />
+                  Colunas{hiddenColumns.size ? ` (${hiddenColumns.size})` : ''}
                 </button>
                 {columnsOpen && (
                   <>
@@ -1040,8 +1093,8 @@ export default function ModulosWorkspace({ course }) {
                 )}
               </div>
               <div className="relative">
-                <button onClick={() => setFiltersOpen(v => !v)} className="btn-secondary text-xs py-2">
-                  <Filter size={13} />
+                <button onClick={() => setFiltersOpen(v => !v)} className="btn-secondary text-sm">
+                  <Filter size={14} />
                   Filtros{statusFilter ? ' (1)' : ''}
                 </button>
                 {filtersOpen && (
@@ -1056,7 +1109,107 @@ export default function ModulosWorkspace({ course }) {
                   </>
                 )}
               </div>
+            </>
+          )}
+          {canManageModules && (
+            <button onClick={() => { setEditingModule(null); setNewModuleOpen(true) }} className="btn-secondary text-sm">
+              <Plus size={14} />
+              Novo módulo
+            </button>
+          )}
+          {canEditContent && (
+            <button
+              onClick={() => openNewContentFor(sortedModules[0]?.id || '')}
+              disabled={modules.length === 0}
+              title={modules.length === 0 ? 'Crie um módulo antes de adicionar conteúdo.' : undefined}
+              className="btn-primary text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Plus size={14} />
+              Novo conteúdo
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Equipe envolvida + Progresso geral */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="card p-5">
+          <h3 className="text-sm font-semibold text-gray-800 mb-4">Equipe envolvida</h3>
+          <div className="flex items-center gap-5 flex-wrap">
+            <TeamMember
+              label="Coordenador"
+              name={course.coordinatorName}
+              avatar={course.coordinatorAvatar}
+              hint="Nenhum coordenador vinculado"
+            />
+            <TeamMember
+              label="Supervisor"
+              name={course.supervisorName}
+              avatar={course.supervisorAvatar}
+              hint="Nenhum supervisor vinculado"
+            />
+            <TeamMember
+              label="Revisor"
+              name={course.revisors?.[0]?.name}
+              avatar={course.revisors?.[0]?.avatar}
+              extra={Math.max(0, (course.revisors?.length || 0) - 1)}
+              hint="Nenhum revisor vinculado"
+            />
+            <TeamMember label="TI" icon={Monitor} hint="Publicação no AVA" />
+
+            <div className="flex items-center gap-3 pl-5 border-l border-gray-100">
+              <div className="w-11 h-11 rounded-xl bg-gray-100 text-gray-500 flex items-center justify-center flex-shrink-0">
+                <Users size={20} />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">Professores no curso</div>
+                <div className="text-xl font-bold text-gray-900 leading-tight">{course.producers?.length || 0}</div>
+              </div>
             </div>
+          </div>
+        </div>
+
+        <div className="card p-5">
+          <h3 className="text-sm font-semibold text-gray-800 mb-4">Progresso geral</h3>
+          <div className="flex items-center gap-6 flex-wrap">
+            <ProgressDonut segments={progress.segments} total={progress.total} percent={progress.percent} />
+            <div className="flex-1 min-w-[190px] space-y-2">
+              {progress.segments.map(segment => (
+                <div key={segment.key} className="flex items-center gap-2 text-xs">
+                  <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: segment.color }} />
+                  <span className="flex-1 text-gray-600">{segment.label}</span>
+                  <span className="font-semibold text-gray-800">{segment.value}</span>
+                  <span className="text-gray-400 w-10 text-right">({segment.pct}%)</span>
+                </div>
+              ))}
+              <div className="pt-2 mt-1 border-t border-gray-100 text-xs text-gray-500">
+                {progress.concluidos} de {progress.total} conteúdo{progress.total !== 1 ? 's' : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {modules.length === 0 ? (
+        <div className="card flex flex-col items-center justify-center text-center py-14 gap-3">
+          <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center">
+            <Plus size={22} />
+          </div>
+          <div>
+            <p className="font-semibold text-gray-800">Nenhum módulo cadastrado ainda</p>
+            <p className="text-sm text-gray-500 mt-1">Crie o primeiro módulo para começar a estruturar o curso.</p>
+          </div>
+          {canManageModules && (
+            <button onClick={() => { setEditingModule(null); setNewModuleOpen(true) }} className="btn-primary mt-2">
+              <Plus size={14} />
+              Criar primeiro módulo
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="card p-0 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h3 className="text-sm font-semibold text-gray-800">Estrutura do curso</h3>
           </div>
 
           <div className="table-container">
