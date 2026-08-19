@@ -42,7 +42,7 @@ const STRUCTURE_COLUMNS = [
   { key: 'supervisor', label: 'Supervisor(a)', width: 'w-32' },
   { key: 'revisor', label: 'Revisor(a)', width: 'w-32' },
   { key: 'coordenador', label: 'Coordenador(a)', width: 'w-32' },
-  { key: 'ti', label: 'TI', width: 'w-32' },
+  { key: 'ti', label: 'Status AVA', width: 'w-36' },
   { key: 'acoes', label: 'Ações', fixed: true, width: 'w-24' },
 ]
 
@@ -70,6 +70,7 @@ const EMPTY_CONTENT_FORM = {
   type: '',
   theme: '',
   objective: '',
+  description: '',
   duration: '',
   deliveryDate: '',
   responsibles: [],
@@ -134,6 +135,7 @@ function ContentModal({ open, onClose, onSave, saving, modules, defaultModuleId,
         type: Array.isArray(editing.type) ? (editing.type[0] || '') : (editing.type || ''),
         theme: editing.theme || '',
         objective: editing.objective || '',
+        description: editing.description || '',
         duration: editing.duration || '',
         deliveryDate: editing.deliveryDate || '',
         responsibles: getMaterialResponsibles(editing),
@@ -241,6 +243,20 @@ function ContentModal({ open, onClose, onSave, saving, modules, defaultModuleId,
         <div className="col-span-2">
           <label className="block text-xs font-medium text-gray-600 mb-1.5">Objetivo de aprendizagem</label>
           <textarea value={form.objective} onChange={e => setForm(f => ({ ...f, objective: e.target.value }))} className="input-field resize-none" rows={2} placeholder="Descreva o objetivo de aprendizagem..." />
+        </div>
+
+        <div className="col-span-2">
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">
+            Descrição do conteúdo
+            <span className="font-normal text-gray-400"> — texto usado na publicação do AVA</span>
+          </label>
+          <textarea
+            value={form.description}
+            onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+            className="input-field resize-none"
+            rows={3}
+            placeholder="Escreva a descrição que aparecerá para o cursista no AVA..."
+          />
         </div>
 
         <div>
@@ -586,8 +602,9 @@ export default function ModulosWorkspace({ course }) {
   const isRevisor = user?.role === 'revisor'
   const isCourseRevisor = isRevisor && course.revisors?.some(r => Number(r.id) === Number(user.id))
   const hasRevisors = (course.revisors?.length || 0) > 0
-  // TI e o unico perfil que marca um conteudo como publicado no AVA (mesma regra do backend).
+  // Status no AVA: so TI e administrador editam (mesma regra do backend).
   const isTI = user?.role === 'ti'
+  const canSetStatusAva = isTI || isAdmin
   const canManageModules = isAdmin || isProducer || isCourseSupervisor || isCourseCoordinator
   // Admin e coordenacao do curso podem sempre alterar qualquer status de qualquer perfil,
   // sem passar pelo gate sequencial (professor -> supervisor -> coordenacao).
@@ -1519,7 +1536,7 @@ export default function ModulosWorkspace({ course }) {
                             )}
                             {isColumnVisible('ti') && (
                               <td className="table-cell px-2">
-                                {isTI ? (
+                                {canSetStatusAva ? (
                                   <select
                                     value={mat.published ? 'publicado' : 'nao_publicado'}
                                     onChange={e => handleTogglePublished(mat, e.target.value === 'publicado')}
@@ -1614,7 +1631,8 @@ export default function ModulosWorkspace({ course }) {
           `Ordem: ${orderLabel}`,
           `Título: ${viewContent.theme || '—'}`,
           `Tipo: ${typeLabel || '—'}`,
-          `Descrição/Objetivo: ${viewContent.objective || '—'}`,
+          `Descrição: ${viewContent.description || '—'}`,
+          `Objetivo: ${viewContent.objective || '—'}`,
           `Duração: ${viewContent.duration || '—'}`,
           `Link: ${viewContent.originalLink || '—'}`,
           `Link final: ${viewContent.adjustedLink || '—'}`,
@@ -1631,7 +1649,7 @@ export default function ModulosWorkspace({ course }) {
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  {isTI && (
+                  {canSetStatusAva && (
                     <button
                       onClick={() => {
                         const next = !viewContent.published
@@ -1660,7 +1678,8 @@ export default function ModulosWorkspace({ course }) {
                 <CopyField label="Módulo" value={viewModule?.title} />
                 <CopyField label="Ordem" value={orderLabel} />
                 <CopyField label="Tipo" value={typeLabel} />
-                <CopyField label="Descrição / Objetivo" value={viewContent.objective} full />
+                <CopyField label="Descrição" value={viewContent.description} full />
+                <CopyField label="Objetivo" value={viewContent.objective} full />
                 <CopyField label="Link" value={viewContent.originalLink} mono />
                 <CopyField label="Link final" value={viewContent.adjustedLink} mono />
                 <CopyField label="Duração" value={viewContent.duration} />

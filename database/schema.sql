@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS materials (
   module_id INT DEFAULT NULL,
   theme VARCHAR(255) NOT NULL,
   objective TEXT,
+  description TEXT DEFAULT NULL,
   type ENUM('Aula','Atividade','videoaula','apresentacao','atividade_escrita','material_complementar','atividade_interativa','outro','ebook','avaliacao_final','atividade_objetiva','pdf') NOT NULL DEFAULT 'videoaula',
   duration VARCHAR(20) DEFAULT NULL,
   responsible_id INT DEFAULT NULL,

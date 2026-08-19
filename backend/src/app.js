@@ -117,6 +117,12 @@ function isTI(user) {
   return user?.role === 'ti'
 }
 
+// Status no AVA (do curso e de cada conteudo). O perfil vem do banco, e nao do token JWT,
+// para que uma troca de perfil passe a valer na hora, sem exigir novo login.
+function canSetStatusAva(user) {
+  return isTI(user) || user?.role === 'administrador'
+}
+
 function canManageProduction(user) {
   return ['administrador', 'supervisor', 'professor'].includes(user?.role) || isCoordinator(user)
 }
@@ -377,6 +383,8 @@ async function materialPayload(body, actor, currentMaterial) {
     moduleId,
     theme: body.theme ?? currentMaterial?.theme ?? '',
     objective: body.objective ?? currentMaterial?.objective ?? '',
+    // Descricao escrita pelo professor produtor, separada do objetivo.
+    description: body.description ?? currentMaterial?.description ?? '',
     type: normalizeMaterialType(body.type, currentMaterial?.type),
     duration: body.duration ?? currentMaterial?.duration ?? '',
     deliveryDate: body.deliveryDate ?? currentMaterial?.deliveryDate ?? null,
@@ -740,7 +748,12 @@ app.put('/api/courses/:id', auth, async (req, res) => {
   }
 })
 
-app.patch('/api/courses/:id/status-ava', auth, requireRole('ti'), async (req, res) => {
+app.patch('/api/courses/:id/status-ava', auth, async (req, res) => {
+  const actor = await store.getUserById(req.user.id)
+  if (!canSetStatusAva(actor)) {
+    return res.status(403).json({ message: 'Apenas TI e administradores podem alterar o status no AVA.' })
+  }
+
   const current = await store.getCourseById(req.params.id)
   if (!current) return res.status(404).json({ message: 'Curso nao encontrado.' })
 
@@ -1018,9 +1031,13 @@ app.delete('/api/materials/:id', auth, async (req, res) => {
   res.json({ id: Number(req.params.id) })
 })
 
-// Marcacao de "Publicado" (no AVA) por conteudo: exclusiva do perfil TI, igual ao
-// status no AVA do curso -- nem administrador altera este campo.
-app.patch('/api/materials/:id/published', auth, requireRole('ti'), async (req, res) => {
+// Status no AVA de cada conteudo: so TI e administrador alteram.
+app.patch('/api/materials/:id/published', auth, async (req, res) => {
+  const actor = await store.getUserById(req.user.id)
+  if (!canSetStatusAva(actor)) {
+    return res.status(403).json({ message: 'Apenas TI e administradores podem alterar o status no AVA.' })
+  }
+
   const current = await store.getMaterialById(req.params.id)
   if (!current) return res.status(404).json({ message: 'Material nao encontrado.' })
 

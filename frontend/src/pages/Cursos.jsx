@@ -196,7 +196,7 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
   const ementaApproved = ementaStatus?.coordinatorStatus === 'valido'
   const alert = deadlineBadge(course.deadline)
   const [statusAvaSaving, setStatusAvaSaving] = useState(false)
-  const canEditStatusAva = user?.role === 'ti'
+  const canEditStatusAva = user?.role === 'ti' || user?.role === 'administrador'
 
   const handleStatusAvaChange = async (event) => {
     const value = event.target.value

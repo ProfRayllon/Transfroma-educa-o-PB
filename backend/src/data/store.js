@@ -44,6 +44,7 @@ function mapMaterialRow(row) {
     moduleId: row.module_id || null,
     theme: row.theme,
     objective: row.objective,
+    description: row.description ?? '',
     type: parseTypeField(row.type),
     duration: row.duration,
     responsibleId: row.responsible_id,
@@ -594,13 +595,19 @@ async function ensureMysqlSchema() {
     await pool.execute('CREATE INDEX idx_materials_module_id ON materials(module_id)')
   }
 
-  const [publishedMatColumns] = await pool.execute(
+  const [extraMatColumns] = await pool.execute(
     `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'materials' AND COLUMN_NAME = 'published'`
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'materials'
+       AND COLUMN_NAME IN ('published', 'description')`
   )
+  const existingExtraMatColumns = new Set(extraMatColumns.map((c) => c.COLUMN_NAME))
 
-  if (publishedMatColumns.length === 0) {
+  if (!existingExtraMatColumns.has('published')) {
     await pool.execute('ALTER TABLE materials ADD COLUMN published TINYINT(1) NOT NULL DEFAULT 0')
+  }
+
+  if (!existingExtraMatColumns.has('description')) {
+    await pool.execute('ALTER TABLE materials ADD COLUMN description TEXT DEFAULT NULL AFTER objective')
   }
 
   await pool.execute(`
@@ -1457,8 +1464,8 @@ async function createMaterial(payload) {
 
   const [result] = await pool.execute(
     `INSERT INTO materials
-     (course, course_id, session, module, module_id, theme, objective, type, duration, responsible_id, responsible_name, responsible_role, responsibles, status, delivery_date, original_link, adjusted_link, review_status, supervisor_status, coordinator_status, revisor_id, revisor_name, revisor_status, review_notes, published, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (course, course_id, session, module, module_id, theme, objective, description, type, duration, responsible_id, responsible_name, responsible_role, responsibles, status, delivery_date, original_link, adjusted_link, review_status, supervisor_status, coordinator_status, revisor_id, revisor_name, revisor_status, review_notes, published, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       payload.course,
       payload.courseId || null,
@@ -1467,6 +1474,7 @@ async function createMaterial(payload) {
       payload.moduleId || null,
       payload.theme,
       payload.objective || null,
+      payload.description || null,
       payload.type || null,
       payload.duration || null,
       payload.responsibleId || null,
@@ -1502,7 +1510,7 @@ async function updateMaterial(id, payload) {
 
   await pool.execute(
     `UPDATE materials
-     SET course = ?, course_id = ?, session = ?, module = ?, module_id = ?, theme = ?, objective = ?, type = ?, duration = ?,
+     SET course = ?, course_id = ?, session = ?, module = ?, module_id = ?, theme = ?, objective = ?, description = ?, type = ?, duration = ?,
          responsible_id = ?, responsible_name = ?, responsible_role = ?, responsibles = ?, status = ?,
          delivery_date = ?, original_link = ?, adjusted_link = ?, review_status = ?,
          supervisor_status = ?, coordinator_status = ?, revisor_id = ?, revisor_name = ?, revisor_status = ?, review_notes = ?,
@@ -1516,6 +1524,7 @@ async function updateMaterial(id, payload) {
       payload.moduleId || null,
       payload.theme,
       payload.objective || null,
+      payload.description || null,
       payload.type || null,
       payload.duration || null,
       payload.responsibleId || null,
