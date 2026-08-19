@@ -320,8 +320,11 @@ async function createPool() {
 }
 
 async function ensureMysqlSchema() {
+  // ATENCAO: esta lista precisa conter TODOS os perfis existentes. Como o ALTER roda a
+  // cada boot, esquecer um perfil ja gravado no banco derruba a API no start
+  // (ER_WARN_DATA_TRUNCATED ao tentar encolher o ENUM).
   await pool.execute(
-    "ALTER TABLE users MODIFY role ENUM('administrador','coordenador','supervisor','professor','tutor','tecnico','gestao','revisor','supervisor_tutoria') NOT NULL DEFAULT 'professor'"
+    "ALTER TABLE users MODIFY role ENUM('administrador','coordenador','supervisor','professor','tutor','tecnico','gestao','revisor','supervisor_tutoria','ti') NOT NULL DEFAULT 'professor'"
   )
 
   const [userExtraColumns] = await pool.execute(
@@ -374,7 +377,7 @@ async function ensureMysqlSchema() {
      FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE()
        AND TABLE_NAME = 'courses'
-       AND COLUMN_NAME IN ('supervisor_id', 'coordinator_id')`
+       AND COLUMN_NAME IN ('supervisor_id', 'coordinator_id', 'status_ava')`
   )
   const existingCourseColumns = new Set(courseColumns.map((column) => column.COLUMN_NAME))
 
@@ -384,6 +387,10 @@ async function ensureMysqlSchema() {
 
   if (!existingCourseColumns.has('coordinator_id')) {
     await pool.execute('ALTER TABLE courses ADD COLUMN coordinator_id INT DEFAULT NULL AFTER supervisor_name')
+  }
+
+  if (!existingCourseColumns.has('status_ava')) {
+    await pool.execute("ALTER TABLE courses ADD COLUMN status_ava ENUM('nao_publicado','publicado') NOT NULL DEFAULT 'nao_publicado'")
   }
 
   await pool.execute(`
@@ -585,6 +592,15 @@ async function ensureMysqlSchema() {
   if (moduleMatColumns.length === 0) {
     await pool.execute('ALTER TABLE materials ADD COLUMN module_id INT DEFAULT NULL AFTER module')
     await pool.execute('CREATE INDEX idx_materials_module_id ON materials(module_id)')
+  }
+
+  const [publishedMatColumns] = await pool.execute(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'materials' AND COLUMN_NAME = 'published'`
+  )
+
+  if (publishedMatColumns.length === 0) {
+    await pool.execute('ALTER TABLE materials ADD COLUMN published TINYINT(1) NOT NULL DEFAULT 0')
   }
 
   await pool.execute(`
