@@ -12,6 +12,10 @@ const COLUNAS = [
 
 const MAX_LINHAS = 20000
 
+// Lotes de 500 mantem cada consulta pequena o bastante para a VPS (que tem pouca
+// RAM livre) e reduzem 13 mil idas ao banco para ~26.
+const TAMANHO_DO_LOTE = 500
+
 /**
  * Leitor de CSV com ponto e virgula, tolerante a campos entre aspas.
  * Escrito a mao para nao adicionar dependencia por um formato simples e fixo.
@@ -133,10 +137,11 @@ async function importar({ conteudo, actor, req }) {
     const conexao = await getPool().getConnection()
     try {
       await conexao.beginTransaction()
-      for (const registro of validos) {
-        const resultado = await repo.upsertFromImport(registro, conexao)
-        if (resultado === 'inserido') inseridos += 1
-        else atualizados += 1
+      for (let i = 0; i < validos.length; i += TAMANHO_DO_LOTE) {
+        const lote = validos.slice(i, i + TAMANHO_DO_LOTE)
+        const resultado = await repo.upsertLoteFromImport(lote, conexao)
+        inseridos += resultado.inseridos
+        atualizados += resultado.atualizados
       }
       await conexao.commit()
     } catch (error) {

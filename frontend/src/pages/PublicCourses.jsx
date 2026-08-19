@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ArrowRight, BookOpen } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
 import Modal from '../components/ui/Modal'
 
-const formUrl = 'https://forms.gle/uYrVTURKxzq6mcRV6'
+// A inscricao deixou de ser um formulario externo do Google: agora acontece na
+// Area do Cursista, que exige login por CPF antes de aceitar qualquer inscricao.
+const inscricaoUrl = '/area-do-cursista'
 const avaUrl = 'https://pb.ava.rieh.nees.ufal.br/login/index.php'
 
 const FILTERS = [
@@ -173,14 +176,12 @@ export default function PublicCourses() {
                     Saber mais
                   </button>
                   {course.available ? (
-                    <a
-                      href={formUrl}
-                      target="_blank"
-                      rel="noreferrer"
+                    <Link
+                      to={inscricaoUrl}
                       className="inline-flex items-center gap-1.5 rounded-full bg-[#6f35b5] px-4 py-2 text-xs font-black text-white transition hover:bg-[#7e22ce]"
                     >
                       Inscrever-se <ArrowRight size={13} />
-                    </a>
+                    </Link>
                   ) : (
                     <span className="inline-flex items-center rounded-full border border-[#e9d5ff] bg-[#faf5ff] px-4 py-2 text-xs font-black text-[#c4a7e7]">
                       Em breve
@@ -213,9 +214,9 @@ export default function PublicCourses() {
               Fechar
             </button>
             {selectedCourse?.available && (
-              <a href={formUrl} target="_blank" rel="noreferrer" className="btn-primary">
+              <Link to={inscricaoUrl} className="btn-primary">
                 Inscrever-se
-              </a>
+              </Link>
             )}
           </>
         )}

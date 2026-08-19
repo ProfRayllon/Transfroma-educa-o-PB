@@ -111,16 +111,48 @@ async function updateContact(id, { email, phone }) {
 }
 
 /**
- * Insere ou atualiza um cursista da base oficial.
+ * Insere ou atualiza um lote de cursistas da base oficial.
+ *
+ * Em lote de proposito: com ~13 mil registros, um INSERT por linha seriam 13 mil
+ * idas ao banco (dezenas de segundos, estourando o timeout do proxy e segurando
+ * uma transacao longa). Em lotes de 500, sao ~26 consultas.
+ *
  * O UPDATE nunca toca em password_hash: reimportar a base nao derruba o acesso
  * de quem ja definiu a propria senha.
  */
-async function upsertFromImport(record, connection) {
+async function upsertLoteFromImport(records, connection) {
   const runner = connection || getPool()
-  const [result] = await runner.execute(
+  if (records.length === 0) return { inseridos: 0, atualizados: 0 }
+
+  // O upsert em lote nao permite saber, linha a linha, o que foi insercao ou
+  // atualizacao (affectedRows vem somado), entao conferimos antes quais CPFs ja existem.
+  const cpfs = records.map((record) => record.cpf)
+  const [existentes] = await runner.query('SELECT cpf FROM cursistas WHERE cpf IN (?)', [cpfs])
+  const jaExistiam = new Set(existentes.map((row) => row.cpf))
+
+  const valores = []
+  const placeholders = records
+    .map((record) => {
+      valores.push(
+        record.cpf,
+        record.name,
+        record.birthDate || null,
+        record.email || null,
+        record.phone || null,
+        record.registration || null,
+        record.position || null,
+        record.school || null,
+        record.municipality || null,
+        record.regional || null
+      )
+      return '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    })
+    .join(', ')
+
+  await runner.query(
     `INSERT INTO cursistas
        (cpf, name, birth_date, email, phone, registration, position, school, municipality, regional)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES ${placeholders}
      ON DUPLICATE KEY UPDATE
        name = VALUES(name),
        birth_date = VALUES(birth_date),
@@ -131,21 +163,13 @@ async function upsertFromImport(record, connection) {
        school = VALUES(school),
        municipality = VALUES(municipality),
        regional = VALUES(regional)`,
-    [
-      record.cpf,
-      record.name,
-      record.birthDate || null,
-      record.email || null,
-      record.phone || null,
-      record.registration || null,
-      record.position || null,
-      record.school || null,
-      record.municipality || null,
-      record.regional || null,
-    ]
+    valores
   )
-  // affectedRows: 1 = inserido, 2 = atualizado (comportamento do MySQL no upsert)
-  return result.affectedRows === 1 ? 'inserido' : 'atualizado'
+
+  return {
+    inseridos: records.length - jaExistiam.size,
+    atualizados: jaExistiam.size,
+  }
 }
 
 async function list({ search = '', status = '', page = 1, perPage = 50 }) {
@@ -195,6 +219,6 @@ module.exports = {
   registerSuccessfulLogin,
   registerFailedLogin,
   updateContact,
-  upsertFromImport,
+  upsertLoteFromImport,
   list,
 }

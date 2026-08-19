@@ -16,6 +16,7 @@ import Frequencia from './pages/Frequencia'
 import Acessos from './pages/Acessos'
 import Notificacoes from './pages/Notificacoes'
 import Perfil from './pages/Perfil'
+import CursistaRoutes from './modules/cursista/CursistaRoutes'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -53,6 +54,9 @@ export default function App() {
           <Route path="/inscricoes" element={<Navigate to="/login" replace />} />
           <Route path="/guia" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+          {/* Area do cursista: publica e com sessao propria, fora dos guards da
+              equipe interna -- cursista nao e usuario do sistema administrativo. */}
+          <Route path="/area-do-cursista/*" element={<CursistaRoutes />} />
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route path="painel" element={<Painel />} />
             <Route path="cursos" element={<Cursos />} />
