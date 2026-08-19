@@ -26,15 +26,29 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
   // Limites de tentativa
   // ---------------------------------------------------------------------------
 
-  // Freio por IP + CPF. Combinado com o bloqueio por conta (no banco), fecha tanto
-  // a tentativa de forca bruta numa conta quanto a varredura da base de CPFs.
-  const limiteLogin = rateLimit({
+  // Sao DOIS freios empilhados, e cada um cobre um ataque diferente.
+  //
+  // Por IP + CPF: forca bruta de senha contra uma conta especifica.
+  const limiteLoginPorConta = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 10,
     standardHeaders: true,
     legacyHeaders: false,
     message: { message: 'Muitas tentativas de acesso. Tente novamente em alguns minutos.' },
     keyGenerator: (req) => `${ipKeyGenerator(req.ip)}:${normalizeCpf(req.body?.cpf)}`,
+  })
+
+  // Por IP apenas: varredura da base de CPFs. O freio acima sozinho NAO cobre este
+  // caso -- como o CPF entra na chave, cada CPF novo ganharia um orcamento novo e o
+  // limite nunca dispararia numa varredura. Como a senha inicial e o proprio CPF,
+  // cada acerto e uma tomada de conta, entao este e o freio que realmente segura.
+  const limiteLoginPorOrigem = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 40,
+    standardHeaders: false,
+    legacyHeaders: false,
+    message: { message: 'Muitas tentativas de acesso. Tente novamente em alguns minutos.' },
+    keyGenerator: (req) => ipKeyGenerator(req.ip),
   })
 
   // A importacao carrega ~13 mil registros; poucas execucoes por hora bastam e
@@ -108,7 +122,7 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
   // Area do cursista
   // ---------------------------------------------------------------------------
 
-  router.post('/auth/login', limiteLogin, tratar(async (req, res) => {
+  router.post('/auth/login', limiteLoginPorOrigem, limiteLoginPorConta, tratar(async (req, res) => {
     const resultado = await auth.login({ cpf: req.body?.cpf, senha: req.body?.senha, req })
     res.json(resultado)
   }))

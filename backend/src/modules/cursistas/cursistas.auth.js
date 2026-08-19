@@ -77,13 +77,11 @@ async function login({ cpf, senha, req }) {
   const conta = await repo.findByCpfForAuth(cpfNormalizado)
   if (!conta) throw credenciaisInvalidas()
 
-  if (conta.status !== 'ativo') {
-    throw erro(403, 'Cadastro inativo. Procure a coordenacao do programa.')
-  }
-
-  if (conta.locked_until && new Date(conta.locked_until) > new Date()) {
-    throw erro(429, 'Muitas tentativas. Tente novamente em alguns minutos.')
-  }
+  // Conta bloqueada e conta inativa so podem ser reveladas DEPOIS que a senha
+  // confere. Respondidas antes, elas viram um oraculo: so existem para CPF que
+  // esta na base, e qualquer resposta diferente do 401 generico confirma que
+  // aquela pessoa e cursista do programa (dado pessoal, LGPD).
+  const bloqueada = Boolean(conta.locked_until) && new Date(conta.locked_until) > new Date()
 
   const primeiroAcesso = !conta.password_hash
   const senhaConfere = primeiroAcesso
@@ -105,6 +103,15 @@ async function login({ cpf, senha, req }) {
     throw credenciaisInvalidas()
   }
 
+  // A partir daqui a senha confere, entao o titular provou ser dono da conta e
+  // informar o motivo real da recusa nao entrega nada a um atacante.
+  if (bloqueada) {
+    throw erro(429, 'Muitas tentativas. Tente novamente em alguns minutos.')
+  }
+  if (conta.status !== 'ativo') {
+    throw erro(403, 'Cadastro inativo. Procure a coordenacao do programa.')
+  }
+
   await repo.registerSuccessfulLogin(conta.id)
   await registrar({
     actorType: 'cursista',
@@ -119,7 +126,10 @@ async function login({ cpf, senha, req }) {
     // Com a senha ainda nao definida, o front leva o cursista direto para a troca
     // e o middleware bloqueia qualquer outra rota ate ele concluir.
     precisaDefinirSenha: primeiroAcesso,
-    cursista: await repo.findById(conta.id, { fullCpf: true }),
+    // No primeiro acesso a senha ainda e o CPF, entao os dados pessoais nao saem
+    // daqui: seriam entregues a quem apenas adivinhou o CPF. O cliente busca o
+    // cadastro em /me depois da troca, que e onde exigirSenhaDefinida ja protege.
+    cursista: primeiroAcesso ? null : await repo.findById(conta.id, { fullCpf: true }),
   }
 }
 

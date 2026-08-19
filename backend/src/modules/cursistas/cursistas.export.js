@@ -24,8 +24,19 @@ const COLUNAS_AVA = [
   { titulo: 'data_inscricao', valor: (r) => (r.enrolled_at ? new Date(r.enrolled_at).toISOString().slice(0, 10) : '') },
 ]
 
+/**
+ * Escapa o valor para CSV e neutraliza formula de planilha.
+ *
+ * O `'` inicial e o que impede o Excel/LibreOffice de interpretar a celula como
+ * formula. Sem ele, um cursista pode gravar `=...` no proprio e-mail e a formula
+ * executa quando o administrador abre a planilha -- que e justamente o arquivo
+ * com o CPF de todos os inscritos, na coluna ao lado.
+ * Envolver em aspas NAO resolve: o leitor da planilha remove as aspas antes de
+ * avaliar o conteudo da celula.
+ */
 function escaparCsv(valor) {
-  const texto = String(valor ?? '')
+  let texto = String(valor ?? '')
+  if (/^[=+\-@\t\r]/.test(texto)) texto = `'${texto}`
   return /[";\r\n]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto
 }
 
