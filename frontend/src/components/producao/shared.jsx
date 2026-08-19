@@ -1,7 +1,8 @@
+import { useState } from 'react'
 import {
   FileText, ExternalLink, Link2, Video, Presentation, ClipboardList,
   Paperclip, MousePointerClick, Award, ListChecks, HelpCircle, BookOpen, File,
-  MessageSquare, Podcast,
+  MessageSquare, Podcast, Copy, Check,
 } from 'lucide-react'
 
 export const PROFESSOR_STATUS_OPTIONS = [
@@ -136,6 +137,106 @@ export function LinkChip({ url }) {
     <div className="flex items-center gap-1.5 min-w-0">
       <Link2 size={13} className="text-gray-400 flex-shrink-0" />
       <span className="text-xs text-gray-500 truncate max-w-[120px]">{url}</span>
+    </div>
+  )
+}
+
+// Versao compacta do LinkChip: so o icone clicavel, usada nas colunas Link e Link final
+// da tabela de producao para nao consumir largura com o dominio.
+export function LinkIconOnly({ url, label = 'Link' }) {
+  if (!url) return <span className="text-gray-300 text-xs">—</span>
+  const isHttp = url.startsWith('http')
+  let hint = url
+  if (isHttp) {
+    try { hint = new URL(url).hostname.replace('www.', '') } catch {}
+  }
+  const content = (
+    <>
+      <div className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+        isHttp ? 'bg-brand-50 text-brand-600 group-hover:bg-brand-100' : 'bg-gray-100 text-gray-400'
+      }`}>
+        {isHttp ? <ExternalLink size={13} /> : <Link2 size={13} />}
+      </div>
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none">
+        <div className="bg-gray-800 text-white text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-lg max-w-xs truncate">
+          <span className="font-medium">{label}:</span> {hint}
+        </div>
+        <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+      </div>
+    </>
+  )
+
+  if (!isHttp) return <div className="relative group inline-flex">{content}</div>
+
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className="relative group inline-flex" onClick={e => e.stopPropagation()}>
+      {content}
+    </a>
+  )
+}
+
+export async function copyToClipboard(text) {
+  const value = String(text ?? '')
+  try {
+    await navigator.clipboard.writeText(value)
+    return true
+  } catch {
+    // Fallback para navegadores/contextos sem Clipboard API.
+    try {
+      const area = document.createElement('textarea')
+      area.value = value
+      area.style.position = 'fixed'
+      area.style.opacity = '0'
+      document.body.appendChild(area)
+      area.select()
+      const ok = document.execCommand('copy')
+      document.body.removeChild(area)
+      return ok
+    } catch {
+      return false
+    }
+  }
+}
+
+export function CopyButton({ value, title = 'Copiar', className = '' }) {
+  const [copied, setCopied] = useState(false)
+  const disabled = !value
+
+  const handleCopy = async () => {
+    if (disabled) return
+    const ok = await copyToClipboard(value)
+    if (!ok) return
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1600)
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      disabled={disabled}
+      title={disabled ? 'Nada para copiar' : title}
+      className={`p-1.5 rounded-lg transition-colors flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed ${
+        copied ? 'text-green-600 bg-green-50' : 'text-gray-400 hover:text-brand-700 hover:bg-brand-50'
+      } ${className}`}
+    >
+      {copied ? <Check size={14} /> : <Copy size={14} />}
+    </button>
+  )
+}
+
+// Linha "rotulo + valor + copiar" do modal de publicacao no AVA (TI).
+export function CopyField({ label, value, mono = false, full = false }) {
+  const display = value === null || value === undefined || value === '' ? '—' : String(value)
+  return (
+    <div className={full ? 'col-span-2' : ''}>
+      <div className="text-xs font-medium text-gray-500 mb-1">{label}</div>
+      <div className="flex items-start gap-1 bg-gray-50 border border-gray-200 rounded-lg pl-3 pr-1 py-1.5">
+        <span className={`flex-1 text-sm text-gray-800 break-words min-w-0 ${mono ? 'font-mono text-xs' : ''}`}>
+          {display}
+        </span>
+        <CopyButton value={value} title={`Copiar ${label.toLowerCase()}`} />
+      </div>
     </div>
   )
 }

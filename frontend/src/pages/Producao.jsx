@@ -508,7 +508,8 @@ export default function Producao() {
   const isCoordinator = user?.role === 'coordenador' || (user?.function || '').toLowerCase().includes('coordenador')
   const canApprove = can('approve_material') || user?.role === 'administrador' || isCoordinator
   const isAdmin = user?.role === 'administrador'
-  const canViewOverview = isAdmin || isCoordinator || user?.role === 'supervisor'
+  // TI precisa varrer todos os cursos para publicar os conteudos no AVA.
+  const canViewOverview = isAdmin || isCoordinator || user?.role === 'supervisor' || user?.role === 'ti'
   const courseOptions = ['Todos', ...courses.map(c => c.name)]
   const supervisorOptions = ['Todos', ...new Set(courses.map(c => c.supervisorName).filter(Boolean))]
   const coordinatorOptions = ['Todos', ...new Set(courses.map(c => c.coordinatorName).filter(Boolean))]

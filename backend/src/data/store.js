@@ -61,6 +61,7 @@ function mapMaterialRow(row) {
     revisorName: row.revisor_name || null,
     revisorStatus: row.revisor_status ?? null,
     reviewNotes: row.review_notes,
+    published: Boolean(row.published),
     createdAt: formatDate(row.created_at),
   }
 }
@@ -1440,8 +1441,8 @@ async function createMaterial(payload) {
 
   const [result] = await pool.execute(
     `INSERT INTO materials
-     (course, course_id, session, module, module_id, theme, objective, type, duration, responsible_id, responsible_name, responsible_role, responsibles, status, delivery_date, original_link, adjusted_link, review_status, supervisor_status, coordinator_status, revisor_id, revisor_name, revisor_status, review_notes, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (course, course_id, session, module, module_id, theme, objective, type, duration, responsible_id, responsible_name, responsible_role, responsibles, status, delivery_date, original_link, adjusted_link, review_status, supervisor_status, coordinator_status, revisor_id, revisor_name, revisor_status, review_notes, published, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       payload.course,
       payload.courseId || null,
@@ -1467,6 +1468,7 @@ async function createMaterial(payload) {
       payload.revisorName || null,
       payload.revisorStatus ?? null,
       payload.reviewNotes || null,
+      payload.published ? 1 : 0,
       new Date().toISOString().slice(0, 10),
     ]
   )
@@ -1487,7 +1489,8 @@ async function updateMaterial(id, payload) {
      SET course = ?, course_id = ?, session = ?, module = ?, module_id = ?, theme = ?, objective = ?, type = ?, duration = ?,
          responsible_id = ?, responsible_name = ?, responsible_role = ?, responsibles = ?, status = ?,
          delivery_date = ?, original_link = ?, adjusted_link = ?, review_status = ?,
-         supervisor_status = ?, coordinator_status = ?, revisor_id = ?, revisor_name = ?, revisor_status = ?, review_notes = ?
+         supervisor_status = ?, coordinator_status = ?, revisor_id = ?, revisor_name = ?, revisor_status = ?, review_notes = ?,
+         published = ?
      WHERE id = ?`,
     [
       payload.course,
@@ -1514,10 +1517,25 @@ async function updateMaterial(id, payload) {
       payload.revisorName || null,
       payload.revisorStatus ?? null,
       payload.reviewNotes || null,
+      payload.published ? 1 : 0,
       id,
     ]
   )
 
+  return getMaterialById(id)
+}
+
+// Marcacao de publicado no AVA por conteudo: campo exclusivo do perfil TI, por isso
+// tem funcao propria em vez de passar pelo updateMaterial (que reescreve todas as colunas).
+async function updateMaterialPublished(id, published) {
+  if (!isMysqlMode()) {
+    const idx = materials.findIndex((material) => material.id === Number(id))
+    if (idx === -1) return null
+    materials[idx] = { ...materials[idx], published: Boolean(published) }
+    return materials[idx]
+  }
+
+  await pool.execute('UPDATE materials SET published = ? WHERE id = ?', [published ? 1 : 0, id])
   return getMaterialById(id)
 }
 
@@ -2562,6 +2580,7 @@ module.exports = {
   getMaterialById,
   createMaterial,
   updateMaterial,
+  updateMaterialPublished,
   approveMaterial,
   deleteMaterial,
   listModules,

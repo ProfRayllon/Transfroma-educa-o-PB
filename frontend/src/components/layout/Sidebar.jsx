@@ -19,7 +19,7 @@ const navItems = [
     to: '/producao',
     icon: FileText,
     label: 'Produção',
-    visible: (user) => user?.role === 'administrador' || user?.role === 'supervisor' || user?.role === 'revisor' || isCoordinatorRole(user),
+    visible: (user) => user?.role === 'administrador' || user?.role === 'supervisor' || user?.role === 'revisor' || user?.role === 'ti' || isCoordinatorRole(user),
   },
   {
     to: '/frequencia',

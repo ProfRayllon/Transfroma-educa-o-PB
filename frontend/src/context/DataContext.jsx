@@ -128,6 +128,16 @@ export function DataProvider({ children }) {
     }
   }
 
+  const updateMaterialPublished = async (materialId, published) => {
+    try {
+      const { data } = await api.patch(`/materials/${materialId}/published`, { published })
+      setMaterials((current) => current.map((item) => (item.id === data.id ? data : item)))
+      return data
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error, 'Erro ao atualizar publicacao no AVA.'))
+    }
+  }
+
   const updateMaterialSession = async (materialId, session) => {
     try {
       const { data } = await api.patch(`/materials/${materialId}/session`, { session })
@@ -164,6 +174,7 @@ export function DataProvider({ children }) {
       saveMaterial,
       approveMaterial,
       updateMaterialStatus,
+      updateMaterialPublished,
       updateMaterialSession,
       deleteMaterial,
     }}>

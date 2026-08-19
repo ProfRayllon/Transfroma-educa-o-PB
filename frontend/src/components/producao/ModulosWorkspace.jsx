@@ -1,9 +1,9 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Plus, Search, GripVertical, CheckCircle, Send, Rocket, Trash2, Pencil, Eye,
+  Plus, Search, CheckCircle, Send, Rocket, Trash2, Pencil, Eye,
   Link2, AlertTriangle, ArrowLeft, ChevronDown, ChevronRight, MoreVertical, Filter, Info,
-  Layers, FileText, Clock, X, MessageSquare,
+  Layers, FileText, Clock, X, MessageSquare, ChevronUp, Columns, ClipboardCopy,
 } from 'lucide-react'
 import Badge from '../ui/Badge'
 import StatCard from '../ui/StatCard'
@@ -19,12 +19,34 @@ import {
   REVISOR_STATUS_OPTIONS,
   MATERIAL_TYPE_OPTIONS,
   getMaterialResponsibles,
+  TYPE_LABELS,
   TypeBadge,
   LinkChip,
+  LinkIconOnly,
+  CopyField,
+  copyToClipboard,
   MiniAvatar,
   StackedAvatars,
   InlineStatusSelect,
 } from './shared'
+
+// Colunas da tabela "Estrutura do curso". Ordem/Item/Ações sao estruturais e nao podem
+// ser ocultadas; as demais entram no menu "Colunas" e ficam salvas por usuario.
+const STRUCTURE_COLUMNS = [
+  { key: 'ordem', label: 'Ordem', fixed: true, width: 'w-20' },
+  { key: 'item', label: 'Item', fixed: true, width: '' },
+  { key: 'tipo', label: 'Tipo', width: 'w-14' },
+  { key: 'professor', label: 'Professor(a)', width: 'w-32' },
+  { key: 'link', label: 'Link', width: 'w-16' },
+  { key: 'linkFinal', label: 'Link final', width: 'w-20' },
+  { key: 'supervisor', label: 'Supervisor(a)', width: 'w-32' },
+  { key: 'revisor', label: 'Revisor(a)', width: 'w-32' },
+  { key: 'coordenador', label: 'Coordenador(a)', width: 'w-32' },
+  { key: 'ti', label: 'TI', width: 'w-32' },
+  { key: 'acoes', label: 'Ações', fixed: true, width: 'w-24' },
+]
+
+const HIDDEN_COLUMNS_KEY = 'transforma:producao:hidden-columns'
 
 const MODULE_STATUS_FILTER_OPTIONS = [
   { value: '', label: 'Todos os status' },
@@ -409,7 +431,7 @@ function ModuleModal({ open, onClose, onSave, saving, editing }) {
 export default function ModulosWorkspace({ course }) {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const { materials, materialAssignees, saveMaterial, deleteMaterial, updateMaterialStatus, updateMaterialSession, loadCourses } = useData()
+  const { materials, materialAssignees, saveMaterial, deleteMaterial, updateMaterialStatus, updateMaterialPublished, updateMaterialSession, loadCourses } = useData()
 
   const [modules, setModules] = useState([])
   const [loading, setLoading] = useState(true)
@@ -417,6 +439,16 @@ export default function ModulosWorkspace({ course }) {
   const [structureSearch, setStructureSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [columnsOpen, setColumnsOpen] = useState(false)
+  const [hiddenColumns, setHiddenColumns] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(HIDDEN_COLUMNS_KEY) || '[]')
+      return new Set(Array.isArray(stored) ? stored : [])
+    } catch {
+      return new Set()
+    }
+  })
+  const [reorderingId, setReorderingId] = useState(null)
   const [openMenuKey, setOpenMenuKey] = useState(null)
   const [savingModule, setSavingModule] = useState(false)
   const [busyAction, setBusyAction] = useState(null)
@@ -476,6 +508,8 @@ export default function ModulosWorkspace({ course }) {
   const isRevisor = user?.role === 'revisor'
   const isCourseRevisor = isRevisor && course.revisors?.some(r => Number(r.id) === Number(user.id))
   const hasRevisors = (course.revisors?.length || 0) > 0
+  // TI e o unico perfil que marca um conteudo como publicado no AVA (mesma regra do backend).
+  const isTI = user?.role === 'ti'
   const canManageModules = isAdmin || isProducer || isCourseSupervisor || isCourseCoordinator
   // Admin e coordenacao do curso podem sempre alterar qualquer status de qualquer perfil,
   // sem passar pelo gate sequencial (professor -> supervisor -> coordenacao).
@@ -550,6 +584,29 @@ export default function ModulosWorkspace({ course }) {
       })
       .filter(Boolean)
   }, [sortedModules, contentsByModuleId, structureSearch, statusFilter, hasRevisors])
+
+  const visibleColumns = useMemo(
+    () => STRUCTURE_COLUMNS.filter(col => col.fixed || !hiddenColumns.has(col.key)),
+    [hiddenColumns]
+  )
+  const isColumnVisible = (key) => visibleColumns.some(col => col.key === key)
+  // A linha do modulo funde as colunas do meio: sem isso o titulo (longo e sem quebra)
+  // esticava a coluna Item e abria o vao entre Item e Tipo.
+  const moduleTitleColSpan = Math.max(1, visibleColumns.length - 2)
+
+  const toggleColumn = (key) => {
+    setHiddenColumns(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key); else next.add(key)
+      try { localStorage.setItem(HIDDEN_COLUMNS_KEY, JSON.stringify([...next])) } catch {}
+      return next
+    })
+  }
+
+  const resetColumns = () => {
+    setHiddenColumns(new Set())
+    try { localStorage.removeItem(HIDDEN_COLUMNS_KEY) } catch {}
+  }
 
   const toggleModuleCollapsed = (id) => {
     setCollapsedModuleIds(prev => {
@@ -691,6 +748,69 @@ export default function ModulosWorkspace({ course }) {
       await updateMaterialStatus(mat.id, { [field]: value })
     } catch (err) {
       showToast(getApiErrorMessage(err, 'Erro ao atualizar status.'), 'error')
+    }
+  }
+
+  const handleTogglePublished = async (mat, published) => {
+    try {
+      await updateMaterialPublished(mat.id, published)
+    } catch (err) {
+      showToast(err.message || 'Erro ao atualizar publicação no AVA.', 'error')
+    }
+  }
+
+  /* ── reordenacao por setas (a numeracao e posicional, entao se atualiza sozinha) ── */
+
+  const moveModule = async (m, direction) => {
+    const idx = sortedModules.findIndex(x => x.id === m.id)
+    const targetIdx = idx + direction
+    if (idx === -1 || targetIdx < 0 || targetIdx >= sortedModules.length) return
+
+    const previous = sortedModules
+    const reordered = [...sortedModules]
+    const [moved] = reordered.splice(idx, 1)
+    reordered.splice(targetIdx, 0, moved)
+    const renumbered = reordered.map((x, i) => ({ ...x, order: i + 1 }))
+
+    setModules(renumbered)
+    setReorderingId(`module-${m.id}`)
+    try {
+      await Promise.all(
+        renumbered
+          .filter(x => (previous.find(o => o.id === x.id)?.order || 0) !== x.order)
+          .map(x => api.patch(`/modules/${x.id}/order`, { order: x.order }))
+      )
+    } catch (err) {
+      setModules(previous)
+      showToast(getApiErrorMessage(err, 'Erro ao reordenar módulos.'), 'error')
+    } finally {
+      setReorderingId(null)
+    }
+  }
+
+  const moveContent = async (mat, direction, siblings) => {
+    const idx = siblings.findIndex(c => c.id === mat.id)
+    const targetIdx = idx + direction
+    if (idx === -1 || targetIdx < 0 || targetIdx >= siblings.length) return
+
+    const reordered = [...siblings]
+    const [moved] = reordered.splice(idx, 1)
+    reordered.splice(targetIdx, 0, moved)
+
+    setReorderingId(`content-${mat.id}`)
+    try {
+      // Renumera as sessoes na nova ordem (1..N) e envia so o que mudou -- assim a
+      // numeracao nao depende de os valores antigos estarem sequenciais.
+      await Promise.all(
+        reordered
+          .map((c, i) => ({ content: c, session: i + 1 }))
+          .filter(({ content, session }) => Number(content.session) !== session)
+          .map(({ content, session }) => updateMaterialSession(content.id, session))
+      )
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'Erro ao reordenar conteúdos.'), 'error')
+    } finally {
+      setReorderingId(null)
     }
   }
 
@@ -883,6 +1003,43 @@ export default function ModulosWorkspace({ course }) {
                 />
               </div>
               <div className="relative">
+                <button onClick={() => setColumnsOpen(v => !v)} className="btn-secondary text-xs py-2">
+                  <Columns size={13} />
+                  Colunas{hiddenColumns.size ? ` (${hiddenColumns.size} oculta${hiddenColumns.size > 1 ? 's' : ''})` : ''}
+                </button>
+                {columnsOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setColumnsOpen(false)} />
+                    <div className="absolute right-0 top-full mt-1 w-60 bg-white rounded-xl shadow-lg border border-gray-100 p-2 z-50 text-left">
+                      <div className="px-2 py-1.5 text-xs font-semibold text-gray-700">Exibir colunas</div>
+                      <div className="max-h-72 overflow-y-auto">
+                        {STRUCTURE_COLUMNS.filter(col => !col.fixed).map(col => (
+                          <label
+                            key={col.key}
+                            className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer text-xs text-gray-700"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={!hiddenColumns.has(col.key)}
+                              onChange={() => toggleColumn(col.key)}
+                              className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                            />
+                            {col.label}
+                          </label>
+                        ))}
+                      </div>
+                      <button
+                        onClick={resetColumns}
+                        disabled={hiddenColumns.size === 0}
+                        className="w-full mt-1 px-2 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-50 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Mostrar todas
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="relative">
                 <button onClick={() => setFiltersOpen(v => !v)} className="btn-secondary text-xs py-2">
                   <Filter size={13} />
                   Filtros{statusFilter ? ' (1)' : ''}
@@ -906,19 +1063,13 @@ export default function ModulosWorkspace({ course }) {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th className="table-header w-16 px-2">Ordem</th>
-                  <th className="table-header px-2">Item</th>
-                  <th className="table-header w-14 px-2">Tipo</th>
-                  <th className="table-header w-32 px-2">Professor(a)</th>
-                  <th className="table-header w-24 px-2">Link</th>
-                  <th className="table-header w-32 px-2">Supervisor(a)</th>
-                  <th className="table-header w-32 px-2">Coordenador(a)</th>
-                  <th className="table-header w-32 px-2">Revisor(a)</th>
-                  <th className="table-header w-24 px-2">Ações</th>
+                  {visibleColumns.map(col => (
+                    <th key={col.key} className={`table-header px-2 ${col.width}`}>{col.label}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {structureRows.map(({ module: m, allContents, visibleContents, forceExpand }) => {
+                {structureRows.map(({ module: m, allContents, visibleContents, forceExpand }, moduleIndex) => {
                   const isExpanded = forceExpand || !collapsedModuleIds.has(m.id)
                   const isDraggingModule = dragModuleId === m.id
                   const isDragOverModule = dragOverModuleId === m.id
@@ -941,13 +1092,32 @@ export default function ModulosWorkspace({ course }) {
                           ${isDragOverModule ? 'bg-brand-50/50 border-t-2 border-t-brand-400' : ''}
                         `}
                       >
-                        <td className="table-cell px-2 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            {canManageModules && reorderingAllowed && <GripVertical size={13} className="text-gray-300 cursor-grab active:cursor-grabbing flex-shrink-0" />}
+                        <td className="table-cell px-2">
+                          <div className="flex items-center justify-center gap-0.5">
+                            {canManageModules && reorderingAllowed && (
+                              <div className="flex flex-col -space-y-1">
+                                <button
+                                  onClick={() => moveModule(m, -1)}
+                                  disabled={moduleIndex === 0 || !!reorderingId}
+                                  title="Mover módulo para cima"
+                                  className="p-0.5 text-gray-300 hover:text-brand-600 disabled:opacity-30 disabled:hover:text-gray-300 transition-colors"
+                                >
+                                  <ChevronUp size={13} />
+                                </button>
+                                <button
+                                  onClick={() => moveModule(m, 1)}
+                                  disabled={moduleIndex === structureRows.length - 1 || !!reorderingId}
+                                  title="Mover módulo para baixo"
+                                  className="p-0.5 text-gray-300 hover:text-brand-600 disabled:opacity-30 disabled:hover:text-gray-300 transition-colors"
+                                >
+                                  <ChevronDown size={13} />
+                                </button>
+                              </div>
+                            )}
                             <span className="font-semibold text-gray-600">{m.order}</span>
                           </div>
                         </td>
-                        <td className="table-cell px-2">
+                        <td className="table-cell px-2" colSpan={moduleTitleColSpan}>
                           <div className="flex items-center gap-2 min-w-0">
                             <button onClick={() => toggleModuleCollapsed(m.id)} className="p-0.5 text-gray-400 hover:text-gray-600 flex-shrink-0">
                               {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
@@ -960,12 +1130,6 @@ export default function ModulosWorkspace({ course }) {
                             <span className="text-xs text-gray-400 whitespace-nowrap">{allContents.length} conteúdo{allContents.length !== 1 ? 's' : ''}</span>
                           </div>
                         </td>
-                        <td className="table-cell" />
-                        <td className="table-cell" />
-                        <td className="table-cell" />
-                        <td className="table-cell" />
-                        <td className="table-cell" />
-                        <td className="table-cell" />
                         <td className="table-cell px-2">
                           <div className="flex items-center justify-end gap-1 relative">
                             {canEditContent && (
@@ -1037,6 +1201,9 @@ export default function ModulosWorkspace({ course }) {
                         const isDragOver = dragOverContentId === mat.id
                         const rowLocked = m.stage !== 'producao' && !isAdmin
                         const canDrag = canEditContent && !rowLocked && reorderingAllowed
+                        // Reordenar conteudo passa por PATCH /materials/:id/session, que no backend
+                        // exige admin/supervisor/coordenacao -- professor arrasta mas nao renumera.
+                        const canReorderThisContent = canReviewContent && !rowLocked && reorderingAllowed
                         return (
                           <tr
                             key={`content-${mat.id}`}
@@ -1050,10 +1217,35 @@ export default function ModulosWorkspace({ course }) {
                               ${isDragOver ? 'bg-brand-50/30 border-t-2 border-t-brand-400' : 'hover:bg-gray-50/50'}
                             `}
                           >
-                            <td className="table-cell px-2 text-center text-gray-400">
-                              <div className="flex items-center justify-center gap-1">
-                                {canDrag && <GripVertical size={12} className="text-gray-200 cursor-grab active:cursor-grabbing flex-shrink-0" />}
+                            <td className="table-cell px-2 text-gray-400">
+                              <div className="flex items-center justify-center gap-0.5">
+                                {canReorderThisContent && (
+                                  <div className="flex flex-col -space-y-1">
+                                    <button
+                                      onClick={() => moveContent(mat, -1, visibleContents)}
+                                      disabled={idx === 0 || !!reorderingId}
+                                      title="Mover conteúdo para cima"
+                                      className="p-0.5 text-gray-300 hover:text-brand-600 disabled:opacity-30 disabled:hover:text-gray-300 transition-colors"
+                                    >
+                                      <ChevronUp size={12} />
+                                    </button>
+                                    <button
+                                      onClick={() => moveContent(mat, 1, visibleContents)}
+                                      disabled={idx === visibleContents.length - 1 || !!reorderingId}
+                                      title="Mover conteúdo para baixo"
+                                      className="p-0.5 text-gray-300 hover:text-brand-600 disabled:opacity-30 disabled:hover:text-gray-300 transition-colors"
+                                    >
+                                      <ChevronDown size={12} />
+                                    </button>
+                                  </div>
+                                )}
                                 <span>{m.order}.{idx + 1}</span>
+                                {/* Confirmacao visual de que o TI ja publicou este conteudo no AVA. */}
+                                {mat.published && (
+                                  <span title="Publicado no AVA" className="text-green-600 flex-shrink-0">
+                                    <CheckCircle size={13} />
+                                  </span>
+                                )}
                               </div>
                             </td>
                             <td className="table-cell px-2">
@@ -1061,102 +1253,137 @@ export default function ModulosWorkspace({ course }) {
                                 <div className="w-6 h-6 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
                                   <FileText size={12} />
                                 </div>
-                                <span className="text-gray-700 truncate max-w-56" title={mat.theme}>{mat.theme}</span>
+                                <span className="text-gray-700 truncate" title={mat.theme}>{mat.theme}</span>
                               </div>
                             </td>
-                            <td className="table-cell px-2"><TypeBadge type={mat.type} iconOnly /></td>
-                            <td className="table-cell px-2">
-                              <div className="flex items-center gap-1.5">
-                                <StackedAvatars responsibles={getMaterialResponsibles(mat)} assignees={materialAssignees} />
-                                {(isPrivileged || isProducer) ? (
-                                  <InlineStatusSelect
-                                    value={mat.status || ''}
-                                    options={PROFESSOR_STATUS_OPTIONS}
-                                    onChange={val => handleContentStatusChange(mat, 'status', val)}
+                            {isColumnVisible('tipo') && (
+                              <td className="table-cell px-2"><TypeBadge type={mat.type} iconOnly /></td>
+                            )}
+                            {isColumnVisible('professor') && (
+                              <td className="table-cell px-2">
+                                <div className="flex items-center gap-1.5">
+                                  <StackedAvatars responsibles={getMaterialResponsibles(mat)} assignees={materialAssignees} />
+                                  {(isPrivileged || isProducer) ? (
+                                    <InlineStatusSelect
+                                      value={mat.status || ''}
+                                      options={PROFESSOR_STATUS_OPTIONS}
+                                      onChange={val => handleContentStatusChange(mat, 'status', val)}
+                                    />
+                                  ) : (
+                                    <Badge status={mat.status || ''} />
+                                  )}
+                                </div>
+                              </td>
+                            )}
+                            {isColumnVisible('link') && (
+                              <td className="table-cell px-2"><LinkIconOnly url={mat.originalLink} label="Link" /></td>
+                            )}
+                            {isColumnVisible('linkFinal') && (
+                              <td className="table-cell px-2"><LinkIconOnly url={mat.adjustedLink} label="Link final" /></td>
+                            )}
+                            {isColumnVisible('supervisor') && (
+                              <td className="table-cell px-2">
+                                <div className="flex items-center gap-1.5">
+                                  <MiniAvatar name={course.supervisorName} roleLabel="Supervisor(a)" avatar={course.supervisorAvatar} />
+                                  {(isPrivileged || isCourseSupervisor) ? (
+                                    <InlineStatusSelect
+                                      value={mat.supervisorStatus || ''}
+                                      options={SUPERVISOR_STATUS_OPTIONS}
+                                      onChange={val => {
+                                        if (!isPrivileged && val === 'aprovado' && mat.status !== 'concluido') {
+                                          showToast('Só é possível aprovar após o professor concluir este conteúdo.', 'error')
+                                          return
+                                        }
+                                        handleContentStatusChange(mat, 'supervisorStatus', val)
+                                      }}
+                                    />
+                                  ) : (
+                                    <Badge status={mat.supervisorStatus || ''} />
+                                  )}
+                                </div>
+                              </td>
+                            )}
+                            {isColumnVisible('revisor') && (
+                              <td className="table-cell px-2">
+                                <div className="flex items-center gap-1.5">
+                                  <MiniAvatar
+                                    name={mat.revisorName}
+                                    roleLabel="Revisor(a)"
+                                    avatar={course.revisors?.find(r => Number(r.id) === Number(mat.revisorId))?.avatar || null}
                                   />
+                                  {(() => {
+                                    const isAssignedRevisor = isRevisor && Number(mat.revisorId) === Number(user?.id)
+                                    if (!isPrivileged && !isAssignedRevisor) {
+                                      return <Badge status={mat.revisorStatus || ''} />
+                                    }
+                                    return (
+                                      <>
+                                        <InlineStatusSelect
+                                          value={mat.revisorStatus || ''}
+                                          options={REVISOR_STATUS_OPTIONS}
+                                          onChange={val => {
+                                            if (!isPrivileged && val === 'aprovado' && mat.coordinatorStatus !== 'aprovado') {
+                                              showToast('Só é possível aprovar após a coordenação aprovar este conteúdo.', 'error')
+                                              return
+                                            }
+                                            if (val === 'ajustes' || val === 'reprovado') {
+                                              openRevisorNote(mat, val)
+                                              return
+                                            }
+                                            handleContentStatusChange(mat, 'revisorStatus', val)
+                                          }}
+                                        />
+                                        {isAssignedRevisor && (
+                                          <button
+                                            onClick={() => openRevisorNote(mat, mat.revisorStatus || '')}
+                                            title="Deixar parecer/comentário"
+                                            className="p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors"
+                                          >
+                                            <MessageSquare size={13} />
+                                          </button>
+                                        )}
+                                      </>
+                                    )
+                                  })()}
+                                </div>
+                              </td>
+                            )}
+                            {isColumnVisible('coordenador') && (
+                              <td className="table-cell px-2">
+                                <div className="flex items-center gap-1.5">
+                                  <MiniAvatar name={course.coordinatorName} roleLabel="Coordenador(a)" avatar={course.coordinatorAvatar} />
+                                  {isPrivileged ? (
+                                    <InlineStatusSelect
+                                      value={mat.coordinatorStatus || ''}
+                                      options={COORDINATOR_STATUS_OPTIONS}
+                                      onChange={val => handleContentStatusChange(mat, 'coordinatorStatus', val)}
+                                    />
+                                  ) : (
+                                    <Badge status={mat.coordinatorStatus || ''} />
+                                  )}
+                                </div>
+                              </td>
+                            )}
+                            {isColumnVisible('ti') && (
+                              <td className="table-cell px-2">
+                                {isTI ? (
+                                  <select
+                                    value={mat.published ? 'publicado' : 'nao_publicado'}
+                                    onChange={e => handleTogglePublished(mat, e.target.value === 'publicado')}
+                                    className={`text-xs font-medium px-2 py-0.5 rounded-md border cursor-pointer focus:outline-none focus:ring-1 focus:ring-brand-400 ${
+                                      mat.published
+                                        ? 'text-green-700 bg-green-50 border-green-200'
+                                        : 'text-gray-600 bg-gray-50 border-gray-200'
+                                    }`}
+                                  >
+                                    <option value="nao_publicado">Não publicado</option>
+                                    <option value="publicado">Publicado</option>
+                                  </select>
                                 ) : (
-                                  <Badge status={mat.status || ''} />
+                                  <Badge status={mat.published ? 'publicado' : 'nao_publicado'} />
                                 )}
-                              </div>
-                            </td>
-                            <td className="table-cell px-2"><LinkChip url={mat.adjustedLink || mat.originalLink} /></td>
-                            <td className="table-cell px-2">
-                              <div className="flex items-center gap-1.5">
-                                <MiniAvatar name={course.supervisorName} roleLabel="Supervisor(a)" avatar={course.supervisorAvatar} />
-                                {(isPrivileged || isCourseSupervisor) ? (
-                                  <InlineStatusSelect
-                                    value={mat.supervisorStatus || ''}
-                                    options={SUPERVISOR_STATUS_OPTIONS}
-                                    onChange={val => {
-                                      if (!isPrivileged && val === 'aprovado' && mat.status !== 'concluido') {
-                                        showToast('Só é possível aprovar após o professor concluir este conteúdo.', 'error')
-                                        return
-                                      }
-                                      handleContentStatusChange(mat, 'supervisorStatus', val)
-                                    }}
-                                  />
-                                ) : (
-                                  <Badge status={mat.supervisorStatus || ''} />
-                                )}
-                              </div>
-                            </td>
-                            <td className="table-cell px-2">
-                              <div className="flex items-center gap-1.5">
-                                <MiniAvatar name={course.coordinatorName} roleLabel="Coordenador(a)" avatar={course.coordinatorAvatar} />
-                                {isPrivileged ? (
-                                  <InlineStatusSelect
-                                    value={mat.coordinatorStatus || ''}
-                                    options={COORDINATOR_STATUS_OPTIONS}
-                                    onChange={val => handleContentStatusChange(mat, 'coordinatorStatus', val)}
-                                  />
-                                ) : (
-                                  <Badge status={mat.coordinatorStatus || ''} />
-                                )}
-                              </div>
-                            </td>
-                            <td className="table-cell px-2">
-                              <div className="flex items-center gap-1.5">
-                                <MiniAvatar
-                                  name={mat.revisorName}
-                                  roleLabel="Revisor(a)"
-                                  avatar={course.revisors?.find(r => Number(r.id) === Number(mat.revisorId))?.avatar || null}
-                                />
-                                {(() => {
-                                  const isAssignedRevisor = isRevisor && Number(mat.revisorId) === Number(user?.id)
-                                  if (!isPrivileged && !isAssignedRevisor) {
-                                    return <Badge status={mat.revisorStatus || ''} />
-                                  }
-                                  return (
-                                    <>
-                                      <InlineStatusSelect
-                                        value={mat.revisorStatus || ''}
-                                        options={REVISOR_STATUS_OPTIONS}
-                                        onChange={val => {
-                                          if (!isPrivileged && val === 'aprovado' && mat.coordinatorStatus !== 'aprovado') {
-                                            showToast('Só é possível aprovar após a coordenação aprovar este conteúdo.', 'error')
-                                            return
-                                          }
-                                          if (val === 'ajustes' || val === 'reprovado') {
-                                            openRevisorNote(mat, val)
-                                            return
-                                          }
-                                          handleContentStatusChange(mat, 'revisorStatus', val)
-                                        }}
-                                      />
-                                      {isAssignedRevisor && (
-                                        <button
-                                          onClick={() => openRevisorNote(mat, mat.revisorStatus || '')}
-                                          title="Deixar parecer/comentário"
-                                          className="p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors"
-                                        >
-                                          <MessageSquare size={13} />
-                                        </button>
-                                      )}
-                                    </>
-                                  )
-                                })()}
-                              </div>
-                            </td>
+                              </td>
+                            )}
                             <td className="table-cell px-2">
                               <div className="flex items-center justify-end gap-0.5">
                                 <button onClick={() => setViewContent(mat)} title="Visualizar" className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
@@ -1179,7 +1406,7 @@ export default function ModulosWorkspace({ course }) {
                       })}
                       {isExpanded && visibleContents.length === 0 && (
                         <tr>
-                          <td colSpan={9} className="table-cell text-center py-6 text-gray-400 text-xs pl-10">
+                          <td colSpan={visibleColumns.length} className="table-cell text-center py-6 text-gray-400 text-xs pl-10">
                             Nenhum conteúdo vinculado a este módulo ainda.
                           </td>
                         </tr>
@@ -1189,7 +1416,7 @@ export default function ModulosWorkspace({ course }) {
                 })}
                 {structureRows.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="table-cell text-center py-10 text-gray-400 text-sm">
+                    <td colSpan={visibleColumns.length} className="table-cell text-center py-10 text-gray-400 text-sm">
                       Nenhum módulo encontrado.
                     </td>
                   </tr>
@@ -1209,64 +1436,126 @@ export default function ModulosWorkspace({ course }) {
           )}
           <div className="px-5 py-2.5 border-t border-gray-100 flex items-center gap-1.5 text-[11px] text-gray-400">
             <Info size={12} />
-            Dica: arraste os itens para reordenar módulos e conteúdos.
+            Dica: use as setas na coluna Ordem (ou arraste os itens) para reordenar módulos e conteúdos.
           </div>
         </div>
       )}
 
-      {/* View content modal */}
-      {viewContent && (
-        <Modal open={!!viewContent} onClose={() => setViewContent(null)} title={viewContent.theme} size="lg">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <div className="text-xs font-medium text-gray-500 mb-1">Tipo</div>
-              <TypeBadge type={viewContent.type} />
-            </div>
-            <div>
-              <div className="text-xs font-medium text-gray-500 mb-1">Professor(a)</div>
-              <Badge status={viewContent.status || ''} />
-            </div>
-            <div className="col-span-2">
-              <div className="text-xs font-medium text-gray-500 mb-1">Objetivo</div>
-              <div className="text-sm text-gray-800">{viewContent.objective || '—'}</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium text-gray-500 mb-1">Tempo estimado</div>
-              <div className="text-sm text-gray-800">{viewContent.duration || '—'}</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium text-gray-500 mb-1">Prazo de entrega</div>
-              <div className="text-sm text-gray-800">{formatDateOnly(viewContent.deliveryDate)}</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium text-gray-500 mb-1">Link original</div>
-              <LinkChip url={viewContent.originalLink} />
-            </div>
-            <div>
-              <div className="text-xs font-medium text-gray-500 mb-1">Link ajustado</div>
-              <LinkChip url={viewContent.adjustedLink} />
-            </div>
-            <div>
-              <div className="text-xs font-medium text-gray-500 mb-1">Supervisor(a)</div>
-              <Badge status={viewContent.supervisorStatus || ''} />
-            </div>
-            <div>
-              <div className="text-xs font-medium text-gray-500 mb-1">Coordenador(a)</div>
-              <Badge status={viewContent.coordinatorStatus || ''} />
-            </div>
-            <div>
-              <div className="text-xs font-medium text-gray-500 mb-1">Revisor(a)</div>
-              <Badge status={viewContent.revisorStatus || ''} />
-            </div>
-            {viewContent.reviewNotes && (
-              <div className="col-span-2">
-                <div className="text-xs font-medium text-gray-500 mb-1">Parecer / observações da revisão</div>
-                <div className="text-sm text-gray-800 bg-amber-50 border border-amber-100 rounded-lg p-3">{viewContent.reviewNotes}</div>
+      {/* Ficha do conteudo pronta para publicacao no AVA (Moodle): cada campo tem botao
+          de copiar, alem do "Copiar tudo" com o bloco completo. */}
+      {viewContent && (() => {
+        const viewModule = modules.find(mod => Number(mod.id) === Number(viewContent.moduleId))
+        const siblings = (contentsByModuleId[viewContent.moduleId] || [])
+          .slice()
+          .sort((a, b) => Number(a.session) - Number(b.session))
+        const position = siblings.findIndex(c => c.id === viewContent.id)
+        const orderLabel = viewModule && position >= 0 ? `${viewModule.order}.${position + 1}` : '—'
+        const typeList = Array.isArray(viewContent.type) ? viewContent.type : [viewContent.type].filter(Boolean)
+        const typeLabel = typeList.map(t => TYPE_LABELS[t] || t).join(', ')
+        const professores = getMaterialResponsibles(viewContent).map(r => r.name).filter(Boolean).join(', ')
+        const finalLink = viewContent.adjustedLink || viewContent.originalLink || ''
+
+        const fullBlock = [
+          `Curso: ${course.name}`,
+          `Módulo: ${viewModule?.title || '—'}`,
+          `Ordem: ${orderLabel}`,
+          `Título: ${viewContent.theme || '—'}`,
+          `Tipo: ${typeLabel || '—'}`,
+          `Descrição/Objetivo: ${viewContent.objective || '—'}`,
+          `Duração: ${viewContent.duration || '—'}`,
+          `Link: ${viewContent.originalLink || '—'}`,
+          `Link final: ${viewContent.adjustedLink || '—'}`,
+        ].join('\n')
+
+        return (
+          <Modal open={!!viewContent} onClose={() => setViewContent(null)} title={viewContent.theme} size="lg">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap bg-brand-50 border border-brand-100 rounded-xl px-4 py-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Badge status={viewContent.published ? 'publicado' : 'nao_publicado'} showDot />
+                  <span className="text-xs text-gray-600">
+                    {viewContent.published ? 'Este conteúdo já está publicado no AVA.' : 'Ainda não publicado no AVA.'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {isTI && (
+                    <button
+                      onClick={() => {
+                        const next = !viewContent.published
+                        handleTogglePublished(viewContent, next)
+                        setViewContent({ ...viewContent, published: next })
+                      }}
+                      className={viewContent.published ? 'btn-secondary text-xs py-1.5' : 'btn-primary text-xs py-1.5'}
+                    >
+                      <CheckCircle size={13} />
+                      {viewContent.published ? 'Desmarcar publicado' : 'Marcar como publicado'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => copyToClipboard(fullBlock).then(ok => ok && showToast('Dados copiados para a área de transferência!'))}
+                    className="btn-secondary text-xs py-1.5"
+                  >
+                    <ClipboardCopy size={13} />
+                    Copiar tudo
+                  </button>
+                </div>
               </div>
-            )}
-          </div>
-        </Modal>
-      )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <CopyField label="Título" value={viewContent.theme} full />
+                <CopyField label="Curso" value={course.name} />
+                <CopyField label="Módulo" value={viewModule?.title} />
+                <CopyField label="Ordem" value={orderLabel} />
+                <CopyField label="Tipo" value={typeLabel} />
+                <CopyField label="Descrição / Objetivo" value={viewContent.objective} full />
+                <CopyField label="Link" value={viewContent.originalLink} mono />
+                <CopyField label="Link final" value={viewContent.adjustedLink} mono />
+                <CopyField label="Duração" value={viewContent.duration} />
+                <CopyField label="Professor(es)" value={professores} />
+              </div>
+
+              {finalLink?.startsWith('http') && (
+                <div className="flex items-center gap-2 text-xs">
+                  <LinkChip url={finalLink} />
+                  <span className="text-gray-400">— link que será usado no AVA</span>
+                </div>
+              )}
+
+              <div className="border-t border-gray-100 pt-3">
+                <div className="text-xs font-medium text-gray-500 mb-2">Situação da validação</div>
+                <div className="grid grid-cols-4 gap-3">
+                  <div>
+                    <div className="text-[11px] text-gray-400 mb-1">Professor(a)</div>
+                    <Badge status={viewContent.status || ''} />
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-gray-400 mb-1">Supervisor(a)</div>
+                    <Badge status={viewContent.supervisorStatus || ''} />
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-gray-400 mb-1">Revisor(a)</div>
+                    <Badge status={viewContent.revisorStatus || ''} />
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-gray-400 mb-1">Coordenador(a)</div>
+                    <Badge status={viewContent.coordinatorStatus || ''} />
+                  </div>
+                </div>
+                <div className="text-[11px] text-gray-400 mt-3">
+                  Prazo de entrega: {formatDateOnly(viewContent.deliveryDate)}
+                </div>
+              </div>
+
+              {viewContent.reviewNotes && (
+                <div>
+                  <div className="text-xs font-medium text-gray-500 mb-1">Parecer / observações da revisão</div>
+                  <div className="text-sm text-gray-800 bg-amber-50 border border-amber-100 rounded-lg p-3">{viewContent.reviewNotes}</div>
+                </div>
+              )}
+            </div>
+          </Modal>
+        )
+      })()}
 
       {/* Parecer do(a) revisor(a) */}
       {revisorNoteTarget && (

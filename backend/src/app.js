@@ -382,6 +382,9 @@ async function materialPayload(body, actor, currentMaterial) {
     deliveryDate: body.deliveryDate ?? currentMaterial?.deliveryDate ?? null,
     originalLink: body.originalLink ?? currentMaterial?.originalLink ?? '',
     adjustedLink: body.adjustedLink ?? currentMaterial?.adjustedLink ?? '',
+    // Publicado no AVA e campo exclusivo do TI (PATCH /materials/:id/published):
+    // qualquer outra edicao apenas preserva o valor atual.
+    published: currentMaterial?.published ?? false,
   }
 
   if (canAssignMaterial(actor)) {
@@ -1013,6 +1016,24 @@ app.delete('/api/materials/:id', auth, async (req, res) => {
   const deleted = await store.deleteMaterial(req.params.id)
   if (!deleted) return res.status(404).json({ message: 'Material nao encontrado.' })
   res.json({ id: Number(req.params.id) })
+})
+
+// Marcacao de "Publicado" (no AVA) por conteudo: exclusiva do perfil TI, igual ao
+// status no AVA do curso -- nem administrador altera este campo.
+app.patch('/api/materials/:id/published', auth, requireRole('ti'), async (req, res) => {
+  const current = await store.getMaterialById(req.params.id)
+  if (!current) return res.status(404).json({ message: 'Material nao encontrado.' })
+
+  if (typeof req.body.published !== 'boolean') {
+    return res.status(400).json({ message: 'Informe publicado como true ou false.' })
+  }
+
+  try {
+    const material = await store.updateMaterialPublished(req.params.id, req.body.published)
+    res.json(material)
+  } catch {
+    res.status(500).json({ message: 'Erro ao atualizar publicacao no AVA.' })
+  }
 })
 
 app.patch('/api/materials/:id/session', auth, async (req, res) => {
