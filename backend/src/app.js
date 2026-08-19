@@ -36,7 +36,8 @@ const COURSE_TRAILS = {
   ],
 }
 
-const USER_ROLES = ['administrador', 'coordenador', 'supervisor', 'professor', 'tutor', 'tecnico', 'gestao', 'revisor', 'supervisor_tutoria']
+const USER_ROLES = ['administrador', 'coordenador', 'supervisor', 'professor', 'tutor', 'tecnico', 'gestao', 'revisor', 'supervisor_tutoria', 'ti']
+const COURSE_STATUS_AVA_VALUES = ['nao_publicado', 'publicado']
 const USER_STATUSES = ['ativo', 'inativo', 'pendente', 'desligado', 'substituido']
 
 // Perfis avaliados pelo modulo de Frequencia (metas/criterios mensais).
@@ -110,6 +111,10 @@ function canManageModule(user, course) {
 
 function canManageCourses(user) {
   return user?.role === 'administrador' || user?.role === 'supervisor' || isCoordinator(user)
+}
+
+function isTI(user) {
+  return user?.role === 'ti'
 }
 
 function canManageProduction(user) {
@@ -729,6 +734,23 @@ app.put('/api/courses/:id', auth, async (req, res) => {
       return res.status(409).json({ message: 'Ja existe um curso com esse nome.' })
     }
     res.status(500).json({ message: 'Erro ao atualizar curso.' })
+  }
+})
+
+app.patch('/api/courses/:id/status-ava', auth, requireRole('ti'), async (req, res) => {
+  const current = await store.getCourseById(req.params.id)
+  if (!current) return res.status(404).json({ message: 'Curso nao encontrado.' })
+
+  const statusAva = String(req.body.statusAva || '').trim()
+  if (!COURSE_STATUS_AVA_VALUES.includes(statusAva)) {
+    return res.status(400).json({ message: 'Status no AVA invalido.' })
+  }
+
+  try {
+    const course = await store.updateCourseStatusAva(req.params.id, statusAva)
+    res.json(course)
+  } catch {
+    res.status(500).json({ message: 'Erro ao atualizar status no AVA.' })
   }
 })
 

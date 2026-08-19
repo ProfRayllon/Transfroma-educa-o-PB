@@ -14,6 +14,7 @@ const MANAGED_ROLES = [
   { value: 'tecnico', label: 'Apoio tecnico' },
   { value: 'revisor', label: 'Revisor(a)' },
   { value: 'supervisor_tutoria', label: 'Supervisor de tutoria' },
+  { value: 'ti', label: 'TI' },
 ]
 
 const FILTER_ROLES = [
@@ -32,6 +33,7 @@ const ROLE_LABELS = {
   gestao: 'Gestao de Pessoas',
   revisor: 'Revisor(a)',
   supervisor_tutoria: 'Supervisor de tutoria',
+  ti: 'TI',
 }
 
 const ROLE_FUNCTIONS = {
@@ -96,6 +98,7 @@ const PERMISSIONS_MAP = {
   tecnico: ['Acesso somente leitura aos dados vinculados'],
   revisor: ['Acessa Producao dos cursos vinculados', 'Aprova ou pede ajuste nos conteudos atribuidos', 'Nao pode excluir conteudos ou modulos'],
   supervisor_tutoria: ['Acessa Gestao de Pessoas'],
+  ti: ['Visualiza todos os cursos', 'E o unico perfil que define o status do curso no AVA'],
 }
 
 function getInitials(name = '') {

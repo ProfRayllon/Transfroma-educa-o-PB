@@ -48,6 +48,9 @@ const variants = {
   gestao: 'bg-teal-100 text-teal-800 border border-teal-200',
   revisor: 'bg-rose-100 text-rose-800 border border-rose-200',
   supervisor_tutoria: 'bg-fuchsia-100 text-fuchsia-800 border border-fuchsia-200',
+  ti: 'bg-sky-100 text-sky-800 border border-sky-200',
+
+  nao_publicado: 'bg-gray-100 text-gray-600 border border-gray-200',
 }
 
 const labels = {
@@ -94,6 +97,9 @@ const labels = {
   gestao: 'Gestão de Pessoas',
   revisor: 'Revisor(a)',
   supervisor_tutoria: 'Supervisor de tutoria',
+  ti: 'TI',
+
+  nao_publicado: 'Não publicado',
 }
 
 const dots = {
@@ -124,6 +130,7 @@ const dots = {
   aguardando: 'bg-amber-500',
   ajustes: 'bg-orange-500',
   publicado: 'bg-teal-500',
+  nao_publicado: 'bg-gray-400',
 }
 
 export default function Badge({ status, showDot = false, className = '' }) {

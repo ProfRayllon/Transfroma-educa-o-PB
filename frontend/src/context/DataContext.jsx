@@ -68,6 +68,16 @@ export function DataProvider({ children }) {
     }
   }
 
+  const updateCourseStatusAva = async (courseId, statusAva) => {
+    try {
+      const { data } = await api.patch(`/courses/${courseId}/status-ava`, { statusAva })
+      setCourses((current) => current.map((item) => (item.id === data.id ? data : item)))
+      return data
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error, 'Erro ao atualizar status no AVA.'))
+    }
+  }
+
   const deleteCourse = async (courseId) => {
     try {
       await api.delete(`/courses/${courseId}`)
@@ -149,6 +159,7 @@ export function DataProvider({ children }) {
       materialAssignees,
       loadCourses,
       saveCourse,
+      updateCourseStatusAva,
       deleteCourse,
       saveMaterial,
       approveMaterial,

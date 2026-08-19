@@ -14,6 +14,7 @@ const ROLE_LABELS = {
   gestao: 'Gestao de Pessoas',
   revisor: 'Revisor(a)',
   supervisor_tutoria: 'Supervisor de tutoria',
+  ti: 'TI',
 }
 
 function InfoRow({ icon: Icon, label, value }) {

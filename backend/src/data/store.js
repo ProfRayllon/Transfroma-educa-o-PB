@@ -105,6 +105,7 @@ function mapCourseRow(row) {
     startDate: formatDate(row.start_date),
     deadline: formatDate(row.deadline),
     image: row.image,
+    statusAva: row.status_ava || 'nao_publicado',
     createdAt: formatDate(row.created_at, true),
   }
 }
@@ -201,7 +202,7 @@ function materialsCourseJoin(materialAlias = 'm', courseAlias = 'c') {
 }
 
 function canSeeAllCourses(user) {
-  return user?.role === 'administrador'
+  return user?.role === 'administrador' || user?.role === 'ti'
 }
 
 function mapPeopleRow(row) {
@@ -1161,6 +1162,7 @@ async function createCourse(payload) {
       producers: payload.producers || [],
       revisors: payload.revisors || [],
       totalSessions: Number(payload.totalSessions) || 0,
+      statusAva: 'nao_publicado',
       createdAt: new Date().toISOString().slice(0, 19),
     }
     courses.push(course)
@@ -1249,6 +1251,18 @@ async function updateCourse(id, payload) {
     )
   }
 
+  return getCourseById(id)
+}
+
+async function updateCourseStatusAva(id, statusAva) {
+  if (!isMysqlMode()) {
+    const idx = courses.findIndex((course) => course.id === Number(id))
+    if (idx === -1) return null
+    courses[idx] = { ...courses[idx], statusAva }
+    return courses[idx]
+  }
+
+  await pool.execute('UPDATE courses SET status_ava = ? WHERE id = ?', [statusAva, id])
   return getCourseById(id)
 }
 
@@ -2540,6 +2554,7 @@ module.exports = {
   getCourseByName,
   createCourse,
   updateCourse,
+  updateCourseStatusAva,
   deleteCourse,
   listCourseParticipants,
   listMaterialAssignees,

@@ -132,4 +132,7 @@ const PERMISSIONS = {
   supervisor_tutoria: [
     'view_pessoas',
   ],
+  ti: [
+    'view_cursos', 'edit_status_ava',
+  ],
 }

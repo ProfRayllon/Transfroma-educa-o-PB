@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import Modal from '../components/ui/Modal'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
+import Badge from '../components/ui/Badge'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 import api, { getApiErrorMessage } from '../lib/api'
@@ -188,12 +189,24 @@ function MultiSelectFilter({ label, placeholder, options, values, onChange }) {
   )
 }
 
-function CourseCard({ course, materials, onEdit, onDelete, ementaStatus }) {
+function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, ementaStatus }) {
   const navigate = useNavigate()
   const { user } = useAuth()
   const color = getTrailColor(course.primaryTrail)
   const ementaApproved = ementaStatus?.coordinatorStatus === 'valido'
   const alert = deadlineBadge(course.deadline)
+  const [statusAvaSaving, setStatusAvaSaving] = useState(false)
+  const canEditStatusAva = user?.role === 'ti'
+
+  const handleStatusAvaChange = async (event) => {
+    const value = event.target.value
+    setStatusAvaSaving(true)
+    try {
+      await onUpdateStatusAva(course.id, value)
+    } finally {
+      setStatusAvaSaving(false)
+    }
+  }
 
   // Mesma regra do backend (DELETE /api/courses/:id): admin sempre pode; coordenador/supervisor
   // so podem excluir o proprio curso.
@@ -273,6 +286,22 @@ function CourseCard({ course, materials, onEdit, onDelete, ementaStatus }) {
           <div className="rounded-xl bg-gray-50 px-3 py-2 border border-gray-100 col-span-2">
             <div className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Conteúdos / Módulos</div>
             <div className="font-medium text-gray-700">{totalContents} conteúdos · {totalModules} módulo{totalModules !== 1 ? 's' : ''}</div>
+          </div>
+          <div className="rounded-xl bg-gray-50 px-3 py-2 border border-gray-100 col-span-2">
+            <div className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Status no AVA</div>
+            {canEditStatusAva ? (
+              <select
+                value={course.statusAva || 'nao_publicado'}
+                onChange={handleStatusAvaChange}
+                disabled={statusAvaSaving}
+                className="text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+              >
+                <option value="nao_publicado">Não publicado</option>
+                <option value="publicado">Publicado</option>
+              </select>
+            ) : (
+              <Badge status={course.statusAva || 'nao_publicado'} />
+            )}
           </div>
         </div>
 
@@ -694,7 +723,7 @@ function CourseModal({ course, open, onClose, onSave, participants = { superviso
 
 export default function Cursos() {
   const { user } = useAuth()
-  const { materials, courses, coursesLoading, coursesError, courseParticipants, saveCourse, deleteCourse } = useData()
+  const { materials, courses, coursesLoading, coursesError, courseParticipants, saveCourse, updateCourseStatusAva, deleteCourse } = useData()
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editCourse, setEditCourse] = useState(null)
@@ -793,6 +822,15 @@ export default function Cursos() {
   const showToast = (message, type = 'success') => {
     setToast({ message, type })
     setTimeout(() => setToast(null), 3500)
+  }
+
+  const handleUpdateStatusAva = async (courseId, statusAva) => {
+    try {
+      await updateCourseStatusAva(courseId, statusAva)
+      showToast('Status no AVA atualizado com sucesso!')
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Erro ao atualizar status no AVA.'), 'error')
+    }
   }
 
   const handleDeleteCourse = async () => {
@@ -967,6 +1005,7 @@ export default function Cursos() {
               materials={materials}
               onEdit={openEdit}
               onDelete={setConfirmDeleteCourse}
+              onUpdateStatusAva={handleUpdateStatusAva}
               ementaStatus={ementaStatuses[course.id]}
             />
           ))}
