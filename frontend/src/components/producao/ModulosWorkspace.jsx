@@ -48,6 +48,15 @@ const STRUCTURE_COLUMNS = [
 
 const HIDDEN_COLUMNS_KEY = 'transforma:producao:hidden-columns'
 
+// Agrupa os tipos de conteudo do curso nas quatro familias do card "Arquivos do curso".
+// A ultima categoria e o fallback, entao a soma sempre fecha com o total de conteudos.
+const FILE_CATEGORIES = [
+  { key: 'videos', label: 'Vídeos', color: '#7c3aed', types: ['videoaula', 'podcast', 'Aula'] },
+  { key: 'documentos', label: 'Documentos/PDFs', color: '#2563eb', types: ['pdf', 'apresentacao', 'ebook', 'material_complementar'] },
+  { key: 'atividades', label: 'Atividades', color: '#16a34a', types: ['atividade_escrita', 'atividade_interativa', 'atividade_objetiva', 'avaliacao_final', 'forum', 'Atividade'] },
+  { key: 'links', label: 'Links', color: '#f97316', types: ['outro'] },
+]
+
 const MODULE_STATUS_FILTER_OPTIONS = [
   { value: '', label: 'Todos os status' },
   { value: 'rascunho', label: 'Rascunho' },
@@ -489,35 +498,70 @@ function ProgressDonut({ segments, total, percent }) {
   )
 }
 
-function TeamMember({ label, name, avatar, icon: Icon, extra = 0, hint }) {
+function TeamMember({ label, name, avatar, icon: Icon, extra = 0, subtitle }) {
   const initials = (name || '').split(' ').filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase()
-  const tooltip = name || hint
+  const caption = subtitle ?? name
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <div className="relative group">
-        <div className={`w-14 h-14 rounded-full flex items-center justify-center overflow-hidden select-none ${
+    <div className="flex-1 min-w-[88px] rounded-xl border border-gray-100 bg-gray-50/60 px-2 py-3 flex flex-col items-center gap-2 text-center">
+      <div className="relative">
+        <div className={`w-12 h-12 rounded-full flex items-center justify-center overflow-hidden select-none ${
           Icon ? 'bg-brand-50 text-brand-600' : 'bg-brand-700 text-white font-semibold'
         }`}>
           {Icon
-            ? <Icon size={22} />
+            ? <Icon size={20} />
             : avatar
               ? <img src={avatar} alt={name} className="w-full h-full object-cover" />
-              : (initials || <span className="text-white/60 text-lg">—</span>)}
+              : (initials || <span className="text-white/60">—</span>)}
         </div>
         {extra > 0 && (
-          <span className="absolute -right-1 bottom-0 px-1.5 h-5 min-w-5 rounded-full bg-gray-200 text-gray-700 text-[10px] font-bold flex items-center justify-center border-2 border-white">
+          <span
+            title={`+${extra} ${label.toLowerCase()}(es)`}
+            className="absolute -right-1 bottom-0 px-1.5 h-5 min-w-5 rounded-full bg-brand-600 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white"
+          >
             +{extra}
           </span>
         )}
-        {tooltip && (
-          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none">
-            <div className="bg-gray-800 text-white text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-lg">{tooltip}</div>
-            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
-          </div>
-        )}
       </div>
-      <span className="text-xs text-gray-500 whitespace-nowrap">{label}</span>
+      <div className="min-w-0 w-full">
+        <div className="text-xs font-semibold text-gray-800 leading-tight">{label}</div>
+        <div className="text-[11px] text-brand-600 truncate leading-tight mt-0.5" title={caption || undefined}>
+          {caption || '—'}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Avatares empilhados dos professores produtores, menores que os cards de papel.
+function ProducerAvatars({ producers = [], max = 6 }) {
+  if (producers.length === 0) return <span className="text-xs text-gray-400">Nenhum professor vinculado</span>
+  const visible = producers.slice(0, max)
+  const extra = producers.length - visible.length
+
+  return (
+    <div className="flex items-center">
+      {visible.map((producer, index) => {
+        const initials = (producer.name || '').split(' ').filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase()
+        return (
+          <div key={producer.id || index} className={`relative group ${index > 0 ? '-ml-2' : ''}`} style={{ zIndex: visible.length - index }}>
+            <div className="w-8 h-8 rounded-full bg-brand-700 text-white text-[10px] font-semibold flex items-center justify-center border-2 border-white overflow-hidden select-none">
+              {producer.avatar
+                ? <img src={producer.avatar} alt={producer.name} className="w-full h-full object-cover" />
+                : initials}
+            </div>
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none">
+              <div className="bg-gray-800 text-white text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-lg">{producer.name}</div>
+              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+            </div>
+          </div>
+        )
+      })}
+      {extra > 0 && (
+        <div className="-ml-2 w-8 h-8 rounded-full bg-gray-200 text-gray-600 text-[10px] font-bold flex items-center justify-center border-2 border-white flex-shrink-0">
+          +{extra}
+        </div>
+      )}
     </div>
   )
 }
@@ -684,6 +728,32 @@ export default function ModulosWorkspace({ course }) {
       ],
     }
   }, [courseMaterials, hasRevisors])
+
+  const publishedCount = useMemo(
+    () => courseMaterials.filter(m => m.published).length,
+    [courseMaterials]
+  )
+
+  const files = useMemo(() => {
+    const counts = Object.fromEntries(FILE_CATEGORIES.map(category => [category.key, 0]))
+    const fallback = FILE_CATEGORIES[FILE_CATEGORIES.length - 1]
+
+    courseMaterials.forEach(m => {
+      const type = Array.isArray(m.type) ? m.type.filter(Boolean)[0] : m.type
+      const category = FILE_CATEGORIES.find(item => item.types.includes(type)) || fallback
+      counts[category.key] += 1
+    })
+
+    const total = courseMaterials.length
+    return {
+      total,
+      items: FILE_CATEGORIES.map(category => ({
+        ...category,
+        value: counts[category.key],
+        pct: total > 0 ? Math.round((counts[category.key] / total) * 100) : 0,
+      })),
+    }
+  }, [courseMaterials])
 
   const sortedModules = useMemo(() => [...modules].sort((a, b) => (a.order || 0) - (b.order || 0)), [modules])
 
@@ -1148,61 +1218,83 @@ export default function ModulosWorkspace({ course }) {
         </div>
       </div>
 
-      {/* Equipe envolvida + Progresso geral */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="card p-5">
+      {/* Equipe envolvida + Progresso geral + Arquivos do curso */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="card p-5 flex flex-col">
           <h3 className="text-sm font-semibold text-gray-800 mb-4">Equipe envolvida</h3>
-          <div className="flex items-center gap-5 flex-wrap">
-            <TeamMember
-              label="Coordenador"
-              name={course.coordinatorName}
-              avatar={course.coordinatorAvatar}
-              hint="Nenhum coordenador vinculado"
-            />
-            <TeamMember
-              label="Supervisor"
-              name={course.supervisorName}
-              avatar={course.supervisorAvatar}
-              hint="Nenhum supervisor vinculado"
-            />
+          <div className="flex items-stretch gap-2">
+            <TeamMember label="Coordenador" name={course.coordinatorName} avatar={course.coordinatorAvatar} />
+            <TeamMember label="Supervisor" name={course.supervisorName} avatar={course.supervisorAvatar} />
             <TeamMember
               label="Revisor"
               name={course.revisors?.[0]?.name}
               avatar={course.revisors?.[0]?.avatar}
               extra={Math.max(0, (course.revisors?.length || 0) - 1)}
-              hint="Nenhum revisor vinculado"
             />
-            <TeamMember label="TI" icon={Monitor} hint="Publicação no AVA" />
+            {/* Nao ha tecnico vinculado por curso: o card mostra o andamento da publicacao no AVA. */}
+            <TeamMember
+              label="Técnico"
+              icon={Monitor}
+              subtitle={`${publishedCount}/${progress.total} no AVA`}
+            />
+          </div>
 
-            <div className="flex items-center gap-3 pl-5 border-l border-gray-100">
-              <div className="w-11 h-11 rounded-xl bg-gray-100 text-gray-500 flex items-center justify-center flex-shrink-0">
-                <Users size={20} />
+          <div className="flex items-center gap-3 mt-4 pt-4 border-t border-gray-100">
+            <div className="w-9 h-9 rounded-xl bg-gray-100 text-gray-500 flex items-center justify-center flex-shrink-0">
+              <Users size={17} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs text-gray-500 mb-1">
+                Professores no curso · <span className="font-bold text-gray-900">{course.producers?.length || 0}</span>
               </div>
-              <div>
-                <div className="text-xs text-gray-500">Professores no curso</div>
-                <div className="text-xl font-bold text-gray-900 leading-tight">{course.producers?.length || 0}</div>
-              </div>
+              <ProducerAvatars producers={course.producers || []} />
             </div>
           </div>
         </div>
 
         <div className="card p-5">
           <h3 className="text-sm font-semibold text-gray-800 mb-4">Progresso geral</h3>
-          <div className="flex items-center gap-6 flex-wrap">
+          <div className="flex items-center gap-4 flex-wrap">
             <ProgressDonut segments={progress.segments} total={progress.total} percent={progress.percent} />
-            <div className="flex-1 min-w-[190px] space-y-2">
+            <div className="flex-1 min-w-[170px] space-y-2">
               {progress.segments.map(segment => (
                 <div key={segment.key} className="flex items-center gap-2 text-xs">
                   <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: segment.color }} />
                   <span className="flex-1 text-gray-600">{segment.label}</span>
                   <span className="font-semibold text-gray-800">{segment.value}</span>
-                  <span className="text-gray-400 w-10 text-right">({segment.pct}%)</span>
+                  <span className="text-gray-400 w-11 text-right">({segment.pct}%)</span>
                 </div>
               ))}
-              <div className="pt-2 mt-1 border-t border-gray-100 text-xs text-gray-500">
-                {progress.concluidos} de {progress.total} conteúdo{progress.total !== 1 ? 's' : ''}
-              </div>
             </div>
+          </div>
+          <div className="pt-3 mt-3 border-t border-gray-100 text-xs text-gray-500">
+            {progress.concluidos} de {progress.total} conteúdo{progress.total !== 1 ? 's' : ''}
+          </div>
+        </div>
+
+        <div className="card p-5 flex flex-col">
+          <h3 className="text-sm font-semibold text-gray-800 mb-4">Arquivos do curso</h3>
+          <div className="space-y-3 flex-1">
+            {files.items.map(item => (
+              <div key={item.key}>
+                <div className="flex items-center justify-between gap-2 text-xs mb-1.5">
+                  <span className="text-gray-600 truncate">{item.label}</span>
+                  <span className="flex-shrink-0">
+                    <span className="font-semibold text-gray-800">{item.value}</span>
+                    <span className="text-gray-400"> ({item.pct}%)</span>
+                  </span>
+                </div>
+                <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{ width: `${item.pct}%`, backgroundColor: item.color }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="pt-3 mt-3 border-t border-gray-100 text-xs text-gray-500">
+            {files.total} arquivo{files.total !== 1 ? 's' : ''} no total
           </div>
         </div>
       </div>
