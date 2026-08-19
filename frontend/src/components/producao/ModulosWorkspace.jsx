@@ -470,7 +470,7 @@ function ProgressDonut({ segments, total, percent }) {
   const stroke = 16
   const radius = (size - stroke) / 2
   const circumference = 2 * Math.PI * radius
-  const trackColor = dark ? '#30185A' : '#f1f5f9'
+  const trackColor = dark ? '#2B1E50' : '#f1f5f9'
   const valueColor = dark ? '#F5F1FF' : '#111827'
   const captionColor = dark ? '#A594CE' : '#9ca3af'
 

@@ -163,22 +163,27 @@
 
 /* ======= Dark mode (roxo escuro) =======
    O tema escuro e aplicado por substituicao das classes utilitarias do Tailwind
-   (os componentes usam sempre as classes do tema claro). Hierarquia de superficie:
-   sidebar (mais escura) < pagina < card < elementos elevados. */
+   (os componentes usam sempre as classes do tema claro). A pagina e o roxo quase
+   preto e a lateral do menu e um roxo mais claro, destacando-se do conteudo. */
 
 .dark {
   /* Superficies, do mais escuro ao mais claro */
-  --tf-bg: #170A2B;         /* fundo da pagina */
-  --tf-surface: #23113E;    /* card, modal, popover (bg-white) */
-  --tf-inset: #1B0D33;      /* poco: cabecalho de tabela, tiles internos (bg-gray-50) */
-  --tf-raised: #30185A;     /* chip neutro, trilha de barra, hover (bg-gray-100) */
-  --tf-raised-2: #3D2070;   /* bg-gray-200 */
-  /* Tooltip/toast: precisa destacar tanto sobre o card quanto sobre a lateral
-     (que e a superficie mais escura), entao e um roxo elevado, nao um preto. */
-  --tf-overlay: #3A2063;
+  --tf-bg: #0E0819;         /* fundo da pagina: roxo quase preto */
+  --tf-inset: #160F2B;      /* poco: cabecalho de tabela, tiles (bg-gray-50) */
+  --tf-surface: #20153D;    /* card, modal, popover (bg-white) */
+  --tf-raised: #2B1E50;     /* chip neutro, trilha de barra, hover (bg-gray-100) */
+  --tf-raised-2: #38285F;   /* bg-gray-200 */
+  /* Tooltip/toast: roxo elevado para destacar sobre o card e sobre a lateral. */
+  --tf-overlay: #3B2868;
 
-  --tf-border: #311B55;     /* border-gray-100 / gray-50 */
-  --tf-border-2: #422670;   /* border-gray-200 / gray-300 */
+  --tf-border: #2C1E4A;     /* border-gray-100 / gray-50 */
+  --tf-border-2: #3A2860;   /* border-gray-200 / gray-300 */
+
+  /* Leve clareamento por cima de qualquer superficie: usado nas variantes com
+     opacidade (bg-gray-50/60) e nos hovers, que precisam funcionar tanto sobre
+     o card quanto sobre a pagina. */
+  --tf-lift: rgba(255, 255, 255, 0.035);
+  --tf-lift-2: rgba(255, 255, 255, 0.06);
 
   /* Texto, do mais forte ao mais fraco */
   --tf-text-900: #F5F1FF;
@@ -205,8 +210,8 @@
 }
 
 .dark ::-webkit-scrollbar-track { background: var(--tf-bg); }
-.dark ::-webkit-scrollbar-thumb { background: #4A2A7A; }
-.dark ::-webkit-scrollbar-thumb:hover { background: #6D3FB0; }
+.dark ::-webkit-scrollbar-thumb { background: #3B2769; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #5C3A9E; }
 
 /* ---- Superficies ---- */
 .dark .bg-white { background-color: var(--tf-surface); }
@@ -216,13 +221,15 @@
 .dark .bg-gray-800,
 .dark .bg-gray-900 { background-color: var(--tf-overlay); }
 
-/* Variantes com opacidade nao casam com as regras acima (o nome da classe muda) */
+/* Variantes com opacidade nao casam com as regras acima (o nome da classe muda).
+   Aqui um veu branco funciona melhor que uma cor fixa: destaca a linha do modulo
+   e os tiles internos sem depender de qual superficie esta por baixo. */
 .dark .bg-gray-50\/50,
-.dark .bg-gray-50\/60 { background-color: rgba(27, 13, 51, 0.6); }
-.dark .bg-white\/90 { background-color: rgba(35, 17, 62, 0.92); }
+.dark .bg-gray-50\/60 { background-color: var(--tf-lift); }
+.dark .bg-white\/90 { background-color: rgba(32, 21, 61, 0.92); }
 
-.dark .hover\:bg-gray-50:hover { background-color: var(--tf-inset); }
-.dark .hover\:bg-gray-50\/50:hover { background-color: rgba(27, 13, 51, 0.5); }
+.dark .hover\:bg-gray-50:hover,
+.dark .hover\:bg-gray-50\/50:hover { background-color: var(--tf-lift-2); }
 .dark .hover\:bg-gray-100:hover { background-color: var(--tf-raised); }
 .dark .hover\:bg-gray-200:hover { background-color: var(--tf-raised-2); }
 
@@ -368,9 +375,10 @@
 .dark .border-fuchsia-200 { border-color: rgba(217, 70, 239, 0.34); }
 
 /* ---- Componentes ---- */
+/* O contorno vem por box-shadow (e nao border) para nao alterar a caixa do card. */
 .dark .card {
   background-color: var(--tf-surface);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 1px var(--tf-border), 0 2px 6px rgba(0, 0, 0, 0.45);
 }
 
 .dark .btn-primary { background-color: var(--tf-brand-fill); }
@@ -415,7 +423,7 @@
 }
 
 .dark .skeleton {
-  background: linear-gradient(90deg, #23113E 25%, #30185A 50%, #23113E 75%);
+  background: linear-gradient(90deg, #20153D 25%, #2B1E50 50%, #20153D 75%);
   background-size: 200% 100%;
 }
 

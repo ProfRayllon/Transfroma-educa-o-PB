@@ -80,10 +80,10 @@ export default function Sidebar({ collapsed, onToggle }) {
         : 'text-white/70 hover:text-white hover:bg-white/10'
     }`
 
-  // No escuro a lateral e o roxo mais fundo da interface, ficando abaixo da pagina
-  // e dos cards na hierarquia de superficie.
+  // No escuro a pagina e o roxo quase preto e a lateral e um roxo mais claro,
+  // funcionando como painel destacado do conteudo.
   const sidebarBackground = dark
-    ? 'linear-gradient(180deg, #0E0420 0%, #150729 45%, #1B0A33 100%)'
+    ? 'linear-gradient(180deg, #301D57 0%, #2A1A4E 45%, #231543 100%)'
     : 'linear-gradient(180deg, #2D1B69 0%, #3B1D7A 40%, #4A2080 100%)'
 
   return (
