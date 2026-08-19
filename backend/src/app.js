@@ -513,6 +513,12 @@ async function modulePayload(body, course, currentModule) {
   return { payload }
 }
 
+// Audiencia do token da equipe interna. O modulo de cursistas assina com a
+// audiencia 'cursista' usando o MESMO segredo, entao esta area precisa recusar
+// explicitamente aquele token -- sem isso, um cursista de id N seria lido como o
+// usuario interno de id N pelas rotas que fazem store.getUserById(req.user.id).
+const INTERNAL_TOKEN_AUDIENCE = 'equipe'
+
 function auth(req, res, next) {
   const header = req.headers.authorization
   if (!header || !header.startsWith('Bearer ')) {
@@ -520,7 +526,13 @@ function auth(req, res, next) {
   }
 
   try {
-    req.user = jwt.verify(header.slice(7), JWT_SECRET)
+    const payload = jwt.verify(header.slice(7), JWT_SECRET)
+    // Tokens emitidos antes desta mudanca nao tem `aud`; seguem validos ate
+    // expirar. Qualquer token com audiencia diferente da interna e recusado.
+    if (payload.aud && payload.aud !== INTERNAL_TOKEN_AUDIENCE) {
+      return res.status(401).json({ message: 'Token invalido para esta area.' })
+    }
+    req.user = payload
     next()
   } catch {
     res.status(401).json({ message: 'Token invalido ou expirado.' })
@@ -545,7 +557,11 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
     const valid = await bcrypt.compare(password, user.passwordHash)
     if (!valid) return res.status(401).json({ message: 'E-mail ou senha incorretos.' })
 
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN, audience: INTERNAL_TOKEN_AUDIENCE }
+    )
     res.json({ token, user: sanitizeUser(user) })
   } catch {
     res.status(500).json({ message: 'Erro interno do servidor.' })
@@ -1724,6 +1740,21 @@ app.put('/api/frequencia/lancamentos/:id', auth, async (req, res) => {
     res.status(500).json({ message: 'Erro ao salvar lancamento.' })
   }
 })
+
+// ---------------------------------------------------------------------------
+// Modulos
+//
+// Codigo novo vive em src/modules/<modulo> com suas proprias rotas, servico e
+// acesso a dados. O modulo recebe daqui os middlewares da area interna, para
+// existir um unico lugar definindo o que e acesso de equipe.
+// ---------------------------------------------------------------------------
+const criarRotasCursistas = require('./modules/cursistas/cursistas.routes')
+
+app.use('/api/cursistas', criarRotasCursistas({
+  authInterna: auth,
+  requireRole,
+  getUsuarioInterno: (id) => store.getUserById(id),
+}))
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', system: 'Transforma Educacao PB 2026', dataMode: store.DATA_MODE, timestamp: new Date().toISOString() })

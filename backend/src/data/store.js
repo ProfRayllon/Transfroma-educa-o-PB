@@ -2585,6 +2585,8 @@ async function updateFrequenciaLancamento(id, updates) {
 module.exports = {
   DATA_MODE,
   MYSQL_AUTO_SEED,
+  // Exposto para os modulos novos reaproveitarem a mesma pool (ver shared/db.js).
+  getPool: () => pool,
   initStore,
   getUserByEmail,
   getUserById,
