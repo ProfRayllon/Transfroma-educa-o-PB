@@ -4,7 +4,6 @@ import {
   Plus, Search, CheckCircle, Send, Rocket, Trash2, Pencil, Eye,
   Link2, AlertTriangle, ArrowLeft, ChevronDown, ChevronRight, MoreVertical, Filter, Info,
   Layers, FileText, X, MessageSquare, ChevronUp, Columns, ClipboardCopy,
-  Monitor, Users,
 } from 'lucide-react'
 import Badge from '../ui/Badge'
 import Modal from '../ui/Modal'
@@ -48,14 +47,22 @@ const STRUCTURE_COLUMNS = [
 
 const HIDDEN_COLUMNS_KEY = 'transforma:producao:hidden-columns'
 
-// Agrupa os tipos de conteudo do curso nas quatro familias do card "Arquivos do curso".
-// A ultima categoria e o fallback, entao a soma sempre fecha com o total de conteudos.
-const FILE_CATEGORIES = [
-  { key: 'videos', label: 'Vídeos', color: '#7c3aed', types: ['videoaula', 'podcast', 'Aula'] },
-  { key: 'documentos', label: 'Documentos/PDFs', color: '#2563eb', types: ['pdf', 'apresentacao', 'ebook', 'material_complementar'] },
-  { key: 'atividades', label: 'Atividades', color: '#16a34a', types: ['atividade_escrita', 'atividade_interativa', 'atividade_objetiva', 'avaliacao_final', 'forum', 'Atividade'] },
-  { key: 'links', label: 'Links', color: '#f97316', types: ['outro'] },
-]
+// Cor de cada tipo de conteudo no card "Arquivos do curso" (contagem por tipo).
+const TYPE_COLORS = {
+  videoaula: '#7c3aed',
+  apresentacao: '#2563eb',
+  ebook: '#0891b2',
+  pdf: '#dc2626',
+  material_complementar: '#64748b',
+  atividade_escrita: '#16a34a',
+  atividade_interativa: '#f59e0b',
+  atividade_objetiva: '#d946ef',
+  avaliacao_final: '#e11d48',
+  forum: '#0d9488',
+  podcast: '#8b5cf6',
+  outro: '#f97316',
+}
+const TYPE_FALLBACK_COLOR = '#94a3b8'
 
 const MODULE_STATUS_FILTER_OPTIONS = [
   { value: '', label: 'Todos os status' },
@@ -729,30 +736,28 @@ export default function ModulosWorkspace({ course }) {
     }
   }, [courseMaterials, hasRevisors])
 
-  const publishedCount = useMemo(
-    () => courseMaterials.filter(m => m.published).length,
-    [courseMaterials]
-  )
-
+  // Contagem por tipo de conteudo, exatamente como esta na coluna "tipo":
+  // so aparecem os tipos que o curso realmente usa, do mais frequente para o menos.
   const files = useMemo(() => {
-    const counts = Object.fromEntries(FILE_CATEGORIES.map(category => [category.key, 0]))
-    const fallback = FILE_CATEGORIES[FILE_CATEGORIES.length - 1]
+    const counts = new Map()
 
     courseMaterials.forEach(m => {
-      const type = Array.isArray(m.type) ? m.type.filter(Boolean)[0] : m.type
-      const category = FILE_CATEGORIES.find(item => item.types.includes(type)) || fallback
-      counts[category.key] += 1
+      const type = (Array.isArray(m.type) ? m.type.filter(Boolean)[0] : m.type) || 'outro'
+      counts.set(type, (counts.get(type) || 0) + 1)
     })
 
     const total = courseMaterials.length
-    return {
-      total,
-      items: FILE_CATEGORIES.map(category => ({
-        ...category,
-        value: counts[category.key],
-        pct: total > 0 ? Math.round((counts[category.key] / total) * 100) : 0,
-      })),
-    }
+    const items = [...counts.entries()]
+      .map(([type, value]) => ({
+        key: type,
+        label: TYPE_LABELS[type] || type,
+        color: TYPE_COLORS[type] || TYPE_FALLBACK_COLOR,
+        value,
+        pct: total > 0 ? Math.round((value / total) * 100) : 0,
+      }))
+      .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label))
+
+    return { total, items }
   }, [courseMaterials])
 
   const sortedModules = useMemo(() => [...modules].sort((a, b) => (a.order || 0) - (b.order || 0)), [modules])
@@ -1231,23 +1236,14 @@ export default function ModulosWorkspace({ course }) {
               avatar={course.revisors?.[0]?.avatar}
               extra={Math.max(0, (course.revisors?.length || 0) - 1)}
             />
-            {/* Nao ha tecnico vinculado por curso: o card mostra o andamento da publicacao no AVA. */}
-            <TeamMember
-              label="Técnico"
-              icon={Monitor}
-              subtitle={`${publishedCount}/${progress.total} no AVA`}
-            />
           </div>
 
-          <div className="flex items-center gap-3 mt-4 pt-4 border-t border-gray-100">
-            <div className="w-9 h-9 rounded-xl bg-gray-100 text-gray-500 flex items-center justify-center flex-shrink-0">
-              <Users size={17} />
+          <div className="mt-4 pt-4 border-t border-gray-100 text-center">
+            <div className="text-xs text-gray-500 mb-2">
+              Professores no curso · <span className="font-bold text-gray-900">{course.producers?.length || 0}</span>
             </div>
-            <div className="min-w-0">
-              <div className="text-xs text-gray-500 mb-1">
-                Professores no curso · <span className="font-bold text-gray-900">{course.producers?.length || 0}</span>
-              </div>
-              <ProducerAvatars producers={course.producers || []} />
+            <div className="flex justify-center">
+              <ProducerAvatars producers={course.producers || []} max={8} />
             </div>
           </div>
         </div>
@@ -1274,11 +1270,12 @@ export default function ModulosWorkspace({ course }) {
 
         <div className="card p-5 flex flex-col">
           <h3 className="text-sm font-semibold text-gray-800 mb-4">Arquivos do curso</h3>
-          <div className="space-y-3 flex-1">
+          {/* Duas colunas onde ha largura; uma so na faixa em que o card fica estreito. */}
+          <div className="grid grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-x-4 gap-y-3 flex-1 content-start">
             {files.items.map(item => (
               <div key={item.key}>
                 <div className="flex items-center justify-between gap-2 text-xs mb-1.5">
-                  <span className="text-gray-600 truncate">{item.label}</span>
+                  <span className="text-gray-600 truncate" title={item.label}>{item.label}</span>
                   <span className="flex-shrink-0">
                     <span className="font-semibold text-gray-800">{item.value}</span>
                     <span className="text-gray-400"> ({item.pct}%)</span>
@@ -1292,9 +1289,12 @@ export default function ModulosWorkspace({ course }) {
                 </div>
               </div>
             ))}
+            {files.items.length === 0 && (
+              <span className="text-xs text-gray-400">Nenhum conteúdo cadastrado ainda.</span>
+            )}
           </div>
           <div className="pt-3 mt-3 border-t border-gray-100 text-xs text-gray-500">
-            {files.total} arquivo{files.total !== 1 ? 's' : ''} no total
+            {files.total} arquivo{files.total !== 1 ? 's' : ''} no total · {files.items.length} tipo{files.items.length !== 1 ? 's' : ''}
           </div>
         </div>
       </div>
