@@ -82,7 +82,7 @@ export function TypeBadge({ type, iconOnly = false }) {
   const types = Array.isArray(type) ? type.filter(Boolean).slice(0, 1) : (type ? [type] : [])
   if (!types.length) return <span className="text-gray-300 text-xs">—</span>
   return (
-    <div className="flex flex-wrap gap-1">
+    <div className={`flex flex-wrap gap-1 ${iconOnly ? 'justify-center' : ''}`}>
       {types.map(t => {
         const Icon = TYPE_ICONS[t] || FileText
         const isDoc = documentTypes.includes(t)
@@ -91,8 +91,8 @@ export function TypeBadge({ type, iconOnly = false }) {
         if (iconOnly) {
           return (
             <div key={t} className="relative group inline-flex">
-              <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isDoc ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}`}>
-                <Icon size={14} />
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${isDoc ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}`}>
+                <Icon size={18} />
               </div>
               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none">
                 <div className="bg-gray-800 text-white text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-lg">{label}</div>

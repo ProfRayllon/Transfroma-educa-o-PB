@@ -32,19 +32,42 @@ import {
 
 // Colunas da tabela "Estrutura do curso". Ordem/Item/Ações sao estruturais e nao podem
 // ser ocultadas; as demais entram no menu "Colunas" e ficam salvas por usuario.
+// Todas tem largura declarada para o espaco ficar distribuido de forma previsivel --
+// sem isso a coluna Item absorvia toda a sobra e abria um vao ate a coluna Tipo.
 const STRUCTURE_COLUMNS = [
-  { key: 'ordem', label: 'Ordem', fixed: true, width: 'w-20' },
-  { key: 'item', label: 'Item', fixed: true, width: '' },
-  { key: 'tipo', label: 'Tipo', width: 'w-14' },
-  { key: 'professor', label: 'Professor(a)', width: 'w-32' },
-  { key: 'link', label: 'Link', width: 'w-16' },
-  { key: 'linkFinal', label: 'Link final', width: 'w-20' },
-  { key: 'supervisor', label: 'Supervisor(a)', width: 'w-32' },
-  { key: 'revisor', label: 'Revisor(a)', width: 'w-32' },
-  { key: 'coordenador', label: 'Coordenador(a)', width: 'w-32' },
+  { key: 'ordem', label: 'Ordem', fixed: true, width: 'w-24' },
+  { key: 'item', label: 'Item', fixed: true, width: 'w-72' },
+  { key: 'tipo', label: 'Tipo', width: 'w-16', center: true },
+  { key: 'professor', label: 'Professor(a)', width: 'w-36' },
+  { key: 'link', label: 'Link', width: 'w-16', center: true },
+  { key: 'linkFinal', label: 'Link final', width: 'w-24', center: true },
+  { key: 'supervisor', label: 'Supervisor(a)', width: 'w-36' },
+  { key: 'revisor', label: 'Revisor(a)', width: 'w-36' },
+  { key: 'coordenador', label: 'Coordenador(a)', width: 'w-36' },
   { key: 'ti', label: 'Status AVA', width: 'w-36' },
   { key: 'acoes', label: 'Ações', fixed: true, width: 'w-24' },
 ]
+
+// Limita titulos a poucas palavras para que a coluna Item tenha largura previsivel.
+// O texto completo continua acessivel no atributo title (tooltip nativo).
+const TITLE_MAX_WORDS = 4
+
+function truncateWords(text, maxWords = TITLE_MAX_WORDS) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean)
+  if (words.length <= maxWords) return String(text || '')
+  return `${words.slice(0, maxWords).join(' ')}…`
+}
+
+// No modulo o prefixo "MODULO N -" consumiria quase todo o limite, entao ele fica
+// fora da contagem: as 4 palavras valem para o titulo em si.
+const MODULE_PREFIX = /^(m[óo]dulo\s+\d+\s*[-–—:]\s*)/i
+
+function truncateModuleTitle(title) {
+  const text = String(title || '')
+  const match = text.match(MODULE_PREFIX)
+  if (!match) return truncateWords(text)
+  return `${match[1]}${truncateWords(text.slice(match[1].length))}`
+}
 
 const HIDDEN_COLUMNS_KEY = 'transforma:producao:hidden-columns'
 
@@ -1333,7 +1356,9 @@ export default function ModulosWorkspace({ course }) {
               <thead>
                 <tr className="border-b border-gray-100">
                   {visibleColumns.map(col => (
-                    <th key={col.key} className={`table-header px-2 ${col.width}`}>{col.label}</th>
+                    <th key={col.key} className={`table-header px-2 ${col.width} ${col.center ? 'text-center' : ''}`}>
+                      {col.label}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -1394,7 +1419,9 @@ export default function ModulosWorkspace({ course }) {
                             <div className="w-7 h-7 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center flex-shrink-0">
                               <Layers size={14} />
                             </div>
-                            <span className="font-bold text-gray-900 whitespace-nowrap">{m.title}</span>
+                            <span className="font-bold text-gray-900 whitespace-nowrap" title={m.title}>
+                              {truncateModuleTitle(m.title)}
+                            </span>
                             <Badge status={getModuleStatusKey(m, allContents, hasRevisors)} />
                             <span className="text-xs text-gray-400 whitespace-nowrap">{allContents.length} conteúdo{allContents.length !== 1 ? 's' : ''}</span>
                           </div>
@@ -1522,11 +1549,11 @@ export default function ModulosWorkspace({ course }) {
                                 <div className="w-6 h-6 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
                                   <FileText size={12} />
                                 </div>
-                                <span className="text-gray-700 truncate" title={mat.theme}>{mat.theme}</span>
+                                <span className="text-gray-700 truncate" title={mat.theme}>{truncateWords(mat.theme)}</span>
                               </div>
                             </td>
                             {isColumnVisible('tipo') && (
-                              <td className="table-cell px-2"><TypeBadge type={mat.type} iconOnly /></td>
+                              <td className="table-cell px-2 text-center"><TypeBadge type={mat.type} iconOnly /></td>
                             )}
                             {isColumnVisible('professor') && (
                               <td className="table-cell px-2">
@@ -1545,10 +1572,10 @@ export default function ModulosWorkspace({ course }) {
                               </td>
                             )}
                             {isColumnVisible('link') && (
-                              <td className="table-cell px-2"><LinkIconOnly url={mat.originalLink} label="Link" /></td>
+                              <td className="table-cell px-2 text-center"><LinkIconOnly url={mat.originalLink} label="Link" /></td>
                             )}
                             {isColumnVisible('linkFinal') && (
-                              <td className="table-cell px-2"><LinkIconOnly url={mat.adjustedLink} label="Link final" /></td>
+                              <td className="table-cell px-2 text-center"><LinkIconOnly url={mat.adjustedLink} label="Link final" /></td>
                             )}
                             {isColumnVisible('supervisor') && (
                               <td className="table-cell px-2">
