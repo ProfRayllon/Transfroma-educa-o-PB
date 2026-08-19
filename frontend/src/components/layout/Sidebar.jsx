@@ -80,13 +80,16 @@ export default function Sidebar({ collapsed, onToggle }) {
         : 'text-white/70 hover:text-white hover:bg-white/10'
     }`
 
+  // No escuro a lateral e o roxo mais fundo da interface, ficando abaixo da pagina
+  // e dos cards na hierarquia de superficie.
+  const sidebarBackground = dark
+    ? 'linear-gradient(180deg, #0E0420 0%, #150729 45%, #1B0A33 100%)'
+    : 'linear-gradient(180deg, #2D1B69 0%, #3B1D7A 40%, #4A2080 100%)'
+
   return (
     <aside
       className={`fixed left-0 top-0 h-screen flex flex-col z-30 transition-all duration-300 ${collapsed ? 'w-16' : 'w-60'}`}
-      style={{ background: dark
-        ? 'linear-gradient(180deg, #0a0a14 0%, #0f0f1e 40%, #131326 100%)'
-        : 'linear-gradient(180deg, #2D1B69 0%, #3B1D7A 40%, #4A2080 100%)'
-      }}
+      style={{ background: sidebarBackground }}
     >
       {/* Logo + toggle */}
       <div className={`flex items-center border-b border-white/10 py-4 ${collapsed ? 'justify-center px-2' : 'px-4 justify-between'}`}>

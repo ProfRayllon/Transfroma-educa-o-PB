@@ -10,6 +10,7 @@ import Modal from '../ui/Modal'
 import ConfirmDialog from '../ui/ConfirmDialog'
 import { useAuth } from '../../context/AuthContext'
 import { useData } from '../../context/DataContext'
+import { useTheme } from '../../context/ThemeContext'
 import api, { getApiErrorMessage } from '../../lib/api'
 import {
   PROFESSOR_STATUS_OPTIONS,
@@ -461,11 +462,17 @@ function ModuleModal({ open, onClose, onSave, saving, editing }) {
 /* ─── main component ─── */
 
 // Donut de progresso em SVG puro (o projeto nao usa lib de grafico).
+// Trilha e textos vem do tema: em SVG as cores sao atributos, entao as classes
+// utilitarias do modo escuro nao alcancam este desenho.
 function ProgressDonut({ segments, total, percent }) {
+  const { dark } = useTheme()
   const size = 132
   const stroke = 16
   const radius = (size - stroke) / 2
   const circumference = 2 * Math.PI * radius
+  const trackColor = dark ? '#30185A' : '#f1f5f9'
+  const valueColor = dark ? '#F5F1FF' : '#111827'
+  const captionColor = dark ? '#A594CE' : '#9ca3af'
 
   let cursor = 0
   const arcs = segments
@@ -480,7 +487,7 @@ function ProgressDonut({ segments, total, percent }) {
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="flex-shrink-0">
       <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#f1f5f9" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={trackColor} strokeWidth={stroke} />
         {total > 0 && arcs.map(arc => (
           <circle
             key={arc.key}
@@ -495,10 +502,10 @@ function ProgressDonut({ segments, total, percent }) {
           />
         ))}
       </g>
-      <text x="50%" y="46%" textAnchor="middle" dominantBaseline="middle" fill="#111827" style={{ fontSize: 27, fontWeight: 800 }}>
+      <text x="50%" y="46%" textAnchor="middle" dominantBaseline="middle" fill={valueColor} style={{ fontSize: 27, fontWeight: 800 }}>
         {percent}%
       </text>
-      <text x="50%" y="63%" textAnchor="middle" dominantBaseline="middle" fill="#9ca3af" style={{ fontSize: 11 }}>
+      <text x="50%" y="63%" textAnchor="middle" dominantBaseline="middle" fill={captionColor} style={{ fontSize: 11 }}>
         Concluído
       </text>
     </svg>

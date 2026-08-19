@@ -161,69 +161,265 @@
   overflow-x: auto;
 }
 
-/* ======= Dark mode ======= */
+/* ======= Dark mode (roxo escuro) =======
+   O tema escuro e aplicado por substituicao das classes utilitarias do Tailwind
+   (os componentes usam sempre as classes do tema claro). Hierarquia de superficie:
+   sidebar (mais escura) < pagina < card < elementos elevados. */
+
+.dark {
+  /* Superficies, do mais escuro ao mais claro */
+  --tf-bg: #170A2B;         /* fundo da pagina */
+  --tf-surface: #23113E;    /* card, modal, popover (bg-white) */
+  --tf-inset: #1B0D33;      /* poco: cabecalho de tabela, tiles internos (bg-gray-50) */
+  --tf-raised: #30185A;     /* chip neutro, trilha de barra, hover (bg-gray-100) */
+  --tf-raised-2: #3D2070;   /* bg-gray-200 */
+  /* Tooltip/toast: precisa destacar tanto sobre o card quanto sobre a lateral
+     (que e a superficie mais escura), entao e um roxo elevado, nao um preto. */
+  --tf-overlay: #3A2063;
+
+  --tf-border: #311B55;     /* border-gray-100 / gray-50 */
+  --tf-border-2: #422670;   /* border-gray-200 / gray-300 */
+
+  /* Texto, do mais forte ao mais fraco */
+  --tf-text-900: #F5F1FF;
+  --tf-text-800: #E6DDFA;
+  --tf-text-700: #D0C2F0;
+  --tf-text-600: #B09FD9;
+  /* A parte baixa da escala foi calibrada por contraste: text-gray-400 e a classe
+     mais usada do sistema e precisa passar em AA (>= 4.5) sobre o card. */
+  --tf-text-500: #A594CE;   /* 6.3:1 */
+  --tf-text-400: #8E7DBA;   /* 4.7:1 */
+  --tf-text-300: #75649B;   /* 3.3:1 -- so para marcadores de vazio e icones inativos */
+
+  /* Roxo da marca, clareado para contrastar com o fundo escuro */
+  --tf-brand-text: #C9A9FF;
+  --tf-brand-fill: #7C3AED;
+
+  /* Faz selects, date pickers e scrollbars nativos seguirem o tema */
+  color-scheme: dark;
+}
 
 .dark body {
-  background-color: #0f172a;
-  color: #e2e8f0;
+  background-color: var(--tf-bg);
+  color: var(--tf-text-800);
 }
 
-/* Backgrounds */
-.dark .bg-white { background-color: #1e293b; }
-.dark .bg-gray-50 { background-color: #0f172a; }
-.dark .bg-gray-100 { background-color: #1e293b; }
-.dark .bg-gray-200 { background-color: #334155; }
+.dark ::-webkit-scrollbar-track { background: var(--tf-bg); }
+.dark ::-webkit-scrollbar-thumb { background: #4A2A7A; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #6D3FB0; }
 
-/* Borders */
-.dark .border-gray-100 { border-color: #1e293b; }
-.dark .border-gray-200 { border-color: #334155; }
-.dark .border-b { border-color: #1e293b; }
+/* ---- Superficies ---- */
+.dark .bg-white { background-color: var(--tf-surface); }
+.dark .bg-gray-50 { background-color: var(--tf-inset); }
+.dark .bg-gray-100 { background-color: var(--tf-raised); }
+.dark .bg-gray-200 { background-color: var(--tf-raised-2); }
+.dark .bg-gray-800,
+.dark .bg-gray-900 { background-color: var(--tf-overlay); }
 
-/* Text */
-.dark .text-gray-900 { color: #f1f5f9; }
-.dark .text-gray-800 { color: #e2e8f0; }
-.dark .text-gray-700 { color: #cbd5e1; }
-.dark .text-gray-600 { color: #94a3b8; }
-.dark .text-gray-500 { color: #64748b; }
-.dark .text-gray-400 { color: #475569; }
+/* Variantes com opacidade nao casam com as regras acima (o nome da classe muda) */
+.dark .bg-gray-50\/50,
+.dark .bg-gray-50\/60 { background-color: rgba(27, 13, 51, 0.6); }
+.dark .bg-white\/90 { background-color: rgba(35, 17, 62, 0.92); }
 
-/* Component overrides */
+.dark .hover\:bg-gray-50:hover { background-color: var(--tf-inset); }
+.dark .hover\:bg-gray-50\/50:hover { background-color: rgba(27, 13, 51, 0.5); }
+.dark .hover\:bg-gray-100:hover { background-color: var(--tf-raised); }
+.dark .hover\:bg-gray-200:hover { background-color: var(--tf-raised-2); }
+
+/* ---- Bordas ---- */
+.dark .border-gray-50,
+.dark .border-gray-100 { border-color: var(--tf-border); }
+.dark .border-gray-200,
+.dark .border-gray-300 { border-color: var(--tf-border-2); }
+.dark .border-b,
+.dark .border-t,
+.dark .border-l,
+.dark .border-r { border-color: var(--tf-border); }
+.dark .divide-gray-100 > * + * { border-color: var(--tf-border); }
+
+/* ---- Texto ---- */
+.dark .text-gray-900 { color: var(--tf-text-900); }
+.dark .text-gray-800 { color: var(--tf-text-800); }
+.dark .text-gray-700 { color: var(--tf-text-700); }
+.dark .text-gray-600 { color: var(--tf-text-600); }
+.dark .text-gray-500 { color: var(--tf-text-500); }
+.dark .text-gray-400 { color: var(--tf-text-400); }
+.dark .text-gray-300 { color: var(--tf-text-300); }
+
+.dark .hover\:text-gray-900:hover { color: var(--tf-text-900); }
+.dark .hover\:text-gray-700:hover { color: var(--tf-text-700); }
+.dark .hover\:text-gray-600:hover { color: var(--tf-text-600); }
+.dark .hover\:text-gray-300:hover { color: var(--tf-text-300); }
+
+/* ---- Roxo da marca ---- */
+.dark .text-brand-600,
+.dark .text-brand-700,
+.dark .text-brand-800 { color: var(--tf-brand-text); }
+.dark .hover\:text-brand-600:hover,
+.dark .hover\:text-brand-700:hover,
+.dark .hover\:text-brand-800:hover,
+.dark .hover\:text-brand-900:hover { color: #E2CCFF; }
+
+.dark .bg-brand-50 { background-color: rgba(168, 85, 247, 0.14); }
+.dark .bg-brand-100 { background-color: rgba(168, 85, 247, 0.2); }
+.dark .bg-brand-50\/30 { background-color: rgba(168, 85, 247, 0.09); }
+.dark .bg-brand-50\/50 { background-color: rgba(168, 85, 247, 0.12); }
+.dark .bg-brand-50\/60 { background-color: rgba(168, 85, 247, 0.15); }
+.dark .hover\:bg-brand-50:hover { background-color: rgba(168, 85, 247, 0.18); }
+.dark .hover\:bg-brand-50\/40:hover { background-color: rgba(168, 85, 247, 0.12); }
+.dark .hover\:bg-brand-100:hover { background-color: rgba(168, 85, 247, 0.26); }
+.dark .hover\:bg-brand-200:hover { background-color: rgba(168, 85, 247, 0.32); }
+.dark .border-brand-100 { border-color: rgba(168, 85, 247, 0.28); }
+.dark .border-brand-200 { border-color: rgba(168, 85, 247, 0.38); }
+.dark .bg-brand-600,
+.dark .bg-brand-700,
+.dark .bg-brand-800 { background-color: var(--tf-brand-fill); }
+
+/* ---- Chips de status/perfil ----
+   No claro sao pastilhas claras (bg-*-50/100 + texto -700/800). No escuro isso
+   viraria um bloco branco brilhante, entao usamos um veu translucido da propria
+   cor com o texto claro -- mantendo o significado de cada cor. */
+.dark .bg-green-50 { background-color: rgba(34, 197, 94, 0.16); }
+.dark .bg-green-100 { background-color: rgba(34, 197, 94, 0.22); }
+.dark .text-green-600,
+.dark .text-green-700,
+.dark .text-green-800 { color: #86EFAC; }
+.dark .border-green-200 { border-color: rgba(34, 197, 94, 0.34); }
+.dark .hover\:bg-green-100:hover { background-color: rgba(34, 197, 94, 0.26); }
+
+.dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.16); }
+.dark .bg-red-100 { background-color: rgba(239, 68, 68, 0.22); }
+.dark .text-red-500,
+.dark .text-red-600,
+.dark .text-red-700,
+.dark .text-red-800 { color: #FCA5A5; }
+.dark .border-red-200 { border-color: rgba(239, 68, 68, 0.34); }
+.dark .hover\:bg-red-50:hover { background-color: rgba(239, 68, 68, 0.18); }
+.dark .hover\:bg-red-100:hover { background-color: rgba(239, 68, 68, 0.26); }
+.dark .hover\:text-red-500:hover,
+.dark .hover\:text-red-600:hover { color: #FCA5A5; }
+
+.dark .bg-amber-50 { background-color: rgba(245, 158, 11, 0.16); }
+.dark .bg-amber-100 { background-color: rgba(245, 158, 11, 0.22); }
+.dark .text-amber-600,
+.dark .text-amber-700,
+.dark .text-amber-800 { color: #FCD34D; }
+.dark .border-amber-200 { border-color: rgba(245, 158, 11, 0.34); }
+
+.dark .bg-orange-50 { background-color: rgba(249, 115, 22, 0.16); }
+.dark .bg-orange-100 { background-color: rgba(249, 115, 22, 0.22); }
+.dark .text-orange-600,
+.dark .text-orange-700,
+.dark .text-orange-800 { color: #FDBA74; }
+.dark .border-orange-200 { border-color: rgba(249, 115, 22, 0.34); }
+
+.dark .bg-blue-50 { background-color: rgba(59, 130, 246, 0.16); }
+.dark .bg-blue-100 { background-color: rgba(59, 130, 246, 0.22); }
+.dark .text-blue-600,
+.dark .text-blue-700,
+.dark .text-blue-800 { color: #93C5FD; }
+.dark .border-blue-200 { border-color: rgba(59, 130, 246, 0.34); }
+
+.dark .bg-purple-50 { background-color: rgba(168, 85, 247, 0.16); }
+.dark .bg-purple-100 { background-color: rgba(168, 85, 247, 0.22); }
+.dark .text-purple-700,
+.dark .text-purple-800 { color: #D8B4FE; }
+.dark .border-purple-200 { border-color: rgba(168, 85, 247, 0.34); }
+
+.dark .bg-violet-100 { background-color: rgba(139, 92, 246, 0.22); }
+.dark .text-violet-700,
+.dark .text-violet-800 { color: #C4B5FD; }
+.dark .border-violet-200 { border-color: rgba(139, 92, 246, 0.34); }
+
+.dark .bg-indigo-100 { background-color: rgba(99, 102, 241, 0.22); }
+.dark .text-indigo-700,
+.dark .text-indigo-800 { color: #A5B4FC; }
+.dark .border-indigo-200 { border-color: rgba(99, 102, 241, 0.34); }
+
+.dark .bg-teal-50 { background-color: rgba(20, 184, 166, 0.16); }
+.dark .bg-teal-100 { background-color: rgba(20, 184, 166, 0.22); }
+.dark .text-teal-700,
+.dark .text-teal-800 { color: #5EEAD4; }
+.dark .border-teal-200 { border-color: rgba(20, 184, 166, 0.34); }
+
+.dark .bg-cyan-100 { background-color: rgba(6, 182, 212, 0.22); }
+.dark .text-cyan-700,
+.dark .text-cyan-800 { color: #67E8F9; }
+.dark .border-cyan-200 { border-color: rgba(6, 182, 212, 0.34); }
+
+.dark .bg-sky-100 { background-color: rgba(14, 165, 233, 0.22); }
+.dark .text-sky-700,
+.dark .text-sky-800 { color: #7DD3FC; }
+.dark .border-sky-200 { border-color: rgba(14, 165, 233, 0.34); }
+
+.dark .bg-rose-100 { background-color: rgba(244, 63, 94, 0.22); }
+.dark .text-rose-700,
+.dark .text-rose-800 { color: #FDA4AF; }
+.dark .border-rose-200 { border-color: rgba(244, 63, 94, 0.34); }
+
+.dark .bg-pink-100 { background-color: rgba(236, 72, 153, 0.22); }
+.dark .text-pink-700,
+.dark .text-pink-800 { color: #F9A8D4; }
+.dark .border-pink-200 { border-color: rgba(236, 72, 153, 0.34); }
+
+.dark .bg-fuchsia-100 { background-color: rgba(217, 70, 239, 0.22); }
+.dark .text-fuchsia-700,
+.dark .text-fuchsia-800 { color: #F0ABFC; }
+.dark .border-fuchsia-200 { border-color: rgba(217, 70, 239, 0.34); }
+
+/* ---- Componentes ---- */
 .dark .card {
-  background-color: #1e293b;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  background-color: var(--tf-surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
+
+.dark .btn-primary { background-color: var(--tf-brand-fill); }
+.dark .btn-primary:hover { background-color: #8B4CF0; }
 
 .dark .btn-secondary {
-  background-color: #1e293b;
-  color: #e2e8f0;
-  border-color: #334155;
+  background-color: var(--tf-surface);
+  color: var(--tf-text-700);
+  border-color: var(--tf-border-2);
 }
-.dark .btn-secondary:hover { background-color: #334155; }
+.dark .btn-secondary:hover { background-color: var(--tf-raised); }
+
+.dark .btn-ghost { color: var(--tf-brand-text); }
+.dark .btn-ghost:hover { background-color: rgba(168, 85, 247, 0.18); }
 
 .dark .input-field,
 .dark .select-field {
-  background-color: #1e293b;
-  border-color: #334155;
-  color: #e2e8f0;
+  background-color: var(--tf-inset);
+  border-color: var(--tf-border-2);
+  color: var(--tf-text-800);
 }
-.dark .input-field::placeholder,
-.dark .select-field::placeholder { color: #64748b; }
+.dark .input-field::placeholder { color: var(--tf-text-400); }
 
 .dark .table-header {
-  background-color: #1a2338;
-  color: #94a3b8;
+  background-color: var(--tf-inset);
+  color: var(--tf-text-500);
 }
-.dark .table-cell { color: #cbd5e1; }
+.dark .table-cell { color: var(--tf-text-700); }
 
-.dark .modal-content { background-color: #1e293b; }
+.dark .modal-content { background-color: var(--tf-surface); }
+.dark .modal-overlay { background-color: rgba(8, 2, 16, 0.6); }
 
-.dark .page-title { color: #f1f5f9; }
-.dark .page-subtitle { color: #94a3b8; }
+.dark .page-title { color: var(--tf-text-900); }
+.dark .page-subtitle { color: var(--tf-text-500); }
+
+.dark .progress-bar { background-color: var(--tf-raised); }
+
+.dark .badge-neutral {
+  background-color: var(--tf-raised);
+  color: var(--tf-text-600);
+  border-color: var(--tf-border-2);
+}
 
 .dark .skeleton {
-  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background: linear-gradient(90deg, #23113E 25%, #30185A 50%, #23113E 75%);
   background-size: 200% 100%;
 }
+
+.dark .tooltip:hover::after { background: var(--tf-overlay); }
 
 /* Tooltip */
 .tooltip {
