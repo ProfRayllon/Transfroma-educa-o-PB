@@ -385,12 +385,6 @@ export default function Home() {
               formação continuada dos profissionais da educação da rede estadual, conduzido pela
               Gerência Executiva de Formação e Desenvolvimento dos Profissionais da Educação (GEFDP).
             </p>
-            <p className="mt-5 text-[17px] leading-relaxed text-white/65">
-              São trilhas formativas construídas a partir da realidade da rede — formação institucional,
-              gestão pedagógica, educação socioemocional, tecnologia e educação inclusiva — para
-              fortalecer a prática de quem está na sala de aula e na gestão da escola. Os cursos
-              acontecem no AVA RIEH/PB, com certificação para quem conclui.
-            </p>
           </div>
         </section>
 
@@ -461,7 +455,7 @@ export default function Home() {
               Formação continuada
             </span>
             <h2 className="mb-4 text-[40px] font-black uppercase leading-tight tracking-tight text-white">
-              Transforme<br />sua prática
+              Transforme sua prática
             </h2>
             <p className="mx-auto max-w-[560px] text-[17px] leading-relaxed text-white/80">
               Participe de formações alinhadas à realidade da rede com intenção, método e resultado.
