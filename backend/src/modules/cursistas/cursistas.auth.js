@@ -21,6 +21,19 @@ const MAX_FAILED_ATTEMPTS = 5
 const LOCK_MINUTES = 15
 const MIN_PASSWORD_LENGTH = 8
 
+/**
+ * Senha de primeiro acesso, igual para toda a base.
+ *
+ * NAO e um segredo: precisa ser comunicada aos ~13 mil cursistas, entao circula
+ * em e-mail, grupo de mensagens e material impresso. O que protege a conta e a
+ * troca obrigatoria na primeira entrada, nao o sigilo deste valor.
+ *
+ * Fica em variavel de ambiente para poder ser trocada sem deploy: se o valor
+ * vazar de forma abusiva, mudar aqui invalida o acesso de quem ainda nao entrou,
+ * sem afetar quem ja definiu a propria senha.
+ */
+const SENHA_PADRAO = process.env.CURSISTA_SENHA_PADRAO || '@transforma2026!'
+
 function assinarToken(cursista) {
   return jwt.sign(
     { id: cursista.id, type: TOKEN_AUDIENCE },
@@ -40,13 +53,19 @@ function erro(statusCode, message) {
 }
 
 /**
- * Regras da senha definida pelo cursista. O CPF e barrado explicitamente: a senha
- * inicial e o CPF, e sem isso o cursista poderia "trocar" a senha para ela mesma.
+ * Regras da senha definida pelo cursista.
+ *
+ * A senha padrao e o CPF sao barrados explicitamente: a padrao e publica (vai
+ * para 13 mil pessoas) e o CPF acabou de ser digitado no login. Sem essas duas
+ * recusas, a "troca" de senha poderia nao trocar nada.
  */
 function validarNovaSenha(senha, cpf) {
   const valor = String(senha || '')
   if (valor.length < MIN_PASSWORD_LENGTH) {
     throw erro(400, `A senha deve ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`)
+  }
+  if (safeEquals(valor, SENHA_PADRAO)) {
+    throw erro(400, 'A nova senha nao pode ser a senha padrao de primeiro acesso.')
   }
   if (normalizeCpf(valor) === normalizeCpf(cpf) && normalizeCpf(valor).length === 11) {
     throw erro(400, 'A nova senha nao pode ser o seu CPF.')
@@ -60,10 +79,10 @@ function validarNovaSenha(senha, cpf) {
 /**
  * Login do cursista.
  *
- * Enquanto `password_hash` for NULL a conta esta em primeiro acesso e o proprio
- * CPF vale como senha. Depois que a senha e definida, o CPF deixa de autenticar
- * -- a regra vem da ausencia do hash, nao de um flag que alguem possa esquecer
- * de conferir.
+ * Enquanto `password_hash` for NULL a conta esta em primeiro acesso e vale a
+ * senha padrao da edicao. Depois que o cursista define a propria senha, a padrao
+ * deixa de autenticar aquela conta -- a regra vem da ausencia do hash, nao de um
+ * flag que alguem possa esquecer de conferir.
  */
 async function login({ cpf, senha, req }) {
   const cpfNormalizado = normalizeCpf(cpf)
@@ -85,7 +104,7 @@ async function login({ cpf, senha, req }) {
 
   const primeiroAcesso = !conta.password_hash
   const senhaConfere = primeiroAcesso
-    ? safeEquals(normalizeCpf(senha), cpfNormalizado)
+    ? safeEquals(String(senha || ''), SENHA_PADRAO)
     : await bcrypt.compare(String(senha || ''), conta.password_hash)
 
   if (!senhaConfere) {
@@ -167,6 +186,7 @@ module.exports = {
   verificarToken,
   assinarToken,
   validarNovaSenha,
+  SENHA_PADRAO,
   TOKEN_AUDIENCE,
   MAX_FAILED_ATTEMPTS,
   LOCK_MINUTES,

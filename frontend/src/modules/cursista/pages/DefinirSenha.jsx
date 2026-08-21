@@ -5,6 +5,10 @@ import { useCursista } from '../CursistaContext'
 
 const MIN_CARACTERES = 8
 
+// Espelha CURSISTA_SENHA_PADRAO do backend. Nao e segredo -- serve so para a tela
+// avisar antes de enviar; quem recusa de fato e o servidor.
+const SENHA_PADRAO = '@transforma2026!'
+
 export default function DefinirSenha() {
   const { senhaPendente, definirSenha } = useCursista()
   const navigate = useNavigate()
@@ -20,14 +24,16 @@ export default function DefinirSenha() {
     { ok: novaSenha.length >= MIN_CARACTERES, texto: `Pelo menos ${MIN_CARACTERES} caracteres` },
     { ok: /[a-zA-Z]/.test(novaSenha) && /\d/.test(novaSenha), texto: 'Letras e números' },
     { ok: novaSenha.length > 0 && novaSenha === confirmacao, texto: 'As duas senhas conferem' },
+    { ok: novaSenha.length > 0 && novaSenha !== SENHA_PADRAO, texto: 'Diferente da senha de primeiro acesso' },
   ]
   const podeEnviar = regras.every((regra) => regra.ok) && (senhaPendente || senhaAtual.length > 0)
 
-  // Erro esperado no primeiro acesso: a pessoa acabou de entrar com o CPF e
-  // repete o CPF como senha nova. A lista de regras sozinha nao explica isso --
-  // ela so mostra "Letras e números" apagado, sem dizer o motivo.
+  // Dois erros esperados no primeiro acesso: repetir a senha padrao (que a pessoa
+  // acabou de digitar) ou usar o proprio CPF. A lista de regras sozinha nao
+  // explica nenhum dos dois -- ela so deixa o botao apagado, sem dizer o motivo.
   const digitados = novaSenha.replace(/\D/g, '')
   const pareceCpf = digitados.length === 11 && !/[a-zA-Z]/.test(novaSenha)
+  const ehSenhaPadrao = novaSenha === SENHA_PADRAO
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -70,9 +76,9 @@ export default function DefinirSenha() {
 
           {senhaPendente && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
-              Enquanto a senha for o seu CPF, outra pessoa que saiba o seu CPF consegue
-              entrar na sua conta. Por isso a troca é obrigatória —{' '}
-              <strong>escolha uma senha diferente do seu CPF</strong>.
+              A senha de primeiro acesso é a mesma para todos os cursistas, então
+              qualquer pessoa que saiba o seu CPF entraria na sua conta. Por isso a
+              troca é obrigatória — <strong>escolha uma senha que só você saiba</strong>.
             </div>
           )}
 
@@ -132,13 +138,23 @@ export default function DefinirSenha() {
             </div>
           </div>
 
-          {pareceCpf && (
+          {(pareceCpf || ehSenhaPadrao) && (
             <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
               <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" />
               <span>
-                <strong>A senha não pode ser o seu CPF.</strong> É justamente o que
-                estamos trocando aqui. Crie uma senha nova, com letras e números —
-                por exemplo, o nome da sua escola com o ano.
+                {ehSenhaPadrao ? (
+                  <>
+                    <strong>Essa é a senha de primeiro acesso.</strong> Todos os
+                    cursistas a conhecem — é justamente ela que estamos trocando.
+                    Escolha uma senha que só você saiba.
+                  </>
+                ) : (
+                  <>
+                    <strong>A senha não pode ser o seu CPF.</strong> Ele identifica
+                    você no login e não serve como senha. Crie uma senha com letras
+                    e números — por exemplo, o nome da sua escola com o ano.
+                  </>
+                )}
               </span>
             </div>
           )}

@@ -97,8 +97,9 @@ export default function LoginCursista() {
           </button>
 
           <div className="rounded-xl bg-brand-50 border border-brand-100 px-3 py-2.5 text-xs text-brand-800">
-            <strong>Primeiro acesso?</strong> Use o seu CPF como senha. O sistema vai
-            pedir que você crie uma senha nova antes de continuar.
+            <strong>Primeiro acesso?</strong> Entre com o seu CPF e a senha{' '}
+            <code className="font-mono font-semibold bg-white/70 px-1 py-0.5 rounded">@transforma2026!</code>.
+            O sistema vai pedir que você crie uma senha pessoal antes de continuar.
           </div>
 
           <p className="text-[11px] text-gray-400 text-center">

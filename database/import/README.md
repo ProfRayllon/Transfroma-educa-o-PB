@@ -52,11 +52,21 @@ digitos, mas conferir na origem evita associar o registro ao CPF errado.
 Cada cursista importado entra com:
 
 - **Login:** CPF (so digitos)
-- **Senha:** o proprio CPF
+- **Senha:** `@transforma2026!` — a mesma para toda a base
 
-No primeiro acesso o sistema **obriga a definir uma senha nova** antes de liberar
-qualquer tela. A partir dai o CPF nao funciona mais como senha.
+No primeiro acesso o sistema **obriga a definir uma senha pessoal** antes de
+liberar qualquer tela, e em seguida **exige completar o cadastro** (data de
+nascimento, telefone e e-mail) antes de liberar as inscricoes. Definida a senha
+propria, a padrao deixa de funcionar naquela conta.
 
-> Por isso a base so deve ser importada proximo a abertura das inscricoes: enquanto
-> um cursista nao fizer o primeiro acesso, o CPF dele e a senha dele. Quanto menor
-> essa janela, menor a exposicao.
+A senha padrao **nao e um segredo**: ela precisa ser comunicada aos ~13 mil
+cursistas, entao circula em e-mail, grupo de mensagens e material impresso. O que
+protege a conta e a troca obrigatoria, nao o sigilo desse valor.
+
+> Consequencia pratica: enquanto um cursista nao fizer o primeiro acesso, quem
+> souber o CPF dele entra na conta. **Importe a base proximo a abertura das
+> inscricoes** -- quanto menor essa janela, menor a exposicao.
+
+Para trocar a senha padrao (por edicao, ou se ela vazar de forma abusiva), altere
+`CURSISTA_SENHA_PADRAO` em `backend/.env` e reinicie a API. Quem ja definiu senha
+propria nao e afetado.
