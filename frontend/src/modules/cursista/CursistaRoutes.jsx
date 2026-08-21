@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { CursistaProvider, useCursista } from './CursistaContext'
+import { useCursista } from './CursistaContext'
 import LoginCursista from './pages/LoginCursista'
 import DefinirSenha from './pages/DefinirSenha'
 import CompletarCadastro from './pages/CompletarCadastro'
@@ -51,16 +51,16 @@ function RedirecionarSeLogado({ children }) {
   return children
 }
 
+// O CursistaProvider vive no App, envolvendo o site inteiro: o topo publico
+// precisa da sessao para trocar o botao de login pelo nome de quem entrou.
 export default function CursistaRoutes() {
   return (
-    <CursistaProvider>
-      <Routes>
-        <Route path="entrar" element={<RedirecionarSeLogado><LoginCursista /></RedirecionarSeLogado>} />
-        <Route path="senha" element={<ExigirCursista aceita="senha"><DefinirSenha /></ExigirCursista>} />
-        <Route path="cadastro" element={<ExigirCursista aceita="cadastro"><CompletarCadastro /></ExigirCursista>} />
-        <Route index element={<ExigirCursista><AreaCursista /></ExigirCursista>} />
-        <Route path="*" element={<Navigate to="/area-do-cursista" replace />} />
-      </Routes>
-    </CursistaProvider>
+    <Routes>
+      <Route path="entrar" element={<RedirecionarSeLogado><LoginCursista /></RedirecionarSeLogado>} />
+      <Route path="senha" element={<ExigirCursista aceita="senha"><DefinirSenha /></ExigirCursista>} />
+      <Route path="cadastro" element={<ExigirCursista aceita="cadastro"><CompletarCadastro /></ExigirCursista>} />
+      <Route index element={<ExigirCursista><AreaCursista /></ExigirCursista>} />
+      <Route path="*" element={<Navigate to="/area-do-cursista" replace />} />
+    </Routes>
   )
 }

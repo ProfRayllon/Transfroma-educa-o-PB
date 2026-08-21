@@ -18,6 +18,7 @@ import CursistasAdmin from './pages/Cursistas'
 import Notificacoes from './pages/Notificacoes'
 import Perfil from './pages/Perfil'
 import CursistaRoutes from './modules/cursista/CursistaRoutes'
+import { CursistaProvider } from './modules/cursista/CursistaContext'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -41,6 +42,11 @@ export default function App() {
         <AvatarProvider>
         <BrandingProvider>
         <DataProvider>
+        {/* Sessao do cursista no nivel do app, e nao so dentro de
+            /area-do-cursista: o topo e a home precisam saber quem entrou para
+            trocar o botao de login pelo nome da pessoa. Continua separada da
+            sessao da equipe -- outro token, outra audiencia. */}
+        <CursistaProvider>
         <Routes>
           {/* Site publico: qualquer visitante ve. O que exige sessao e a inscricao,
               nao a leitura -- por isso a home e o catalogo ficam fora dos guards. */}
@@ -69,6 +75,7 @@ export default function App() {
               errado uma URL do portal e visitante, nao alguem da equipe. */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </CursistaProvider>
         </DataProvider>
         </BrandingProvider>
         </AvatarProvider>

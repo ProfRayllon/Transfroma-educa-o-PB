@@ -1,19 +1,36 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, Download } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { ArrowRight, Clock, Download, LayoutGrid } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
 import MapaParaiba from '../components/public/MapaParaiba'
+import publicApi from '../lib/publicApi'
+import { useCursista } from '../modules/cursista/CursistaContext'
+import cursistaApi from '../modules/cursista/api'
 
 const heroImage = '/images/home/hero-capa.png'
 const statsImage = '/images/home/resultados.png'
 const avaUrl = 'https://pb.ava.rieh.nees.ufal.br/login/index.php'
 
-const allCourses = [
-  { title: 'Google for Education', tag: 'Trilha Institucional', workload: '20h', status: 'Em andamento', image: '/images/home/curso-google.png' },
-  { title: 'Antes que aconteça nas Escolas', tag: 'Trilha Institucional', workload: '20h', status: 'Em breve', image: '/images/home/curso-antes-escolas.png' },
-  { title: 'Legislação Educacional na Prática Docente', tag: 'Trilha Institucional', workload: '20h', status: 'Em breve', image: '/images/home/curso-legislacao.png' },
-]
+// Mesmo mapa do catalogo: as trilhas chegam do banco sem acento.
+const NOMES_TRILHA = {
+  'Educacao Socioemocional': 'Educação Socioemocional',
+  'Educacao, Ciencia e Tecnologia': 'Educação, Ciência e Tecnologia',
+  'Area de Ciencias Humanas': 'Ciências Humanas',
+  'Area de Matematica e Ciencias da Natureza': 'Matemática e Ciências da Natureza',
+  'Area de Linguagens': 'Linguagens',
+  'Gestao Pedagogica': 'Gestão Pedagógica',
+  'Inclusao, Diversidade e Equidade': 'Inclusão, Diversidade e Equidade',
+}
+
+const nomeTrilha = (valor) => NOMES_TRILHA[valor] || valor || 'Trilha'
+
+const SITUACOES = {
+  aberto: { texto: 'Inscrições abertas', classe: 'bg-green-400/90 text-green-950' },
+  em_breve: { texto: 'Em breve', classe: 'bg-amber-300/90 text-amber-900' },
+  encerrado: { texto: 'Encerrado', classe: 'bg-slate-300/90 text-slate-800' },
+  fechado: { texto: 'Em breve', classe: 'bg-amber-300/90 text-amber-900' },
+}
 
 const timeline = [
   ['1', 'Faça o login', 'Entre com as informações repassadas pelo seu tutor.'],
@@ -31,15 +48,58 @@ const stats = [
   { value: 95, prefix: '+', suffix: '%', label: 'de satisfação' },
 ]
 
-const FILTERS = [
-  { label: 'Todos', match: null },
-  { label: 'Institucional', match: 'Trilha Institucional' },
-  { label: 'Socioemocional', match: 'Educacao Socioemocional' },
-  { label: 'Tecnologia', match: 'Educacao, Ciencia e Tecnologia' },
-  { label: 'Gestão', match: 'Gestao Pedagogica' },
-  { label: 'Pedagogia', match: 'Gestao Pedagogica' },
-  { label: 'Inclusiva', match: 'Educacao Inclusiva' },
-]
+/**
+ * Faixa que reconhece quem entrou.
+ *
+ * Aparece so para cursista logado, logo abaixo do banner. A home continua sendo
+ * a pagina institucional -- quem trabalha nos cursos vai para a Area do
+ * Cursista, e esta faixa e o atalho.
+ */
+function FaixaCursista() {
+  const { cursista, cadastroPendente } = useCursista()
+  const [total, setTotal] = useState(null)
+
+  useEffect(() => {
+    if (!cursista || cadastroPendente) return
+    let ativo = true
+    cursistaApi
+      .get('/minhas-inscricoes')
+      .then(({ data }) => { if (ativo) setTotal((data.atuais || []).length) })
+      .catch(() => { /* a faixa e atalho, nao pode quebrar a home */ })
+    return () => { ativo = false }
+  }, [cursista, cadastroPendente])
+
+  if (!cursista) return null
+
+  const primeiroNome = String(cursista.name || '').split(' ')[0]
+
+  return (
+    <section className="border-b border-[#e9d5ff] bg-gradient-to-r from-[#f3e8ff] to-[#faf5ff] px-[22px] py-5">
+      <div className="mx-auto flex max-w-[1180px] flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-[17px] font-black text-[#1c1033]">Olá, {primeiroNome}</p>
+          <p className="mt-0.5 text-sm text-[#566176]">
+            {cadastroPendente
+              ? 'Complete o seu cadastro para poder se inscrever nos cursos.'
+              : total === null
+                ? 'Bem-vindo de volta à sua área do Transforma.'
+                : total === 0
+                  ? 'Você ainda não se inscreveu em nenhum curso desta edição.'
+                  : `Você está inscrito em ${total} ${total === 1 ? 'curso' : 'cursos'} nesta edição.`}
+          </p>
+        </div>
+        <Link
+          to={cadastroPendente ? '/area-do-cursista/cadastro' : '/area-do-cursista'}
+          className="inline-flex shrink-0 items-center gap-2 self-start rounded-xl bg-[#6f35b5] px-6 py-3 text-sm font-black text-white shadow-md transition hover:-translate-y-0.5 hover:bg-[#5a2b94] sm:self-auto"
+        >
+          <LayoutGrid size={16} />
+          {cadastroPendente ? 'Completar cadastro' : 'Ver meus cursos'}
+          <ArrowRight size={15} />
+        </Link>
+      </div>
+    </section>
+  )
+}
 
 function CountUp({ value, prefix = '', suffix = '', label }) {
   const [current, setCurrent] = useState(0)
@@ -237,15 +297,35 @@ function FluxoTimeline() {
 }
 
 export default function Home() {
-  const [activeFilter, setActiveFilter] = useState(1)
+  const [cursos, setCursos] = useState([])
+  const [trilhaAtiva, setTrilhaAtiva] = useState(null)
   const carouselRef = useRef(null)
-  const navigate = useNavigate()
 
-  const visibleCourses = useMemo(() => {
-    const match = FILTERS[activeFilter]?.match
-    if (!match) return allCourses
-    return allCourses.filter((c) => c.tag.startsWith(match))
-  }, [activeFilter])
+  const carregar = useCallback(async () => {
+    try {
+      const { data } = await publicApi.get('/publico/cursos')
+      setCursos(data)
+    } catch {
+      // Home e vitrine: sem a API, o carrossel some e o resto da pagina fica.
+    }
+  }, [])
+
+  useEffect(() => { carregar() }, [carregar])
+
+  // Filtros vindos das trilhas que existem de verdade no banco, e nao de uma
+  // lista fixa que envelhecia toda vez que a equipe cadastrava um curso novo.
+  const trilhas = useMemo(() => {
+    const vistas = new Map()
+    cursos.forEach((curso) => {
+      if (curso.trail && !vistas.has(curso.trail)) vistas.set(curso.trail, nomeTrilha(curso.trail))
+    })
+    return [...vistas.entries()]
+  }, [cursos])
+
+  const visibleCourses = useMemo(
+    () => (trilhaAtiva ? cursos.filter((c) => c.trail === trilhaAtiva) : cursos),
+    [cursos, trilhaAtiva],
+  )
 
   const scrollCarousel = (dir) => {
     carouselRef.current?.scrollBy({ left: dir * 380, behavior: 'smooth' })
@@ -262,6 +342,8 @@ export default function Home() {
           <div className="absolute inset-0 bg-gradient-to-b from-[#3b1d7a]/10 via-transparent to-[#1a0733]/80" />
           <HeroStats />
         </section>
+
+        <FaixaCursista />
 
 
         {/* ── Cursos ── */}
@@ -283,24 +365,24 @@ export default function Home() {
           </div>
 
           {/* Filtros — linha única sem scrollbar */}
-          <div className="mb-8 flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {FILTERS.map((f, i) => (
-              <button
-                key={f.label}
-                type="button"
-                onClick={() => {
-                  if (i === 0) { navigate('/catalogo-cursos') } else { setActiveFilter(i) }
-                }}
-                className={`shrink-0 whitespace-nowrap rounded-full border px-5 py-2 text-sm font-bold transition ${
-                  activeFilter === i
-                    ? 'border-[#6f35b5] bg-[#6f35b5] text-white shadow-md'
-                    : 'border-[#ddd6fe] bg-white text-[#6f35b5] hover:border-[#6f35b5] hover:bg-[#faf5ff]'
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
+          {trilhas.length > 0 && (
+            <div className="mb-8 flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {[[null, 'Todos'], ...trilhas].map(([valor, rotulo]) => (
+                <button
+                  key={rotulo}
+                  type="button"
+                  onClick={() => setTrilhaAtiva(valor)}
+                  className={`shrink-0 whitespace-nowrap rounded-full border px-5 py-2 text-sm font-bold transition ${
+                    trilhaAtiva === valor
+                      ? 'border-[#6f35b5] bg-[#6f35b5] text-white shadow-md'
+                      : 'border-[#ddd6fe] bg-white text-[#6f35b5] hover:border-[#6f35b5] hover:bg-[#faf5ff]'
+                  }`}
+                >
+                  {rotulo}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Carrossel com seta sobreposta */}
           <div className="relative">
@@ -319,45 +401,52 @@ export default function Home() {
                   </div>
                 </div>
               )}
-              {visibleCourses.map((course) => (
-                <Link
-                  key={course.title}
-                  to="/catalogo-cursos"
-                  className="group relative h-[380px] w-[340px] shrink-0 overflow-hidden rounded-2xl bg-[#1a0a2e] text-white shadow-[0_8px_28px_rgba(17,24,39,.14)] transition hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(111,53,181,.22)]"
-                  style={{ scrollSnapAlign: 'start' }}
-                >
-                  <img
-                    src={course.image} alt={course.title}
-                    className="absolute inset-0 h-full w-full object-cover object-top transition duration-500 group-hover:scale-[1.04]"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/10 to-black/80" />
+              {visibleCourses.map((course) => {
+                const situacao = SITUACOES[course.situacao] || SITUACOES.fechado
+                return (
+                  <Link
+                    key={course.id}
+                    to="/catalogo-cursos"
+                    className="group relative h-[380px] w-[340px] shrink-0 overflow-hidden rounded-2xl bg-[#1a0a2e] text-white shadow-[0_8px_28px_rgba(17,24,39,.14)] transition hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(111,53,181,.22)]"
+                    style={{ scrollSnapAlign: 'start' }}
+                  >
+                    {course.hasImage ? (
+                      <img
+                        src={`/api/publico/cursos/${course.id}/imagem`}
+                        alt=""
+                        loading="lazy"
+                        className="absolute inset-0 h-full w-full object-cover object-top transition duration-500 group-hover:scale-[1.04]"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 bg-gradient-to-br from-[#4A238A] via-[#6f35b5] to-[#a855f7]" />
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/10 to-black/80" />
 
-                  {/* Tags topo */}
-                  <div className="absolute left-4 top-4 z-10 flex flex-wrap gap-2">
-                    <span className="rounded-full bg-[#f3e8ff]/90 px-3 py-1 text-xs font-black text-[#4f1f87] backdrop-blur-sm">
-                      {course.tag}
-                    </span>
-                    <span className={`rounded-full px-3 py-1 text-xs font-black backdrop-blur-sm ${
-                      course.status === 'Em andamento'
-                        ? 'bg-green-400/90 text-green-950'
-                        : 'bg-amber-300/90 text-amber-900'
-                    }`}>
-                      {course.status}
-                    </span>
-                  </div>
+                    {/* Tags topo */}
+                    <div className="absolute left-4 top-4 z-10 flex flex-wrap gap-2">
+                      <span className="rounded-full bg-[#f3e8ff]/90 px-3 py-1 text-xs font-black text-[#4f1f87] backdrop-blur-sm">
+                        {nomeTrilha(course.trail)}
+                      </span>
+                      <span className={`rounded-full px-3 py-1 text-xs font-black backdrop-blur-sm ${situacao.classe}`}>
+                        {situacao.texto}
+                      </span>
+                    </div>
 
-                  {/* Conteúdo base */}
-                  <div className="absolute bottom-5 left-5 right-14 z-10">
-                    <small className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-white/60">
-                      {course.workload}
-                    </small>
-                    <h3 className="text-base font-black uppercase leading-snug">{course.title}</h3>
-                  </div>
-                  <span className="absolute bottom-5 right-4 z-10 grid h-9 w-9 place-items-center rounded-full bg-white text-[#6f35b5] shadow-md transition group-hover:bg-[#6f35b5] group-hover:text-white">
-                    <ArrowRight size={17} />
-                  </span>
-                </Link>
-              ))}
+                    {/* Conteúdo base */}
+                    <div className="absolute bottom-5 left-5 right-14 z-10">
+                      {course.totalSessions > 0 && (
+                        <small className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-white/60">
+                          <Clock size={10} /> {course.totalSessions} encontros
+                        </small>
+                      )}
+                      <h3 className="text-base font-black uppercase leading-snug">{course.name}</h3>
+                    </div>
+                    <span className="absolute bottom-5 right-4 z-10 grid h-9 w-9 place-items-center rounded-full bg-white text-[#6f35b5] shadow-md transition group-hover:bg-[#6f35b5] group-hover:text-white">
+                      <ArrowRight size={17} />
+                    </span>
+                  </Link>
+                )
+              })}
             </div>
 
             {/* Seta direita sobreposta (estilo da referência) */}

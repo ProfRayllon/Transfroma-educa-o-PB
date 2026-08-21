@@ -1768,12 +1768,17 @@ app.put('/api/frequencia/lancamentos/:id', auth, async (req, res) => {
 // existir um unico lugar definindo o que e acesso de equipe.
 // ---------------------------------------------------------------------------
 const criarRotasCursistas = require('./modules/cursistas/cursistas.routes')
+const criarRotasPublicas = require('./modules/publico/publico.routes')
 
 app.use('/api/cursistas', criarRotasCursistas({
   authInterna: auth,
   requireRole,
   getUsuarioInterno: (id) => store.getUserById(id),
 }))
+
+// Unico modulo sem autenticacao, e por isso montado separado dos demais: fica
+// obvio na leitura que tudo abaixo deste prefixo e publico por definicao.
+app.use('/api/publico', criarRotasPublicas())
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', system: 'Transforma Educacao PB 2026', dataMode: store.DATA_MODE, timestamp: new Date().toISOString() })
