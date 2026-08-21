@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useBranding } from '../context/BrandingContext'
-import { Mail, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react'
+import { ArrowRight, Eye, EyeOff, GraduationCap, Lock, Mail, ShieldCheck } from 'lucide-react'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -38,10 +38,25 @@ export default function Login() {
         </div>
 
         {/* Heading */}
-        <div className="text-center mb-6">
+        <div className="text-center mb-4">
           <h1 className="text-2xl font-bold text-gray-900">Acesse o sistema</h1>
-          <p className="text-sm text-gray-500 mt-1">Entre com suas credenciais para continuar</p>
+          <p className="text-sm text-gray-500 mt-1">Área da equipe — entre com seu e-mail</p>
         </div>
+
+        {/* O cursista tem area e login proprios (CPF). Sem este aviso, quem se
+            inscreve nos cursos chega aqui, tenta o CPF e nao entra -- foi o
+            primeiro tropeco de quem testou. */}
+        <Link
+          to="/area-do-cursista"
+          className="flex items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 mb-6 transition-colors hover:bg-brand-100"
+        >
+          <GraduationCap size={18} className="text-brand-700 flex-shrink-0" />
+          <span className="flex-1 text-xs text-brand-900 leading-snug">
+            <strong>É cursista?</strong> Para se inscrever nos cursos, entre pela Área
+            do Cursista com o seu CPF.
+          </span>
+          <ArrowRight size={15} className="text-brand-700 flex-shrink-0" />
+        </Link>
 
         <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email */}

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { AlertTriangle, Eye, EyeOff, Fingerprint, Lock, LogIn } from 'lucide-react'
 import { useCursista } from '../CursistaContext'
 import { formatarCpf } from '../api'
@@ -105,6 +105,14 @@ export default function LoginCursista() {
             Esqueceu a senha? Procure a coordenação do programa para solicitar a redefinição.
           </p>
         </form>
+
+        {/* Caminho de volta para quem e da equipe e caiu aqui por engano. */}
+        <p className="text-center text-xs text-gray-500 mt-4">
+          É da equipe do programa?{' '}
+          <Link to="/login" className="font-medium text-brand-700 hover:text-brand-900 underline underline-offset-2">
+            Entre pela área da equipe
+          </Link>
+        </p>
       </div>
     </div>
   )
