@@ -3,111 +3,85 @@
 const repo = require('./cursistas.repo')
 const { getPool, requireMysql } = require('../../shared/db')
 const { normalizeCpf, isValidCpf } = require('../../shared/cpf')
+const { lerPlanilha, normalizarData } = require('../../shared/xlsx')
 const { registrar, ACOES } = require('../../shared/audit')
 
-const COLUNAS = [
-  'cpf', 'nome_completo', 'data_nascimento', 'email', 'telefone',
-  'matricula', 'cargo', 'escola', 'municipio', 'regional',
-]
-
-const MAX_LINHAS = 20000
+const ABA_USUARIOS = 'USUARIOS'
+const ABA_PERFIL = 'PERFIL_DOCENTE'
+const MAX_REGISTROS = 20000
+const MAX_VINCULOS = 4
 
 // Lotes de 500 mantem cada consulta pequena o bastante para a VPS (que tem pouca
 // RAM livre) e reduzem 13 mil idas ao banco para ~26.
 const TAMANHO_DO_LOTE = 500
 
-/**
- * Leitor de CSV com ponto e virgula, tolerante a campos entre aspas.
- * Escrito a mao para nao adicionar dependencia por um formato simples e fixo.
- */
-function parseCsv(texto) {
-  const limpo = String(texto || '').replace(/^﻿/, '') // remove BOM do Excel
-  const linhas = limpo.split(/\r?\n/).filter((linha) => linha.trim() !== '')
-  if (linhas.length === 0) return { cabecalho: [], linhas: [] }
-
-  const separar = (linha) => {
-    const campos = []
-    let atual = ''
-    let dentroDeAspas = false
-
-    for (let i = 0; i < linha.length; i += 1) {
-      const char = linha[i]
-      if (char === '"') {
-        if (dentroDeAspas && linha[i + 1] === '"') { atual += '"'; i += 1 }
-        else dentroDeAspas = !dentroDeAspas
-      } else if (char === ';' && !dentroDeAspas) {
-        campos.push(atual.trim())
-        atual = ''
-      } else {
-        atual += char
-      }
-    }
-    campos.push(atual.trim())
-    return campos
-  }
-
-  const cabecalho = separar(linhas[0]).map((c) => c.toLowerCase().replace(/\s+/g, '_'))
-  return { cabecalho, linhas: linhas.slice(1).map(separar) }
+function erro(statusCode, message) {
+  return Object.assign(new Error(message), { statusCode })
 }
 
-function normalizarData(valor) {
-  const texto = String(valor || '').trim()
-  if (!texto) return null
-  // Aceita AAAA-MM-DD e DD/MM/AAAA, os dois formatos que saem do Excel.
-  let match = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  if (match) return `${match[1]}-${match[2]}-${match[3]}`
-  match = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
-  if (match) return `${match[3]}-${match[2]}-${match[1]}`
-  return null
-}
+const texto = (valor, limite) => String(valor ?? '').trim().slice(0, limite) || null
+const bandeira = (valor) => ['1', 'sim', 'true', 's'].includes(String(valor ?? '').trim().toLowerCase())
 
 /**
- * Importa a base oficial.
+ * Importa a base oficial de docentes (.xlsx com as abas USUARIOS e
+ * PERFIL_DOCENTE), unindo as duas por USUARIO_ID.
  *
- * Roda em transacao: ou a base entra inteira, ou nao entra nada. Com ~13 mil
- * registros, uma importacao parcial deixaria o cadastro em estado ambiguo e
- * dificil de reconciliar.
+ * A planilha nao e a fonte da senha nem do estado de acesso: PRIMEIRO_ACESSO e
+ * CADASTRO_CONFIRMADO da origem sao ignorados de proposito, porque quem manda
+ * neles e o que o cursista ja fez NESTE sistema. Reimportar a base atualiza
+ * cadastro, nunca derruba acesso.
  */
-async function importar({ conteudo, actor, req }) {
+async function importar({ arquivo, actor, req }) {
   requireMysql()
 
-  const { cabecalho, linhas } = parseCsv(conteudo)
-
-  if (cabecalho.length === 0) {
-    throw Object.assign(new Error('Arquivo vazio.'), { statusCode: 400 })
-  }
-  const faltando = ['cpf', 'nome_completo'].filter((coluna) => !cabecalho.includes(coluna))
-  if (faltando.length > 0) {
-    throw Object.assign(
-      new Error(`Colunas obrigatorias ausentes: ${faltando.join(', ')}. Use o modelo em database/import.`),
-      { statusCode: 400 }
-    )
-  }
-  if (linhas.length > MAX_LINHAS) {
-    throw Object.assign(
-      new Error(`O arquivo tem ${linhas.length} linhas; o limite e ${MAX_LINHAS}.`),
-      { statusCode: 400 }
-    )
+  if (!Buffer.isBuffer(arquivo) || arquivo.length === 0) {
+    throw erro(400, 'Envie o arquivo .xlsx da base.')
   }
 
-  const indice = Object.fromEntries(COLUNAS.map((coluna) => [coluna, cabecalho.indexOf(coluna)]))
-  const valor = (linha, coluna) => (indice[coluna] >= 0 ? linha[indice[coluna]] || '' : '')
+  const abas = lerPlanilha(arquivo)
+
+  const usuarios = abas.get(ABA_USUARIOS)
+  if (!usuarios) {
+    throw erro(400, `A planilha precisa ter a aba "${ABA_USUARIOS}". Abas encontradas: ${[...abas.keys()].join(', ') || 'nenhuma'}.`)
+  }
+  const perfis = abas.get(ABA_PERFIL)
+
+  for (const coluna of ['CPF', 'NOME_COMPLETO']) {
+    if (!usuarios.cabecalho.includes(coluna)) {
+      throw erro(400, `A aba ${ABA_USUARIOS} precisa da coluna ${coluna}.`)
+    }
+  }
+  if (usuarios.registros.length > MAX_REGISTROS) {
+    throw erro(400, `A base tem ${usuarios.registros.length} registros; o limite e ${MAX_REGISTROS}.`)
+  }
+
+  // Perfil indexado por USUARIO_ID e, como reserva, por CPF -- se a coluna de
+  // ligacao vier vazia numa das abas, o CPF ainda casa os dois lados.
+  const perfilPorUsuario = new Map()
+  const perfilPorCpf = new Map()
+  for (const registro of perfis?.registros || []) {
+    const chave = texto(registro.USUARIO_ID)
+    if (chave) perfilPorUsuario.set(chave, registro)
+    const cpf = normalizeCpf(registro.CPF)
+    if (cpf) perfilPorCpf.set(cpf, registro)
+  }
 
   const validos = []
   const rejeitados = []
   const cpfsVistos = new Map()
+  let semPerfil = 0
 
-  linhas.forEach((linha, posicao) => {
+  usuarios.registros.forEach((linha, posicao) => {
     const numeroDaLinha = posicao + 2 // +1 do cabecalho, +1 porque planilha comeca em 1
-    const cpf = normalizeCpf(valor(linha, 'cpf'))
-    const nome = String(valor(linha, 'nome_completo') || '').trim()
+    const cpf = normalizeCpf(linha.CPF)
+    const nome = texto(linha.NOME_COMPLETO, 150)
 
     if (!cpf || !isValidCpf(cpf)) {
       rejeitados.push({ linha: numeroDaLinha, motivo: 'CPF invalido' })
       return
     }
     if (!nome) {
-      rejeitados.push({ linha: numeroDaLinha, motivo: 'Nome completo vazio' })
+      rejeitados.push({ linha: numeroDaLinha, motivo: 'NOME_COMPLETO vazio' })
       return
     }
     if (cpfsVistos.has(cpf)) {
@@ -116,17 +90,39 @@ async function importar({ conteudo, actor, req }) {
     }
     cpfsVistos.set(cpf, numeroDaLinha)
 
+    const usuarioId = texto(linha.USUARIO_ID, 20)
+    const perfil = (usuarioId && perfilPorUsuario.get(usuarioId)) || perfilPorCpf.get(cpf) || {}
+    if (!Object.keys(perfil).length) semPerfil += 1
+
+    const vinculos = []
+    for (let ordem = 1; ordem <= MAX_VINCULOS; ordem += 1) {
+      const inep = texto(perfil[`INEP_${ordem}`], 12)
+      const gre = texto(perfil[`GRE_${ordem}`], 60)
+      const escola = texto(perfil[`ESCOLA_${ordem}`], 200)
+      if (inep || gre || escola) vinculos.push({ ordem, inep, gre, escola })
+    }
+
     validos.push({
+      usuarioId,
       cpf,
-      name: nome.slice(0, 150),
-      birthDate: normalizarData(valor(linha, 'data_nascimento')),
-      email: String(valor(linha, 'email') || '').trim().toLowerCase().slice(0, 150) || null,
-      phone: String(valor(linha, 'telefone') || '').replace(/\D/g, '').slice(0, 20) || null,
-      registration: String(valor(linha, 'matricula') || '').trim().slice(0, 30) || null,
-      position: String(valor(linha, 'cargo') || '').trim().slice(0, 120) || null,
-      school: String(valor(linha, 'escola') || '').trim().slice(0, 200) || null,
-      municipality: String(valor(linha, 'municipio') || '').trim().slice(0, 120) || null,
-      regional: String(valor(linha, 'regional') || '').trim().slice(0, 120) || null,
+      name: nome,
+      // Dados funcionais: vem da base e o cursista nao altera.
+      funcao: texto(perfil.FUNCAO, 120),
+      componenteCurricular: texto(perfil.COMPONENTE_CURRICULAR, 120),
+      eixoTecnologico: texto(perfil.EIXO_TECNOLOGICO, 120),
+      cursoTecnico: texto(perfil.CURSO_TECNICO, 120),
+      formacaoEncontrada: bandeira(perfil.FORMACAO_ENCONTRADA),
+      qtdeVinculos: Number(perfil.QTDE_VINCULOS || linha.QTDE_VINCULOS) || vinculos.length || 1,
+      dataInicioRede: normalizarData(perfil.DATA_INICIO_REDE_ESTADUAL),
+      // Dados de contato: a base preenche o que tem; o cursista completa depois.
+      birthDate: normalizarData(perfil.DATA_NASCIMENTO),
+      emailInstitucional: texto(String(perfil.EMAIL_INSTITUCIONAL || '').toLowerCase(), 150),
+      emailPessoal: texto(String(perfil.EMAIL_PESSOAL || '').toLowerCase(), 150),
+      genero: texto(perfil.GENERO, 40),
+      // ATIVO da base controla se a conta pode entrar; os demais estados de
+      // acesso sao deste sistema, nao da planilha.
+      status: Object.prototype.hasOwnProperty.call(linha, 'ATIVO') && !bandeira(linha.ATIVO) ? 'inativo' : 'ativo',
+      vinculos,
     })
   })
 
@@ -142,6 +138,7 @@ async function importar({ conteudo, actor, req }) {
         const resultado = await repo.upsertLoteFromImport(lote, conexao)
         inseridos += resultado.inseridos
         atualizados += resultado.atualizados
+        await repo.substituirVinculos(lote, conexao)
       }
       await conexao.commit()
     } catch (error) {
@@ -153,10 +150,12 @@ async function importar({ conteudo, actor, req }) {
   }
 
   const resumo = {
-    totalLinhas: linhas.length,
+    totalLinhas: usuarios.registros.length,
     inseridos,
     atualizados,
     rejeitados: rejeitados.length,
+    semPerfil,
+    comMultiplosVinculos: validos.filter((v) => v.vinculos.length > 1).length,
     // Amostra para o admin corrigir a origem sem despejar o arquivo inteiro na tela.
     exemplosRejeitados: rejeitados.slice(0, 50),
   }
@@ -167,10 +166,16 @@ async function importar({ conteudo, actor, req }) {
     actorLabel: actor?.name || null,
     action: ACOES.BASE_IMPORTADA,
     req,
-    details: { totalLinhas: resumo.totalLinhas, inseridos, atualizados, rejeitados: rejeitados.length },
+    details: {
+      totalLinhas: resumo.totalLinhas,
+      inseridos,
+      atualizados,
+      rejeitados: rejeitados.length,
+      semPerfil,
+    },
   })
 
   return resumo
 }
 
-module.exports = { importar, parseCsv }
+module.exports = { importar, ABA_USUARIOS, ABA_PERFIL }

@@ -98,10 +98,28 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
       if (conta.status !== 'ativo') {
         return res.status(403).json({ message: 'Cadastro inativo.' })
       }
+      req.contaCursista = conta
       next()
     } catch (error) {
       next(error)
     }
+  }
+
+  /**
+   * Segundo portao: a base chega inteira com o cadastro pendente de confirmacao
+   * e o cursista so passa das telas de cadastro depois de completar os dados.
+   *
+   * Aplicado apenas nas rotas de curso e inscricao -- ler e gravar o proprio
+   * cadastro precisa continuar liberado, senao nao haveria como completa-lo.
+   */
+  function exigirCadastroConfirmado(req, res, next) {
+    if (!req.contaCursista?.cadastro_confirmado) {
+      return res.status(428).json({
+        message: 'Complete e confirme o seu cadastro para acessar os cursos.',
+        precisaConfirmarCadastro: true,
+      })
+    }
+    next()
   }
 
   function tratar(handler) {
@@ -142,25 +160,27 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
     res.json(await repo.findById(req.cursista.id, { fullCpf: true }))
   }))
 
+  // Sem `exigirCadastroConfirmado`: e esta a rota que conclui o cadastro.
   router.put('/me', autenticarCursista, exigirSenhaDefinida, tratar(async (req, res) => {
-    const atualizado = await service.atualizarMeusDados({
+    const atualizado = await service.atualizarMeuCadastro({
       cursistaId: req.cursista.id,
-      email: req.body?.email,
-      phone: req.body?.phone,
+      dados: req.body,
       req,
     })
     res.json(atualizado)
   }))
 
-  router.get('/cursos-abertos', autenticarCursista, exigirSenhaDefinida, tratar(async (req, res) => {
+  const areaLogada = [autenticarCursista, exigirSenhaDefinida, exigirCadastroConfirmado]
+
+  router.get('/cursos-abertos', ...areaLogada, tratar(async (req, res) => {
     res.json(await service.listarCursosAbertos(req.cursista.id))
   }))
 
-  router.get('/minhas-inscricoes', autenticarCursista, exigirSenhaDefinida, tratar(async (req, res) => {
+  router.get('/minhas-inscricoes', ...areaLogada, tratar(async (req, res) => {
     res.json(await service.listarMinhasInscricoes(req.cursista.id))
   }))
 
-  router.post('/inscricoes', autenticarCursista, exigirSenhaDefinida, tratar(async (req, res) => {
+  router.post('/inscricoes', ...areaLogada, tratar(async (req, res) => {
     const resultado = await service.inscrever({
       cursistaId: req.cursista.id,
       courseId: Number(req.body?.courseId),
@@ -169,7 +189,7 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
     res.status(201).json(resultado)
   }))
 
-  router.delete('/inscricoes/:courseId', autenticarCursista, exigirSenhaDefinida, tratar(async (req, res) => {
+  router.delete('/inscricoes/:courseId', ...areaLogada, tratar(async (req, res) => {
     await service.cancelarInscricao({
       cursistaId: req.cursista.id,
       courseId: Number(req.params.courseId),
@@ -193,13 +213,30 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
     }))
   }))
 
-  router.post('/admin/cursistas/importar', ...soAdmin, limiteImportacao, tratar(async (req, res) => {
-    const conteudo = req.body?.conteudo
-    if (!conteudo || typeof conteudo !== 'string') {
-      return res.status(400).json({ message: 'Envie o conteudo do arquivo CSV.' })
+  // Recebe o .xlsx como bytes, nao como texto ou base64: a base dos 13 mil pesa
+  // alguns MB e base64 inflaria em 33% sem nenhum ganho.
+  const receberPlanilha = express.raw({
+    type: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/octet-stream'],
+    limit: '25mb',
+  })
+
+  router.post('/admin/cursistas/importar', ...soAdmin, limiteImportacao, receberPlanilha, tratar(async (req, res) => {
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      return res.status(400).json({ message: 'Envie o arquivo .xlsx da base no corpo da requisicao.' })
     }
     const actor = await getUsuarioInterno(req.user.id)
-    res.json(await importar({ conteudo, actor, req }))
+    res.json(await importar({ arquivo: req.body, actor, req }))
+  }))
+
+  /**
+   * Panorama de acesso, so com numeros agregados.
+   *
+   * Acompanhar a adesao dos 13 mil nao exige abrir o cadastro de ninguem, e a
+   * LGPD pede que o tratamento se limite ao necessario para a finalidade -- por
+   * isso nada aqui identifica pessoas.
+   */
+  router.get('/admin/estatisticas', ...soAdmin, tratar(async (req, res) => {
+    res.json(await repo.estatisticas())
   }))
 
   router.post('/admin/cursistas/:id/resetar-senha', ...soAdmin, tratar(async (req, res) => {

