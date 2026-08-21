@@ -13,6 +13,16 @@ const zlib = require('zlib')
 const ASSINATURA_CENTRAL = 0x02014b50
 const ASSINATURA_FIM_CENTRAL = 0x06054b50
 
+/**
+ * Teto para o conteudo descomprimido.
+ *
+ * ZIP permite razoes de compressao enormes: alguns KB podem virar gigabytes ao
+ * inflar. A VPS roda com menos de 1 GB de RAM, entao um arquivo assim derrubaria
+ * a API inteira. A base real dos 13 mil, descomprimida, fica na casa das dezenas
+ * de MB -- 300 MB e folga larga com protecao efetiva.
+ */
+const MAX_DESCOMPRIMIDO = 300 * 1024 * 1024
+
 /** Extrai as entradas do ZIP percorrendo o diretorio central. */
 function lerZip(buffer) {
   // O fim do diretorio central fica no rodape; pode haver comentario depois dele.
@@ -26,25 +36,48 @@ function lerZip(buffer) {
   let posicao = buffer.readUInt32LE(fimCentral + 16)
   const arquivos = new Map()
 
+  // So as partes que o leitor realmente usa sao descomprimidas. Uma planilha pode
+  // carregar imagens e outros anexos pesados que nao interessam aqui.
+  const INTERESSAM = /^xl\/(workbook\.xml|sharedStrings\.xml|_rels\/workbook\.xml\.rels|worksheets\/[^/]+\.xml)$/
+
+  let totalDescomprimido = 0
+
   for (let i = 0; i < totalEntradas; i += 1) {
+    if (posicao + 46 > buffer.length) break
     if (buffer.readUInt32LE(posicao) !== ASSINATURA_CENTRAL) break
 
     const metodo = buffer.readUInt16LE(posicao + 10)
     const tamanhoComprimido = buffer.readUInt32LE(posicao + 20)
+    const tamanhoDescomprimido = buffer.readUInt32LE(posicao + 24)
     const tamanhoNome = buffer.readUInt16LE(posicao + 28)
     const tamanhoExtra = buffer.readUInt16LE(posicao + 30)
     const tamanhoComentario = buffer.readUInt16LE(posicao + 32)
     const inicioLocal = buffer.readUInt32LE(posicao + 42)
     const nome = buffer.toString('utf8', posicao + 46, posicao + 46 + tamanhoNome)
 
+    posicao += 46 + tamanhoNome + tamanhoExtra + tamanhoComentario
+
+    if (!INTERESSAM.test(nome)) continue
+
+    // O tamanho declarado nao e confiavel, mas serve para recusar cedo o que ja
+    // se anuncia grande demais; o total real e conferido depois de inflar.
+    totalDescomprimido += tamanhoDescomprimido
+    if (totalDescomprimido > MAX_DESCOMPRIMIDO) {
+      throw Object.assign(new Error('Planilha grande demais para processar.'), { statusCode: 400 })
+    }
+
     // O cabecalho local repete nome e extra, com tamanhos proprios.
+    if (inicioLocal + 30 > buffer.length) continue
     const nomeLocal = buffer.readUInt16LE(inicioLocal + 26)
     const extraLocal = buffer.readUInt16LE(inicioLocal + 28)
     const inicioDados = inicioLocal + 30 + nomeLocal + extraLocal
     const dados = buffer.subarray(inicioDados, inicioDados + tamanhoComprimido)
 
-    arquivos.set(nome, metodo === 0 ? dados : zlib.inflateRawSync(dados))
-    posicao += 46 + tamanhoNome + tamanhoExtra + tamanhoComentario
+    const conteudo = metodo === 0
+      ? dados
+      : zlib.inflateRawSync(dados, { maxOutputLength: MAX_DESCOMPRIMIDO })
+
+    arquivos.set(nome, conteudo)
   }
 
   return arquivos
