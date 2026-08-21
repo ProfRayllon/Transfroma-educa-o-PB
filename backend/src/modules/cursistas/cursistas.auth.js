@@ -24,15 +24,26 @@ const MIN_PASSWORD_LENGTH = 8
 /**
  * Senha de primeiro acesso, igual para toda a base.
  *
- * NAO e um segredo: precisa ser comunicada aos ~13 mil cursistas, entao circula
- * em e-mail, grupo de mensagens e material impresso. O que protege a conta e a
- * troca obrigatoria na primeira entrada, nao o sigilo deste valor.
+ * So existe na variavel de ambiente, sem valor de reserva no codigo. Um fallback
+ * aqui teria dois problemas: publicaria a senha no repositorio (que e publico) e,
+ * pior, faria o sistema aceitar em silencio um valor conhecido caso alguem
+ * esquecesse de configurar a variavel no servidor.
  *
- * Fica em variavel de ambiente para poder ser trocada sem deploy: se o valor
- * vazar de forma abusiva, mudar aqui invalida o acesso de quem ainda nao entrou,
- * sem afetar quem ja definiu a propria senha.
+ * Sem a variavel definida, o primeiro acesso falha fechado -- nenhuma conta e
+ * aberta por engano. Quem ja definiu a propria senha nao e afetado: aquele
+ * caminho usa bcrypt contra o hash gravado e nao passa por aqui.
+ *
+ * Estar em variavel tambem permite trocar o valor sem deploy, por edicao ou se
+ * ele vazar.
  */
-const SENHA_PADRAO = process.env.CURSISTA_SENHA_PADRAO || '@transforma2026!'
+const SENHA_PADRAO = process.env.CURSISTA_SENHA_PADRAO || ''
+
+if (!SENHA_PADRAO) {
+  console.warn(
+    '[cursistas] CURSISTA_SENHA_PADRAO nao definida: o primeiro acesso vai recusar ' +
+    'qualquer senha ate a variavel ser configurada no .env do servidor.'
+  )
+}
 
 function assinarToken(cursista) {
   return jwt.sign(
@@ -103,8 +114,13 @@ async function login({ cpf, senha, req }) {
   const bloqueada = Boolean(conta.locked_until) && new Date(conta.locked_until) > new Date()
 
   const primeiroAcesso = !conta.password_hash
+
+  // A guarda de SENHA_PADRAO vazia vem ANTES da comparacao, e nao pode virar um
+  // safeEquals a mais: `timingSafeEqual` entre dois buffers vazios devolve TRUE,
+  // entao, sem variavel configurada, uma senha vazia abriria qualquer conta que
+  // ainda esta em primeiro acesso.
   const senhaConfere = primeiroAcesso
-    ? safeEquals(String(senha || ''), SENHA_PADRAO)
+    ? Boolean(SENHA_PADRAO) && safeEquals(String(senha || ''), SENHA_PADRAO)
     : await bcrypt.compare(String(senha || ''), conta.password_hash)
 
   if (!senhaConfere) {

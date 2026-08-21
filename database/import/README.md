@@ -52,21 +52,27 @@ digitos, mas conferir na origem evita associar o registro ao CPF errado.
 Cada cursista importado entra com:
 
 - **Login:** CPF (so digitos)
-- **Senha:** `@transforma2026!` — a mesma para toda a base
+- **Senha:** o valor de `CURSISTA_SENHA_PADRAO`, igual para toda a base
+
+> **O valor nao esta escrito neste repositorio, e nao deve ser.** Ele vive
+> apenas em `backend/.env` no servidor, e a coordenacao o comunica aos cursistas
+> por canal interno. Este repositorio e publico: qualquer valor escrito aqui
+> esta publicado para sempre, inclusive no historico do git.
 
 No primeiro acesso o sistema **obriga a definir uma senha pessoal** antes de
 liberar qualquer tela, e em seguida **exige completar o cadastro** (data de
 nascimento, telefone e e-mail) antes de liberar as inscricoes. Definida a senha
 propria, a padrao deixa de funcionar naquela conta.
 
-A senha padrao **nao e um segredo**: ela precisa ser comunicada aos ~13 mil
-cursistas, entao circula em e-mail, grupo de mensagens e material impresso. O que
-protege a conta e a troca obrigatoria, nao o sigilo desse valor.
+A senha padrao **nao e um segredo forte**: precisa chegar a ~13 mil pessoas,
+entao circula em e-mail, grupo de mensagens e material impresso. O que protege a
+conta e a troca obrigatoria na primeira entrada, nao o sigilo do valor -- mas
+nao publica-la reduz quem a alcanca sem esforco nenhum.
 
 > Consequencia pratica: enquanto um cursista nao fizer o primeiro acesso, quem
-> souber o CPF dele entra na conta. **Importe a base proximo a abertura das
-> inscricoes** -- quanto menor essa janela, menor a exposicao.
+> souber o CPF dele e a senha padrao entra na conta. **Importe a base proximo a
+> abertura das inscricoes** -- quanto menor essa janela, menor a exposicao.
 
-Para trocar a senha padrao (por edicao, ou se ela vazar de forma abusiva), altere
-`CURSISTA_SENHA_PADRAO` em `backend/.env` e reinicie a API. Quem ja definiu senha
-propria nao e afetado.
+Para trocar a senha padrao (por edicao, ou se ela vazar), altere
+`CURSISTA_SENHA_PADRAO` em `backend/.env` no servidor e reinicie a API. Quem ja
+definiu senha propria nao e afetado.

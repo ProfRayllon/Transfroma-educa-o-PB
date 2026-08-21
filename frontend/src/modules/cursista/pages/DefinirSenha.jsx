@@ -5,9 +5,9 @@ import { useCursista } from '../CursistaContext'
 
 const MIN_CARACTERES = 8
 
-// Espelha CURSISTA_SENHA_PADRAO do backend. Nao e segredo -- serve so para a tela
-// avisar antes de enviar; quem recusa de fato e o servidor.
-const SENHA_PADRAO = '@transforma2026!'
+// A senha de primeiro acesso NAO e espelhada aqui. O bundle do front e publico:
+// qualquer pessoa baixa o .js e le uma constante. Quem recusa a repeticao da
+// senha padrao e o servidor, e a mensagem dele aparece no bloco de erro acima.
 
 export default function DefinirSenha() {
   const { senhaPendente, definirSenha } = useCursista()
@@ -24,16 +24,16 @@ export default function DefinirSenha() {
     { ok: novaSenha.length >= MIN_CARACTERES, texto: `Pelo menos ${MIN_CARACTERES} caracteres` },
     { ok: /[a-zA-Z]/.test(novaSenha) && /\d/.test(novaSenha), texto: 'Letras e números' },
     { ok: novaSenha.length > 0 && novaSenha === confirmacao, texto: 'As duas senhas conferem' },
-    { ok: novaSenha.length > 0 && novaSenha !== SENHA_PADRAO, texto: 'Diferente da senha de primeiro acesso' },
   ]
   const podeEnviar = regras.every((regra) => regra.ok) && (senhaPendente || senhaAtual.length > 0)
 
-  // Dois erros esperados no primeiro acesso: repetir a senha padrao (que a pessoa
-  // acabou de digitar) ou usar o proprio CPF. A lista de regras sozinha nao
-  // explica nenhum dos dois -- ela so deixa o botao apagado, sem dizer o motivo.
+  // Usar o proprio CPF e o erro mais comum no primeiro acesso, e a lista de
+  // regras sozinha nao explica o motivo -- ela so deixa o botao apagado. Este
+  // aviso e local porque conferir o CPF nao expoe nada: a pessoa acabou de
+  // digita-lo. A recusa da senha padrao fica no servidor, que nao precisa
+  // publicar o valor para compara-lo.
   const digitados = novaSenha.replace(/\D/g, '')
   const pareceCpf = digitados.length === 11 && !/[a-zA-Z]/.test(novaSenha)
-  const ehSenhaPadrao = novaSenha === SENHA_PADRAO
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -138,23 +138,13 @@ export default function DefinirSenha() {
             </div>
           </div>
 
-          {(pareceCpf || ehSenhaPadrao) && (
+          {pareceCpf && (
             <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
               <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" />
               <span>
-                {ehSenhaPadrao ? (
-                  <>
-                    <strong>Essa é a senha de primeiro acesso.</strong> Todos os
-                    cursistas a conhecem — é justamente ela que estamos trocando.
-                    Escolha uma senha que só você saiba.
-                  </>
-                ) : (
-                  <>
-                    <strong>A senha não pode ser o seu CPF.</strong> Ele identifica
-                    você no login e não serve como senha. Crie uma senha com letras
-                    e números — por exemplo, o nome da sua escola com o ano.
-                  </>
-                )}
+                <strong>A senha não pode ser o seu CPF.</strong> Ele identifica
+                você no login e não serve como senha. Crie uma senha com letras
+                e números — por exemplo, o nome da sua escola com o ano.
               </span>
             </div>
           )}

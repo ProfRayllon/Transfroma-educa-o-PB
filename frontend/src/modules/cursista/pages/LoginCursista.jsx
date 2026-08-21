@@ -96,14 +96,11 @@ export default function LoginCursista() {
             {enviando ? 'Entrando...' : 'Entrar'}
           </button>
 
-          <div className="rounded-xl bg-brand-50 border border-brand-100 px-3 py-2.5 text-xs text-brand-800">
-            <strong>Primeiro acesso?</strong> Entre com o seu CPF e a senha{' '}
-            <code className="font-mono font-semibold bg-white/70 px-1 py-0.5 rounded">@transforma2026!</code>.
-            O sistema vai pedir que você crie uma senha pessoal antes de continuar.
-          </div>
-
-          <p className="text-[11px] text-gray-400 text-center">
-            Esqueceu a senha? Procure a coordenação do programa para solicitar a redefinição.
+          {/* A senha de primeiro acesso NAO aparece aqui: e comunicada pela
+              coordenacao por canal interno. Publicar o valor nesta tela o
+              entregaria a qualquer visitante junto com o campo de CPF. */}
+          <p className="text-[11px] text-gray-400 text-center leading-relaxed">
+            Primeiro acesso ou esqueceu a senha? Procure a coordenação do programa.
           </p>
         </form>
 
