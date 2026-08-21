@@ -104,8 +104,10 @@ export default function Cursistas() {
   const carregarLista = useCallback(async () => {
     setCarregando(true)
     try {
-      const { data } = await api.get('/cursistas/admin/cursistas', {
-        params: { search: busca, situacao, page: pagina, perPage: 50 },
+      // POST, e nao GET com query string: o termo pode ser um CPF, e a URL
+      // completa iria para o access.log do nginx e para o historico do navegador.
+      const { data } = await api.post('/cursistas/admin/cursistas/buscar', {
+        search: busca, situacao, page: pagina, perPage: 50,
       })
       setLista(data)
     } catch (error) {

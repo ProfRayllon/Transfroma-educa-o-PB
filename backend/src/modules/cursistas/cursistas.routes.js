@@ -204,13 +204,21 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
 
   const soAdmin = [authInterna, requireRole('administrador')]
 
-  router.get('/admin/cursistas', ...soAdmin, tratar(async (req, res) => {
+  /**
+   * Busca de cursistas por POST, e nao GET com query string.
+   *
+   * O termo pode ser um CPF, e o nginx grava a URL completa no access.log
+   * (formato combined, retido por 14 dias). Um CPF pesquisado ficaria em texto
+   * puro no disco do servidor, acessivel a quem le log -- alem do historico do
+   * navegador e de qualquer proxy no caminho. No corpo do POST isso nao acontece.
+   */
+  router.post('/admin/cursistas/buscar', ...soAdmin, tratar(async (req, res) => {
     res.json(await repo.list({
-      search: req.query.search || '',
-      status: req.query.status || '',
-      situacao: req.query.situacao || '',
-      page: req.query.page,
-      perPage: req.query.perPage,
+      search: req.body?.search || '',
+      status: req.body?.status || '',
+      situacao: req.body?.situacao || '',
+      page: req.body?.page,
+      perPage: req.body?.perPage,
     }))
   }))
 
