@@ -6,25 +6,7 @@ import {
 } from 'lucide-react'
 import { useCursista } from '../CursistaContext'
 import cursistaApi, { getCursistaErrorMessage } from '../api'
-import PublicNav from '../../../components/public/PublicNav'
-import PublicFooter from '../../../components/public/PublicFooter'
-
-function Cartao({ children, className = '' }) {
-  return (
-    <section className={`rounded-2xl border border-[#ded6ea] bg-white p-6 shadow-[0_6px_20px_rgba(42,24,70,.06)] ${className}`}>
-      {children}
-    </section>
-  )
-}
-
-function TituloSecao({ children, descricao }) {
-  return (
-    <div className="mb-5">
-      <h2 className="text-[19px] font-black leading-tight text-[#1c1033]">{children}</h2>
-      {descricao && <p className="mt-1 text-sm text-[#566176]">{descricao}</p>}
-    </div>
-  )
-}
+import CursistaShell, { CartaoCursista as Cartao, TituloCartao as TituloSecao } from '../CursistaShell'
 
 export default function AreaCursista() {
   const { cursista } = useCursista()
@@ -92,36 +74,25 @@ export default function AreaCursista() {
   const totalInscrito = inscricoes.atuais.length
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#f7f5fb]">
-      <PublicNav />
-
-      <main className="flex-1">
-        {/* Faixa de boas-vindas na identidade do site, no lugar do cabecalho
-            cinza de painel que a area tinha antes. */}
-        <section className="relative overflow-hidden bg-[#3b1d7a] px-[22px] py-12">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(168,85,247,.28)_0%,_transparent_60%)]" />
-          <div className="relative mx-auto flex max-w-[1000px] flex-col gap-5 md:flex-row md:items-end md:justify-between">
-            <div>
-              <span className="mb-3 inline-block rounded-full bg-white/15 px-3 py-1 text-xs font-black uppercase tracking-[0.3em] text-purple-200 ring-1 ring-white/20">
-                Área do Cursista
-              </span>
-              <h1 className="text-[36px] font-black leading-tight text-white">Olá, {primeiroNome}</h1>
-              <p className="mt-1.5 text-[16px] text-white/70">
-                {totalInscrito === 0
-                  ? 'Você ainda não se inscreveu em nenhum curso desta edição.'
-                  : `Você está inscrito em ${totalInscrito} ${totalInscrito === 1 ? 'curso' : 'cursos'} nesta edição.`}
-              </p>
-            </div>
-            <Link
-              to="/area-do-cursista/cadastro"
-              className="inline-flex shrink-0 items-center gap-2 self-start rounded-xl border border-white/40 bg-white/15 px-5 py-3 text-sm font-black text-white backdrop-blur-sm transition hover:bg-white/25 md:self-auto"
-            >
-              <UserCog size={16} /> Meus dados
-            </Link>
-          </div>
-        </section>
-
-        <div className="mx-auto max-w-[1000px] space-y-5 px-[22px] py-10">
+    <CursistaShell
+      largura="max-w-[1000px]"
+      badge="Área do Cursista"
+      titulo={`Olá, ${primeiroNome}`}
+      descricao={
+        totalInscrito === 0
+          ? 'Você ainda não se inscreveu em nenhum curso desta edição.'
+          : `Você está inscrito em ${totalInscrito} ${totalInscrito === 1 ? 'curso' : 'cursos'} nesta edição.`
+      }
+      acao={(
+        <Link
+          to="/area-do-cursista/cadastro"
+          className="inline-flex items-center gap-2 rounded-xl border border-white/40 bg-white/15 px-5 py-3 text-sm font-black text-white backdrop-blur-sm transition hover:bg-white/25"
+        >
+          <UserCog size={16} /> Meus dados
+        </Link>
+      )}
+    >
+      <>
           {aviso && (
             <div className={`flex items-start gap-2 rounded-xl border px-4 py-3 text-sm ${
               aviso.tipo === 'erro'
@@ -258,10 +229,7 @@ export default function AreaCursista() {
               </ul>
             </Cartao>
           )}
-        </div>
-      </main>
-
-      <PublicFooter />
-    </div>
+      </>
+    </CursistaShell>
   )
 }

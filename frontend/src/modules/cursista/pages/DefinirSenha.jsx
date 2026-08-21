@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, CheckCircle, Eye, EyeOff, Lock, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Eye, EyeOff, Lock } from 'lucide-react'
 import { useCursista } from '../CursistaContext'
+import CursistaShell, { BOTAO_PRINCIPAL, CartaoCursista, TituloCartao } from '../CursistaShell'
 
 const MIN_CARACTERES = 8
 
 // A senha de primeiro acesso NAO e espelhada aqui. O bundle do front e publico:
 // qualquer pessoa baixa o .js e le uma constante. Quem recusa a repeticao da
-// senha padrao e o servidor, e a mensagem dele aparece no bloco de erro acima.
+// senha padrao e o servidor, e a mensagem dele aparece no bloco de erro.
 
 export default function DefinirSenha() {
   const { senhaPendente, definirSenha } = useCursista()
@@ -50,41 +51,33 @@ export default function DefinirSenha() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#f4f6fa] px-4 py-10">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-6">
-          <div className="w-12 h-12 rounded-2xl bg-brand-100 text-brand-700 flex items-center justify-center mx-auto mb-3">
-            <ShieldCheck size={24} />
-          </div>
-          <h1 className="text-2xl font-black text-[#1c1033]">
-            {senhaPendente ? 'Crie a sua senha' : 'Alterar senha'}
-          </h1>
-          {senhaPendente && (
-            <p className="text-sm text-[#566176] mt-1">
-              Você entrou com o CPF. Defina uma senha pessoal para continuar.
-            </p>
-          )}
-        </div>
+    <CursistaShell
+      bloqueado={senhaPendente}
+      largura="max-w-2xl"
+      badge={senhaPendente ? 'Primeiro acesso' : 'Minha conta'}
+      titulo={senhaPendente ? 'Crie a sua senha' : 'Alterar senha'}
+      descricao={
+        senhaPendente
+          ? 'A senha de primeiro acesso é a mesma para todos os cursistas. Escolha agora uma senha que só você saiba.'
+          : 'Troque a sua senha de acesso à Área do Cursista.'
+      }
+    >
+      <CartaoCursista>
+        <TituloCartao descricao="A senha protege os seus dados e as suas inscrições.">
+          {senhaPendente ? 'Sua nova senha' : 'Trocar senha'}
+        </TituloCartao>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-card p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {erro && (
-            <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
+            <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
               <span>{erro}</span>
             </div>
           )}
 
-          {senhaPendente && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
-              A senha de primeiro acesso é a mesma para todos os cursistas, então
-              qualquer pessoa que saiba o seu CPF entraria na sua conta. Por isso a
-              troca é obrigatória — <strong>escolha uma senha que só você saiba</strong>.
-            </div>
-          )}
-
           {!senhaPendente && (
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Senha atual</label>
+              <label className="mb-1.5 block text-xs font-bold text-[#566176]">Senha atual</label>
               <div className="relative">
                 <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
@@ -100,7 +93,7 @@ export default function DefinirSenha() {
           )}
 
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">Nova senha</label>
+            <label className="mb-1.5 block text-xs font-bold text-[#566176]">Nova senha</label>
             <div className="relative">
               <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
@@ -124,7 +117,7 @@ export default function DefinirSenha() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">Confirme a nova senha</label>
+            <label className="mb-1.5 block text-xs font-bold text-[#566176]">Confirme a nova senha</label>
             <div className="relative">
               <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
@@ -139,7 +132,7 @@ export default function DefinirSenha() {
           </div>
 
           {pareceCpf && (
-            <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
+            <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
               <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" />
               <span>
                 <strong>A senha não pode ser o seu CPF.</strong> Ele identifica
@@ -149,20 +142,20 @@ export default function DefinirSenha() {
             </div>
           )}
 
-          <ul className="space-y-1.5">
+          <ul className="space-y-1.5 rounded-xl bg-[#faf8fd] px-4 py-3">
             {regras.map((regra) => (
-              <li key={regra.texto} className={`flex items-center gap-2 text-xs ${regra.ok ? 'text-green-700' : 'text-gray-400'}`}>
+              <li key={regra.texto} className={`flex items-center gap-2 text-xs font-medium ${regra.ok ? 'text-green-700' : 'text-[#9070c8]'}`}>
                 <CheckCircle size={13} className="flex-shrink-0" />
                 {regra.texto}
               </li>
             ))}
           </ul>
 
-          <button type="submit" disabled={!podeEnviar || enviando} className="btn-primary w-full justify-center disabled:opacity-40">
+          <button type="submit" disabled={!podeEnviar || enviando} className={`${BOTAO_PRINCIPAL} w-full`}>
             {enviando ? 'Salvando...' : 'Salvar senha'}
           </button>
         </form>
-      </div>
-    </div>
+      </CartaoCursista>
+    </CursistaShell>
   )
 }

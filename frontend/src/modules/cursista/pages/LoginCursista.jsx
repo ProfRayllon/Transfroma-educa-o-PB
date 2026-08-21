@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { AlertTriangle, Eye, EyeOff, Fingerprint, Lock, LogIn } from 'lucide-react'
 import { useCursista } from '../CursistaContext'
 import { formatarCpf } from '../api'
+import CursistaShell, { BOTAO_PRINCIPAL, CartaoCursista, TituloCartao } from '../CursistaShell'
 
 export default function LoginCursista() {
   const { entrar } = useCursista()
@@ -33,25 +34,26 @@ export default function LoginCursista() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#f4f6fa] px-4 py-10">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-black text-[#1c1033]">Área do Cursista</h1>
-          <p className="text-sm text-[#566176] mt-1">
-            Transforma Educação PB — acesse para se inscrever nos cursos
-          </p>
-        </div>
+    <CursistaShell
+      bloqueado
+      largura="max-w-md"
+      badge="Área do Cursista"
+      titulo="Entre com o seu CPF"
+      descricao="Acesse para atualizar os seus dados e se inscrever nos cursos do Transforma Educação PB."
+    >
+      <CartaoCursista>
+        <TituloCartao>Acesso do cursista</TituloCartao>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-card p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {erro && (
-            <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
+            <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
               <span>{erro}</span>
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">CPF</label>
+            <label className="mb-1.5 block text-xs font-bold text-[#566176]">CPF</label>
             <div className="relative">
               <Fingerprint size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
@@ -68,7 +70,7 @@ export default function LoginCursista() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">Senha</label>
+            <label className="mb-1.5 block text-xs font-bold text-[#566176]">Senha</label>
             <div className="relative">
               <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
@@ -91,7 +93,7 @@ export default function LoginCursista() {
             </div>
           </div>
 
-          <button type="submit" disabled={enviando} className="btn-primary w-full justify-center disabled:opacity-50">
+          <button type="submit" disabled={enviando} className={`${BOTAO_PRINCIPAL} w-full`}>
             <LogIn size={15} />
             {enviando ? 'Entrando...' : 'Entrar'}
           </button>
@@ -99,17 +101,11 @@ export default function LoginCursista() {
           {/* A senha de primeiro acesso NAO aparece aqui: e comunicada pela
               coordenacao por canal interno. Publicar o valor nesta tela o
               entregaria a qualquer visitante junto com o campo de CPF. */}
-          <p className="text-[11px] text-gray-400 text-center leading-relaxed">
+          <p className="text-center text-[12px] leading-relaxed text-[#7c6a9c]">
             Primeiro acesso ou esqueceu a senha? Procure a coordenação do programa.
           </p>
         </form>
-
-        <p className="text-center text-xs text-gray-500 mt-5">
-          <Link to="/" className="text-gray-400 hover:text-brand-700">
-            ← Voltar ao site
-          </Link>
-        </p>
-      </div>
-    </div>
+      </CartaoCursista>
+    </CursistaShell>
   )
 }
