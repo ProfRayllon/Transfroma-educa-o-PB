@@ -28,7 +28,11 @@ export default function PublicNav() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-[#ded6ea] bg-white">
-      <div className="mx-auto flex h-16 max-w-[1180px] items-center justify-between px-[22px]">
+      {/* Largura cheia, sem o container de 1180px do resto da pagina: o hero
+          logo abaixo vai de ponta a ponta, e a barra centrada deixava uma folga
+          visivel dos dois lados. Aqui a logo encosta na esquerda e o menu na
+          direita, como o conteudo que vem depois. */}
+      <div className="flex h-16 w-full items-center justify-between px-6 lg:px-10">
         <Link to="/">
           <img src="/logo.png" alt="Transforma Educação PB" className="h-10 w-auto" style={{ filter: logoFilter }} />
         </Link>
