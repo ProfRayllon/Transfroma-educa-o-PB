@@ -52,10 +52,15 @@ export default function CapaCurso({ curso, className = '' }) {
     )
   }
 
+  // O `?v=` faz a URL mudar quando a capa muda. A rota da imagem manda cache de
+  // 24h e o endereco depende so do id do curso: sem isto, quem ja visitou o site
+  // continuaria vendo a capa antiga por um dia, servida do proprio cache.
+  const src = `/api/publico/cursos/${curso.id}/imagem${curso.imageVersion ? `?v=${curso.imageVersion}` : ''}`
+
   return (
     <div className={`h-full w-full ${encaixe === 'contain' ? 'bg-[#f6f2fc]' : ''} ${className}`}>
       <img
-        src={`/api/publico/cursos/${curso.id}/imagem`}
+        src={src}
         alt=""
         loading="lazy"
         onLoad={aoCarregar}

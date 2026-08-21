@@ -72,6 +72,8 @@ module.exports = function criarRotasPublicas() {
               -- Mesmo criterio da rota de imagem: se o data URI nao for de
               -- imagem, a rota recusa e o front mostraria capa quebrada.
               (c.image LIKE 'data:image/%') AS tem_imagem,
+              -- Versao da capa. Ver o comentario de imageVersion abaixo.
+              UNIX_TIMESTAMP(c.updated_at) AS versao,
               CASE WHEN e.coordinator_status = 'valido' THEN e.general_objective END AS objetivo
          FROM courses c
          LEFT JOIN ementas e ON e.course_id = c.id
@@ -86,6 +88,19 @@ module.exports = function criarRotasPublicas() {
       totalSessions: row.total_sessions,
       objective: row.objetivo || null,
       hasImage: Boolean(Number(row.tem_imagem)),
+      /**
+       * Marca de versao da capa, para o front variar a URL da imagem.
+       *
+       * A rota da imagem manda cache de 24h, e o endereco dela depende so do id
+       * do curso. Sem esta marca, trocar a capa nao mudava nada para quem ja
+       * tinha visitado: o navegador continuava servindo a antiga do proprio
+       * cache, sem nem perguntar ao servidor.
+       *
+       * Vem de `updated_at`, que ja existe e nao custa nada. Editar o nome do
+       * curso tambem muda o valor e faz baixar a capa de novo -- uma requisicao
+       * a mais, de vez em quando, em troca de a capa nova sempre aparecer.
+       */
+      imageVersion: Number(row.versao || 0),
       enrollmentOpensAt: row.enrollment_opens_at,
       enrollmentClosesAt: row.enrollment_closes_at,
       situacao: situacaoInscricao(row.enrollment_opens_at, row.enrollment_closes_at),
