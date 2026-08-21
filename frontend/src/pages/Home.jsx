@@ -4,6 +4,7 @@ import { ArrowRight, Clock, Download, LayoutGrid } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
 import MapaParaiba from '../components/public/MapaParaiba'
+import CapaCurso, { nomeTrilha } from '../components/public/CapaCurso'
 import publicApi from '../lib/publicApi'
 import { useCursista } from '../modules/cursista/CursistaContext'
 import cursistaApi from '../modules/cursista/api'
@@ -11,19 +12,6 @@ import cursistaApi from '../modules/cursista/api'
 const heroImage = '/images/home/hero-capa.png'
 const statsImage = '/images/home/resultados.png'
 const avaUrl = 'https://pb.ava.rieh.nees.ufal.br/login/index.php'
-
-// Mesmo mapa do catalogo: as trilhas chegam do banco sem acento.
-const NOMES_TRILHA = {
-  'Educacao Socioemocional': 'Educação Socioemocional',
-  'Educacao, Ciencia e Tecnologia': 'Educação, Ciência e Tecnologia',
-  'Area de Ciencias Humanas': 'Ciências Humanas',
-  'Area de Matematica e Ciencias da Natureza': 'Matemática e Ciências da Natureza',
-  'Area de Linguagens': 'Linguagens',
-  'Gestao Pedagogica': 'Gestão Pedagógica',
-  'Inclusao, Diversidade e Equidade': 'Inclusão, Diversidade e Equidade',
-}
-
-const nomeTrilha = (valor) => NOMES_TRILHA[valor] || valor || 'Trilha'
 
 const SITUACOES = {
   aberto: { texto: 'Inscrições abertas', classe: 'bg-green-400/90 text-green-950' },
@@ -404,46 +392,39 @@ export default function Home() {
               {visibleCourses.map((course) => {
                 const situacao = SITUACOES[course.situacao] || SITUACOES.fechado
                 return (
+                  // A capa deixa de ser fundo do card e ganha area propria, no
+                  // mesmo formato quadrado da arte. Antes, o titulo ficava por
+                  // cima dela com um gradiente escuro: o terco de baixo da
+                  // imagem sumia justamente onde esta a ilustracao.
                   <Link
                     key={course.id}
                     to="/catalogo-cursos"
-                    className="group relative h-[380px] w-[340px] shrink-0 overflow-hidden rounded-2xl bg-[#1a0a2e] text-white shadow-[0_8px_28px_rgba(17,24,39,.14)] transition hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(111,53,181,.22)]"
+                    className="group flex w-[340px] shrink-0 flex-col overflow-hidden rounded-2xl border border-[#e9d5ff] bg-white shadow-[0_8px_28px_rgba(17,24,39,.10)] transition hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(111,53,181,.22)]"
                     style={{ scrollSnapAlign: 'start' }}
                   >
-                    {course.hasImage ? (
-                      <img
-                        src={`/api/publico/cursos/${course.id}/imagem`}
-                        alt=""
-                        loading="lazy"
-                        className="absolute inset-0 h-full w-full object-cover object-top transition duration-500 group-hover:scale-[1.04]"
-                      />
-                    ) : (
-                      <div className="absolute inset-0 bg-gradient-to-br from-[#4A238A] via-[#6f35b5] to-[#a855f7]" />
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/10 to-black/80" />
-
-                    {/* Tags topo */}
-                    <div className="absolute left-4 top-4 z-10 flex flex-wrap gap-2">
-                      <span className="rounded-full bg-[#f3e8ff]/90 px-3 py-1 text-xs font-black text-[#4f1f87] backdrop-blur-sm">
-                        {nomeTrilha(course.trail)}
-                      </span>
-                      <span className={`rounded-full px-3 py-1 text-xs font-black backdrop-blur-sm ${situacao.classe}`}>
+                    <div className="relative aspect-square overflow-hidden bg-[#f1edf8]">
+                      <CapaCurso curso={course} />
+                      <span className={`absolute left-3 top-3 rounded-full px-3 py-1 text-xs font-black backdrop-blur-sm ${situacao.classe}`}>
                         {situacao.texto}
                       </span>
                     </div>
 
-                    {/* Conteúdo base */}
-                    <div className="absolute bottom-5 left-5 right-14 z-10">
-                      {course.totalSessions > 0 && (
-                        <small className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-white/60">
-                          <Clock size={10} /> {course.totalSessions} encontros
-                        </small>
-                      )}
-                      <h3 className="text-base font-black uppercase leading-snug">{course.name}</h3>
+                    <div className="flex flex-1 flex-col p-5">
+                      <div className="mb-2 flex flex-wrap gap-2">
+                        <span className="rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-black text-[#6f35b5]">
+                          {nomeTrilha(course.trail)}
+                        </span>
+                        {course.totalSessions > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#f1f5f9] px-3 py-1 text-xs font-black text-[#566176]">
+                            <Clock size={11} /> {course.totalSessions} encontros
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="text-[15px] font-black leading-snug text-[#1c1033]">{course.name}</h3>
+                      <span className="mt-auto flex items-center gap-1.5 pt-4 text-xs font-black text-[#6f35b5]">
+                        Ver detalhes <ArrowRight size={14} />
+                      </span>
                     </div>
-                    <span className="absolute bottom-5 right-4 z-10 grid h-9 w-9 place-items-center rounded-full bg-white text-[#6f35b5] shadow-md transition group-hover:bg-[#6f35b5] group-hover:text-white">
-                      <ArrowRight size={17} />
-                    </span>
                   </Link>
                 )
               })}

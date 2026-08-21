@@ -4,59 +4,18 @@ import { AlertTriangle, ArrowRight, BookOpen, CheckCircle, Clock, GraduationCap,
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
 import Modal from '../components/ui/Modal'
+import CapaCurso, { nomeTrilha } from '../components/public/CapaCurso'
 import publicApi from '../lib/publicApi'
 import { useCursista } from '../modules/cursista/CursistaContext'
 import cursistaApi, { getCursistaErrorMessage } from '../modules/cursista/api'
 
 const AREA_CURSISTA = '/area-do-cursista'
 
-/**
- * As trilhas chegam do banco sem acento (`Educacao Socioemocional`). O mapa e so
- * de exibicao -- trilha nova que apareca no cadastro continua aparecendo aqui,
- * com o texto que veio do banco, em vez de sumir da lista.
- */
-const NOMES_TRILHA = {
-  'Educacao Socioemocional': 'Educação Socioemocional',
-  'Educacao, Ciencia e Tecnologia': 'Educação, Ciência e Tecnologia',
-  'Area de Ciencias Humanas': 'Ciências Humanas',
-  'Area de Matematica e Ciencias da Natureza': 'Matemática e Ciências da Natureza',
-  'Area de Linguagens': 'Linguagens',
-  'Gestao Pedagogica': 'Gestão Pedagógica',
-  'Inclusao, Diversidade e Equidade': 'Inclusão, Diversidade e Equidade',
-}
-
-const nomeTrilha = (valor) => NOMES_TRILHA[valor] || valor || 'Trilha'
-
 const SITUACOES = {
   aberto: { texto: 'Inscrições abertas', classe: 'bg-green-400/90 text-green-950' },
   em_breve: { texto: 'Em breve', classe: 'bg-amber-300/90 text-amber-900' },
   encerrado: { texto: 'Inscrições encerradas', classe: 'bg-slate-300/90 text-slate-800' },
   fechado: { texto: 'Em breve', classe: 'bg-amber-300/90 text-amber-900' },
-}
-
-/** Capa do curso: a imagem do banco quando existe, um gradiente quando nao. */
-function Capa({ curso }) {
-  const [falhou, setFalhou] = useState(false)
-
-  if (!curso.hasImage || falhou) {
-    return (
-      <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#4A238A] via-[#6f35b5] to-[#a855f7] p-5">
-        <span className="text-center text-[13px] font-black uppercase leading-tight tracking-wider text-white/85">
-          {nomeTrilha(curso.trail)}
-        </span>
-      </div>
-    )
-  }
-
-  return (
-    <img
-      src={`/api/publico/cursos/${curso.id}/imagem`}
-      alt=""
-      loading="lazy"
-      onError={() => setFalhou(true)}
-      className="h-full w-full object-cover object-top transition duration-500 group-hover:scale-[1.04]"
-    />
-  )
 }
 
 export default function PublicCourses() {
@@ -247,9 +206,9 @@ export default function PublicCourses() {
         )}
 
         {carregando ? (
-          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="h-[420px] animate-pulse rounded-2xl border border-[#e9d5ff] bg-[#faf5ff]" />
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-[560px] animate-pulse rounded-2xl border border-[#e9d5ff] bg-[#faf5ff]" />
             ))}
           </div>
         ) : erro ? (
@@ -259,7 +218,9 @@ export default function PublicCourses() {
           </div>
         ) : (
           <>
-            <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+            {/* Tres colunas, e nao quatro: com 4 o card ficava estreito demais e
+                a capa quadrada nao cabia sem perder metade da arte. */}
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {visiveis.map((curso) => {
                 const situacao = SITUACOES[curso.situacao] || SITUACOES.fechado
                 return (
@@ -267,8 +228,8 @@ export default function PublicCourses() {
                     key={curso.id}
                     className="group flex flex-col overflow-hidden rounded-2xl border border-[#e9d5ff] bg-white shadow-[0_4px_20px_rgba(111,53,181,.07)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(111,53,181,.14)]"
                   >
-                    <div className="relative h-[200px] overflow-hidden bg-[#f1edf8]">
-                      <Capa curso={curso} />
+                    <div className="relative aspect-square overflow-hidden bg-[#f1edf8]">
+                      <CapaCurso curso={curso} />
                       <span className={`absolute left-3 top-3 rounded-full px-3 py-1 text-xs font-black backdrop-blur-sm ${situacao.classe}`}>
                         {situacao.texto}
                       </span>
