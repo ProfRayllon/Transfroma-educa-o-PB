@@ -268,11 +268,22 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
     res.json({ message: 'Senha resetada. O cursista entra com o CPF e define uma nova senha.' })
   }))
 
+  /**
+   * Quantos inscritos por curso, para a tela administrativa oferecer o download
+   * de cada um. So contagens -- nenhum dado de cursista sai daqui.
+   */
+  router.get('/admin/inscricoes/resumo', ...soAdmin, tratar(async (req, res) => {
+    res.json(await service.resumoInscricoesPorCurso(req.query.edition))
+  }))
+
   router.get('/admin/inscricoes/exportar', ...soAdmin, tratar(async (req, res) => {
     const actor = await getUsuarioInterno(req.user.id)
     const { csv, total } = await exportarInscritos({
       courseId: req.query.courseId ? Number(req.query.courseId) : null,
       edition: req.query.edition || service.EDICAO_ATUAL,
+      // 'completo' e o padrao: e o relatorio que a coordenacao usa no dia a dia.
+      // 'ava' fica para a carga no ambiente, quando o modelo oficial chegar.
+      formato: req.query.formato === 'ava' ? 'ava' : 'completo',
       actor,
       req,
     })

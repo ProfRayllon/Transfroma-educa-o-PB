@@ -30,6 +30,51 @@ const COLUNAS_AVA = [
   { titulo: 'data_inscricao', valor: (r) => (r.enrolled_at ? new Date(r.enrolled_at).toISOString().slice(0, 10) : '') },
 ]
 
+const data = (valor) => (valor ? new Date(valor).toISOString().slice(0, 10) : '')
+const dataHora = (valor) => (valor ? new Date(valor).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '')
+const sim = (valor) => (Number(valor) ? 'Sim' : 'Nao')
+
+/**
+ * Planilha completa dos inscritos, para uso da coordenacao.
+ *
+ * Separada de COLUNAS_AVA de proposito: aquela precisa bater exatamente com o
+ * modelo que o AVA exige (ainda por definir), e mistura-las faria a chegada do
+ * modelo oficial quebrar este relatorio, ou o contrario.
+ *
+ * Aqui vai tudo o que o cadastro guarda sobre o cursista, mais o vinculo com a
+ * escola e os dados da inscricao.
+ */
+const COLUNAS_COMPLETO = [
+  { titulo: 'curso', valor: (r) => r.course_name },
+  { titulo: 'trilha', valor: (r) => r.secondary_trail || '' },
+  { titulo: 'edicao', valor: (r) => r.edition },
+  { titulo: 'data_inscricao', valor: (r) => dataHora(r.enrolled_at) },
+  { titulo: 'cpf', valor: (r) => r.cpf },
+  { titulo: 'nome_completo', valor: (r) => r.name },
+  { titulo: 'data_nascimento', valor: (r) => data(r.birth_date) },
+  { titulo: 'genero', valor: (r) => r.genero || '' },
+  { titulo: 'email_institucional', valor: (r) => r.email_institucional || '' },
+  { titulo: 'email_pessoal', valor: (r) => r.email_pessoal || '' },
+  { titulo: 'telefone', valor: (r) => r.phone || '' },
+  { titulo: 'funcao', valor: (r) => r.funcao || '' },
+  { titulo: 'componente_curricular', valor: (r) => r.componente_curricular || '' },
+  { titulo: 'eixo_tecnologico', valor: (r) => r.eixo_tecnologico || '' },
+  { titulo: 'curso_tecnico', valor: (r) => r.curso_tecnico || '' },
+  { titulo: 'data_inicio_rede', valor: (r) => data(r.data_inicio_rede) },
+  { titulo: 'gre', valor: (r) => r.gre || '' },
+  { titulo: 'escola', valor: (r) => r.escola || '' },
+  { titulo: 'inep', valor: (r) => r.inep || '' },
+  // Quem atua em mais de uma escola tem as demais aqui, para a linha continuar
+  // sendo uma por inscricao.
+  { titulo: 'outras_escolas', valor: (r) => r.outras_escolas || '' },
+  { titulo: 'qtde_vinculos', valor: (r) => r.qtde_vinculos ?? '' },
+  { titulo: 'usuario_id', valor: (r) => r.usuario_id || '' },
+  { titulo: 'cadastro_confirmado', valor: (r) => sim(r.cadastro_confirmado) },
+  { titulo: 'ultimo_acesso', valor: (r) => dataHora(r.last_access_at) },
+]
+
+const FORMATOS = { ava: COLUNAS_AVA, completo: COLUNAS_COMPLETO }
+
 /**
  * Escapa o valor para CSV e neutraliza formula de planilha.
  *
@@ -53,8 +98,10 @@ function escaparCsv(valor) {
  * os inscritos. Por isso: restrita a administrador, sempre registrada na trilha
  * de auditoria e nunca acessivel por link publico.
  */
-async function exportarInscritos({ courseId = null, edition, actor, req }) {
+async function exportarInscritos({ courseId = null, edition, formato = 'completo', actor, req }) {
   requireMysql()
+
+  const colunas = FORMATOS[formato] || COLUNAS_COMPLETO
 
   const params = [edition]
   let filtroCurso = ''
@@ -63,14 +110,19 @@ async function exportarInscritos({ courseId = null, edition, actor, req }) {
     params.push(courseId)
   }
 
-  // O vinculo principal (ordem 1) vem por subconsulta: quem tem mais de uma
-  // escola geraria linhas duplicadas num JOIN, e a carga do AVA espera uma linha
-  // por inscricao.
+  // O vinculo principal (ordem 1) vem por LEFT JOIN e os demais por subconsulta
+  // agregada: quem tem mais de uma escola geraria linhas duplicadas num JOIN
+  // simples, e a planilha espera uma linha por inscricao.
   const [rows] = await getPool().execute(
     `SELECT c.id, c.usuario_id, c.cpf, c.name, c.email_institucional, c.email_pessoal,
-            c.phone, c.birth_date, c.funcao, c.componente_curricular,
+            c.phone, c.birth_date, c.genero, c.funcao, c.componente_curricular,
+            c.eixo_tecnologico, c.curso_tecnico, c.data_inicio_rede, c.qtde_vinculos,
+            c.cadastro_confirmado, c.last_access_at,
             v.gre, v.escola, v.inep,
-            cur.name AS course_name, i.enrolled_at
+            (SELECT GROUP_CONCAT(o.escola ORDER BY o.ordem SEPARATOR ' | ')
+               FROM cursista_vinculos o
+              WHERE o.cursista_id = c.id AND o.ordem > 1) AS outras_escolas,
+            cur.name AS course_name, cur.secondary_trail, i.edition, i.enrolled_at
      FROM inscricoes i
      JOIN cursistas c ON c.id = i.cursista_id
      JOIN courses cur ON cur.id = i.course_id
@@ -81,8 +133,8 @@ async function exportarInscritos({ courseId = null, edition, actor, req }) {
   )
 
   const linhas = [
-    COLUNAS_AVA.map((coluna) => coluna.titulo).join(';'),
-    ...rows.map((row) => COLUNAS_AVA.map((coluna) => escaparCsv(coluna.valor(row))).join(';')),
+    colunas.map((coluna) => coluna.titulo).join(';'),
+    ...rows.map((row) => colunas.map((coluna) => escaparCsv(coluna.valor(row))).join(';')),
   ]
 
   // BOM para o Excel abrir os acentos corretamente.
@@ -94,7 +146,7 @@ async function exportarInscritos({ courseId = null, edition, actor, req }) {
     actorLabel: actor?.name || null,
     action: ACOES.BASE_EXPORTADA,
     req,
-    details: { courseId: courseId ? Number(courseId) : 'todos', edition, registros: rows.length },
+    details: { courseId: courseId ? Number(courseId) : 'todos', edition, formato, registros: rows.length },
   })
 
   return { csv, total: rows.length }
@@ -116,4 +168,4 @@ async function marcarComoExportadas({ courseId, edition }) {
   )
 }
 
-module.exports = { exportarInscritos, marcarComoExportadas, COLUNAS_AVA }
+module.exports = { exportarInscritos, marcarComoExportadas, COLUNAS_AVA, COLUNAS_COMPLETO, FORMATOS }

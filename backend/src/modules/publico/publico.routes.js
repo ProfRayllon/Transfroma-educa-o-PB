@@ -28,13 +28,36 @@ const TIPOS_IMAGEM = {
 
 const MAX_IMAGEM_BYTES = 8 * 1024 * 1024
 
-function situacaoInscricao(abreEm, fechaEm) {
-  if (!abreEm || !fechaEm) return 'fechado'
-  const agora = new Date()
-  if (agora < new Date(abreEm)) return 'em_breve'
-  if (agora > new Date(fechaEm)) return 'encerrado'
-  return 'aberto'
+/**
+ * Traduz a situacao ja decidida pelo MySQL.
+ *
+ * A comparacao com o horario atual acontece no SQL, e NAO aqui. O motivo e um
+ * bug real: o banco roda em America/Sao_Paulo e o container da API em UTC, sem
+ * TZ definido. A janela gravada como "21/08 19:55" significa 19:55 de Sao Paulo,
+ * mas o driver entregava a data ao Node, que a lia como 19:55 UTC -- tres horas
+ * de diferenca.
+ *
+ * O efeito era visivel: o catalogo anunciava "Inscricoes abertas" e mostrava o
+ * botao, enquanto a rota de inscricao -- que sempre comparou via NOW() do MySQL
+ * -- recusava com "as inscricoes nao estao abertas". Quem clicava nao conseguia
+ * se inscrever.
+ *
+ * Com a decisao no SQL existe um relogio so, o do banco, e as duas rotas nunca
+ * mais discordam.
+ */
+function traduzirSituacao(codigo) {
+  const valores = ['aberto', 'em_breve', 'encerrado', 'fechado']
+  return valores.includes(codigo) ? codigo : 'fechado'
 }
+
+/** Expressao SQL que decide a situacao da inscricao, usando o relogio do banco. */
+const SQL_SITUACAO = `
+  CASE
+    WHEN c.enrollment_opens_at IS NULL OR c.enrollment_closes_at IS NULL THEN 'fechado'
+    WHEN NOW() < c.enrollment_opens_at THEN 'em_breve'
+    WHEN NOW() > c.enrollment_closes_at THEN 'encerrado'
+    ELSE 'aberto'
+  END`
 
 module.exports = function criarRotasPublicas() {
   const router = express.Router()
@@ -74,6 +97,7 @@ module.exports = function criarRotasPublicas() {
               (c.image LIKE 'data:image/%') AS tem_imagem,
               -- Versao da capa. Ver o comentario de imageVersion abaixo.
               UNIX_TIMESTAMP(c.updated_at) AS versao,
+              ${SQL_SITUACAO} AS situacao,
               CASE WHEN e.coordinator_status = 'valido' THEN e.general_objective END AS objetivo
          FROM courses c
          LEFT JOIN ementas e ON e.course_id = c.id
@@ -103,7 +127,7 @@ module.exports = function criarRotasPublicas() {
       imageVersion: Number(row.versao || 0),
       enrollmentOpensAt: row.enrollment_opens_at,
       enrollmentClosesAt: row.enrollment_closes_at,
-      situacao: situacaoInscricao(row.enrollment_opens_at, row.enrollment_closes_at),
+      situacao: traduzirSituacao(row.situacao),
     })))
   }))
 

@@ -13,6 +13,56 @@ function erro(statusCode, message) {
 const EDICAO_ATUAL = process.env.EDICAO_ATUAL || String(new Date().getFullYear())
 
 /**
+ * Inscritos por curso, para a tela administrativa.
+ *
+ * Traz todo curso que ja teve janela de inscricao configurada, mesmo com zero
+ * inscritos: a coordenacao precisa ver o curso na lista para saber que ele
+ * existe e ainda nao teve procura -- some-lo daria a impressao de que nao foi
+ * cadastrado.
+ *
+ * A situacao vem de NOW() do MySQL, e nao do relogio do Node: o container da API
+ * e o banco rodam em fusos diferentes, e comparar aqui geraria divergencia com a
+ * regra que autoriza a inscricao.
+ */
+async function resumoInscricoesPorCurso(edicao) {
+  requireMysql()
+  const edition = edicao || EDICAO_ATUAL
+
+  const [rows] = await getPool().execute(
+    `SELECT c.id, c.name, c.secondary_trail, c.enrollment_opens_at, c.enrollment_closes_at,
+            CASE
+              WHEN c.enrollment_opens_at IS NULL OR c.enrollment_closes_at IS NULL THEN 'fechado'
+              WHEN NOW() < c.enrollment_opens_at THEN 'em_breve'
+              WHEN NOW() > c.enrollment_closes_at THEN 'encerrado'
+              ELSE 'aberto'
+            END AS situacao,
+            COALESCE(SUM(i.status = 'inscrito'), 0) AS inscritos,
+            COALESCE(SUM(i.status = 'cancelado'), 0) AS cancelados,
+            MAX(i.enrolled_at) AS ultima_inscricao
+       FROM courses c
+       LEFT JOIN inscricoes i ON i.course_id = c.id AND i.edition = ?
+      GROUP BY c.id, c.name, c.secondary_trail, c.enrollment_opens_at, c.enrollment_closes_at
+      ORDER BY inscritos DESC, c.name`,
+    [edition]
+  )
+
+  return {
+    edicao: edition,
+    cursos: rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      trail: row.secondary_trail,
+      situacao: row.situacao,
+      enrollmentOpensAt: row.enrollment_opens_at,
+      enrollmentClosesAt: row.enrollment_closes_at,
+      inscritos: Number(row.inscritos || 0),
+      cancelados: Number(row.cancelados || 0),
+      ultimaInscricao: row.ultima_inscricao,
+    })),
+  }
+}
+
+/**
  * Cursos abertos para inscricao agora.
  * As duas datas nulas significam curso fechado: o padrao e nao aceitar inscricao,
  * para nenhum curso abrir por descuido de cadastro.
@@ -244,6 +294,7 @@ async function atualizarMeuCadastro({ cursistaId, dados, req }) {
 module.exports = {
   EDICAO_ATUAL,
   CAMPOS_OBRIGATORIOS,
+  resumoInscricoesPorCurso,
   listarCursosAbertos,
   listarMinhasInscricoes,
   inscrever,

@@ -9,6 +9,13 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
+      # O container sobe em UTC por padrao, enquanto o host e o MySQL rodam em
+      # America/Sao_Paulo. As datas de inscricao sao gravadas sem fuso ("21/08
+      # 19:55" quer dizer 19:55 daqui), e o driver as entrega ao Node usando o
+      # fuso do processo -- em UTC, viravam 19:55Z, tres horas adiantadas.
+      # Alinhar o container ao banco faz qualquer data lida do MySQL significar
+      # o mesmo instante nos dois lados.
+      TZ: America/Sao_Paulo
     extra_hosts:
       - "host.docker.internal:host-gateway"
     expose:

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle, CheckCircle, Clock, Download, FileSpreadsheet, Filter,
-  KeyRound, Lock, MailX, RefreshCw, Search, ShieldAlert, Upload, UserCheck, Users,
+  KeyRound, Lock, MailX, Search, ShieldAlert, Upload, UserCheck, Users,
 } from 'lucide-react'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import Modal from '../components/ui/Modal'
@@ -32,6 +32,104 @@ function Indicador({ icon: Icon, valor, label, cor = 'brand', destaque }) {
       <div className="min-w-0">
         <div className={`text-xl font-bold leading-tight ${destaque ? 'text-amber-600' : 'text-gray-900'}`}>{valor}</div>
         <div className="text-xs text-gray-500 leading-tight">{label}</div>
+      </div>
+    </div>
+  )
+}
+
+const SITUACAO_CURSO = {
+  aberto: { texto: 'Inscrições abertas', cls: 'bg-green-50 text-green-700 border-green-200' },
+  em_breve: { texto: 'Abre em breve', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+  encerrado: { texto: 'Encerrado', cls: 'bg-gray-100 text-gray-600 border-gray-200' },
+  fechado: { texto: 'Sem data definida', cls: 'bg-gray-100 text-gray-500 border-gray-200' },
+}
+
+const formatarQuando = (valor) =>
+  valor ? new Date(valor).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'
+
+/**
+ * Inscritos por curso, com download individual da planilha.
+ *
+ * Mostra todo curso cadastrado, inclusive os sem inscrito e sem data: e por aqui
+ * que a coordenacao percebe que um curso ficou sem janela configurada e por isso
+ * nao aparece para inscricao.
+ */
+function InscricoesPorCurso({ cursos, edicao, aoExportar, exportando }) {
+  const totalInscritos = cursos.reduce((soma, c) => soma + c.inscritos, 0)
+  const semJanela = cursos.filter((c) => c.situacao === 'fechado').length
+
+  return (
+    <div className="card">
+      <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-800">Inscrições por curso</h3>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Edição {edicao} · {totalInscritos.toLocaleString('pt-BR')} {totalInscritos === 1 ? 'inscrição' : 'inscrições'}
+          </p>
+        </div>
+        <button
+          onClick={() => aoExportar(null)}
+          disabled={Boolean(exportando) || totalInscritos === 0}
+          className="btn-secondary text-xs disabled:opacity-40"
+          title={totalInscritos === 0 ? 'Nenhuma inscrição para exportar' : 'Baixar todos os cursos num arquivo'}
+        >
+          <Download size={13} />
+          {exportando === 'todos' ? 'Gerando...' : 'Baixar tudo'}
+        </button>
+      </div>
+
+      {semJanela > 0 && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 mt-3">
+          <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
+          <span>
+            {semJanela === 1
+              ? '1 curso está sem data de inscrição e não aparece para os cursistas.'
+              : `${semJanela} cursos estão sem data de inscrição e não aparecem para os cursistas.`}{' '}
+            Defina as datas na tela de Cursos.
+          </span>
+        </div>
+      )}
+
+      <div className="mt-4 space-y-2">
+        {cursos.length === 0 && (
+          <p className="text-sm text-gray-400 py-4 text-center">Nenhum curso cadastrado.</p>
+        )}
+        {cursos.map((curso) => {
+          const sit = SITUACAO_CURSO[curso.situacao] || SITUACAO_CURSO.fechado
+          return (
+            <div key={curso.id} className="flex items-center gap-3 rounded-xl border border-gray-100 px-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium text-gray-900 truncate">{curso.name}</div>
+                <div className="flex items-center gap-2 flex-wrap mt-1">
+                  <span className={`badge border ${sit.cls}`}>{sit.texto}</span>
+                  {curso.situacao !== 'fechado' && (
+                    <span className="text-[11px] text-gray-400">
+                      {formatarQuando(curso.enrollmentOpensAt)} até {formatarQuando(curso.enrollmentClosesAt)}
+                    </span>
+                  )}
+                  {curso.cancelados > 0 && (
+                    <span className="text-[11px] text-gray-400">{curso.cancelados} cancelada(s)</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="text-right flex-shrink-0">
+                <div className="text-lg font-bold leading-none text-gray-900">{curso.inscritos}</div>
+                <div className="text-[10px] uppercase tracking-wide text-gray-400">inscritos</div>
+              </div>
+
+              <button
+                onClick={() => aoExportar(curso)}
+                disabled={Boolean(exportando) || curso.inscritos === 0}
+                className="btn-secondary text-xs flex-shrink-0 disabled:opacity-30"
+                title={curso.inscritos === 0 ? 'Nenhum inscrito neste curso' : 'Baixar a planilha deste curso'}
+              >
+                <Download size={13} />
+                {exportando === curso.id ? '...' : 'Planilha'}
+              </button>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -74,6 +172,7 @@ function Adesao({ cadastro }) {
 
 export default function Cursistas() {
   const [estatisticas, setEstatisticas] = useState(null)
+  const [resumoCursos, setResumoCursos] = useState(null)
   const [lista, setLista] = useState({ items: [], total: 0, page: 1, perPage: 50 })
   const [busca, setBusca] = useState('')
   const [situacao, setSituacao] = useState('')
@@ -117,8 +216,18 @@ export default function Cursistas() {
     }
   }, [busca, situacao, pagina])
 
+  const carregarResumoCursos = useCallback(async () => {
+    try {
+      const { data } = await api.get('/cursistas/admin/inscricoes/resumo')
+      setResumoCursos(data)
+    } catch (error) {
+      mostrar('erro', getApiErrorMessage(error, 'Erro ao carregar as inscrições por curso.'))
+    }
+  }, [])
+
   useEffect(() => { carregarEstatisticas() }, [carregarEstatisticas])
   useEffect(() => { carregarLista() }, [carregarLista])
+  useEffect(() => { carregarResumoCursos() }, [carregarResumoCursos])
 
   const importar = async (event) => {
     const arquivo = event.target.files?.[0]
@@ -140,14 +249,31 @@ export default function Cursistas() {
     }
   }
 
-  const exportar = async () => {
-    setExportando(true)
+  /**
+   * Baixa a planilha de inscritos. Sem `curso`, traz a edicao inteira.
+   *
+   * O arquivo carrega o CPF de todos os inscritos, entao o backend restringe a
+   * administrador e registra cada download na trilha de auditoria.
+   */
+  const exportar = async (curso = null) => {
+    setExportando(curso ? curso.id : 'todos')
     try {
-      const resposta = await api.get('/cursistas/admin/inscricoes/exportar', { responseType: 'blob' })
+      const resposta = await api.get('/cursistas/admin/inscricoes/exportar', {
+        params: curso ? { courseId: curso.id } : {},
+        responseType: 'blob',
+      })
       const url = URL.createObjectURL(new Blob([resposta.data], { type: 'text/csv;charset=utf-8' }))
       const link = document.createElement('a')
       link.href = url
-      link.download = `inscritos-${new Date().toISOString().slice(0, 10)}.csv`
+      // Nome de arquivo a partir do nome do curso: separa o acento da letra
+      // (NFD), remove as marcas por faixa unicode explicita -- escrever os
+      // caracteres combinantes direto na regex os deixa invisiveis no editor --
+      // e troca o resto por hifen.
+      const sufixo = curso
+        ? curso.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50)
+        : 'todos-os-cursos'
+      link.download = `inscritos-${sufixo}-${new Date().toISOString().slice(0, 10)}.csv`
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -199,9 +325,11 @@ export default function Cursistas() {
             <Upload size={14} />
             {importando ? 'Importando...' : 'Importar base (.xlsx)'}
           </button>
-          <button onClick={exportar} disabled={exportando} className="btn-primary text-sm disabled:opacity-50">
+          {/* `() => exportar(null)` e nao `exportar`: como handler direto, o
+              onClick passaria o evento do clique no lugar do curso. */}
+          <button onClick={() => exportar(null)} disabled={Boolean(exportando)} className="btn-primary text-sm disabled:opacity-50">
             <Download size={14} />
-            {exportando ? 'Gerando...' : 'Exportar inscritos'}
+            {exportando === 'todos' ? 'Gerando...' : 'Exportar inscritos'}
           </button>
         </div>
       </div>
@@ -225,6 +353,15 @@ export default function Cursistas() {
             <Indicador icon={FileSpreadsheet} valor={(estatisticas.inscricoes.cursistasInscritos || 0).toLocaleString('pt-BR')} label="Cursistas inscritos" cor="brand" />
             <Indicador icon={Lock} valor={cad.bloqueadas.toLocaleString('pt-BR')} label="Contas bloqueadas" cor={cad.bloqueadas > 0 ? 'red' : 'gray'} destaque={cad.bloqueadas > 0} />
           </div>
+
+          {resumoCursos && (
+            <InscricoesPorCurso
+              cursos={resumoCursos.cursos}
+              edicao={resumoCursos.edicao}
+              aoExportar={exportar}
+              exportando={exportando}
+            />
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Adesao cadastro={cad} />
