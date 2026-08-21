@@ -11,15 +11,21 @@ const { registrar, ACOES } = require('../../shared/audit')
  * `valor` recebe a linha ja carregada do banco.
  */
 const COLUNAS_AVA = [
+  // AUTH_USER_ID: a base oficial reserva esta coluna para o id do sistema de
+  // autenticacao, e e este modulo que o preenche.
+  { titulo: 'auth_user_id', valor: (r) => r.id },
+  { titulo: 'usuario_id', valor: (r) => r.usuario_id || '' },
   { titulo: 'cpf', valor: (r) => r.cpf },
   { titulo: 'nome_completo', valor: (r) => r.name },
-  { titulo: 'email', valor: (r) => r.email || '' },
+  { titulo: 'email', valor: (r) => r.email_institucional || r.email_pessoal || '' },
+  { titulo: 'email_pessoal', valor: (r) => r.email_pessoal || '' },
   { titulo: 'telefone', valor: (r) => r.phone || '' },
-  { titulo: 'matricula', valor: (r) => r.registration || '' },
-  { titulo: 'cargo', valor: (r) => r.position || '' },
-  { titulo: 'escola', valor: (r) => r.school || '' },
-  { titulo: 'municipio', valor: (r) => r.municipality || '' },
-  { titulo: 'regional', valor: (r) => r.regional || '' },
+  { titulo: 'data_nascimento', valor: (r) => (r.birth_date ? new Date(r.birth_date).toISOString().slice(0, 10) : '') },
+  { titulo: 'funcao', valor: (r) => r.funcao || '' },
+  { titulo: 'componente_curricular', valor: (r) => r.componente_curricular || '' },
+  { titulo: 'gre', valor: (r) => r.gre || '' },
+  { titulo: 'escola', valor: (r) => r.escola || '' },
+  { titulo: 'inep', valor: (r) => r.inep || '' },
   { titulo: 'curso', valor: (r) => r.course_name },
   { titulo: 'data_inscricao', valor: (r) => (r.enrolled_at ? new Date(r.enrolled_at).toISOString().slice(0, 10) : '') },
 ]
@@ -57,13 +63,18 @@ async function exportarInscritos({ courseId = null, edition, actor, req }) {
     params.push(courseId)
   }
 
+  // O vinculo principal (ordem 1) vem por subconsulta: quem tem mais de uma
+  // escola geraria linhas duplicadas num JOIN, e a carga do AVA espera uma linha
+  // por inscricao.
   const [rows] = await getPool().execute(
-    `SELECT c.cpf, c.name, c.email, c.phone, c.registration, c.position,
-            c.school, c.municipality, c.regional,
+    `SELECT c.id, c.usuario_id, c.cpf, c.name, c.email_institucional, c.email_pessoal,
+            c.phone, c.birth_date, c.funcao, c.componente_curricular,
+            v.gre, v.escola, v.inep,
             cur.name AS course_name, i.enrolled_at
      FROM inscricoes i
      JOIN cursistas c ON c.id = i.cursista_id
      JOIN courses cur ON cur.id = i.course_id
+     LEFT JOIN cursista_vinculos v ON v.cursista_id = c.id AND v.ordem = 1
      WHERE i.status = 'inscrito' AND i.edition = ? ${filtroCurso}
      ORDER BY cur.name, c.name`,
     params

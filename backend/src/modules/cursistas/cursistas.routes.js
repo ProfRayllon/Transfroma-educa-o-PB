@@ -208,6 +208,7 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
     res.json(await repo.list({
       search: req.query.search || '',
       status: req.query.status || '',
+      situacao: req.query.situacao || '',
       page: req.query.page,
       perPage: req.query.perPage,
     }))

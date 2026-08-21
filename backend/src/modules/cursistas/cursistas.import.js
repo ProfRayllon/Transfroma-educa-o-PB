@@ -66,9 +66,12 @@ async function importar({ arquivo, actor, req }) {
     if (cpf) perfilPorCpf.set(cpf, registro)
   }
 
+  const temColunaAtivo = usuarios.cabecalho.includes('ATIVO')
+
   const validos = []
   const rejeitados = []
   const cpfsVistos = new Map()
+  const usuarioIdsVistos = new Map()
   let semPerfil = 0
 
   usuarios.registros.forEach((linha, posicao) => {
@@ -91,6 +94,17 @@ async function importar({ arquivo, actor, req }) {
     cpfsVistos.set(cpf, numeroDaLinha)
 
     const usuarioId = texto(linha.USUARIO_ID, 20)
+    // USUARIO_ID tambem e chave unica. Repetido no arquivo, o upsert atualizaria
+    // o cadastro de OUTRA pessoa (nome, e-mails, funcao) em vez de inserir esta,
+    // misturando dado pessoal entre contas.
+    if (usuarioId && usuarioIdsVistos.has(usuarioId)) {
+      rejeitados.push({
+        linha: numeroDaLinha,
+        motivo: `USUARIO_ID repetido (ja aparece na linha ${usuarioIdsVistos.get(usuarioId)})`,
+      })
+      return
+    }
+    if (usuarioId) usuarioIdsVistos.set(usuarioId, numeroDaLinha)
     const perfil = (usuarioId && perfilPorUsuario.get(usuarioId)) || perfilPorCpf.get(cpf) || {}
     if (!Object.keys(perfil).length) semPerfil += 1
 
@@ -119,9 +133,13 @@ async function importar({ arquivo, actor, req }) {
       emailInstitucional: texto(String(perfil.EMAIL_INSTITUCIONAL || '').toLowerCase(), 150),
       emailPessoal: texto(String(perfil.EMAIL_PESSOAL || '').toLowerCase(), 150),
       genero: texto(perfil.GENERO, 40),
-      // ATIVO da base controla se a conta pode entrar; os demais estados de
-      // acesso sao deste sistema, nao da planilha.
-      status: Object.prototype.hasOwnProperty.call(linha, 'ATIVO') && !bandeira(linha.ATIVO) ? 'inativo' : 'ativo',
+      // ATIVO da base controla se a conta pode entrar. Quando a coluna nao vem na
+      // planilha, `status` fica indefinido e o upsert PRESERVA o valor atual --
+      // sem isso, importar uma base sem essa coluna reativaria em silencio todas
+      // as contas que a coordenacao havia desativado.
+      status: temColunaAtivo
+        ? (bandeira(linha.ATIVO) ? 'ativo' : 'inativo')
+        : null,
       vinculos,
     })
   })
@@ -135,10 +153,23 @@ async function importar({ arquivo, actor, req }) {
       await conexao.beginTransaction()
       for (let i = 0; i < validos.length; i += TAMANHO_DO_LOTE) {
         const lote = validos.slice(i, i + TAMANHO_DO_LOTE)
-        const resultado = await repo.upsertLoteFromImport(lote, conexao)
+        const resultado = await repo.upsertLoteFromImport(lote, conexao, {
+          atualizarStatus: temColunaAtivo,
+        })
         inseridos += resultado.inseridos
         atualizados += resultado.atualizados
-        await repo.substituirVinculos(lote, conexao)
+
+        // Registro cujo USUARIO_ID ja pertence a outro CPF nao e gravado: seria
+        // sobrescrever o cadastro de outra pessoa.
+        for (const conflito of resultado.conflitos) {
+          rejeitados.push({
+            linha: cpfsVistos.get(conflito.cpf) ?? '?',
+            motivo: `USUARIO_ID ${conflito.usuarioId} ja pertence a outro CPF no sistema`,
+          })
+        }
+
+        const gravados = lote.filter((r) => !resultado.conflitos.some((c) => c.cpf === r.cpf))
+        await repo.substituirVinculos(gravados, conexao)
       }
       await conexao.commit()
     } catch (error) {

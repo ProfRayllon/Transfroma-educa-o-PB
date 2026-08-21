@@ -102,8 +102,12 @@ async function setPassword(id, passwordHash) {
 }
 
 /**
- * Volta a conta para o estado de primeiro acesso: o CPF passa a valer de novo e
- * a confirmacao do cadastro e exigida outra vez.
+ * Volta a conta para o estado de primeiro acesso: o CPF passa a valer como senha
+ * de novo e a troca sera exigida na proxima entrada.
+ *
+ * O cadastro ja confirmado e mantido de proposito -- os dados continuam validos,
+ * e obrigar a preencher tudo outra vez so porque a pessoa esqueceu a senha seria
+ * atrito sem ganho.
  */
 async function resetPassword(id) {
   requireMysql()
@@ -173,9 +177,15 @@ async function atualizarCadastro(id, dados) {
  * campos de contato para nao apagar o que o cursista preencheu com o vazio da
  * planilha.
  */
-async function upsertLoteFromImport(records, connection) {
+/**
+ * `atualizarStatus` so vem verdadeiro quando a planilha realmente tem a coluna
+ * ATIVO. Sem ela, o status de quem ja existe fica fora da clausula de
+ * atualizacao e e preservado -- importar uma base incompleta nao pode reativar
+ * em silencio contas que a coordenacao desativou.
+ */
+async function upsertLoteFromImport(records, connection, { atualizarStatus = false } = {}) {
   const runner = connection || getPool()
-  if (records.length === 0) return { inseridos: 0, atualizados: 0 }
+  if (records.length === 0) return { inseridos: 0, atualizados: 0, conflitos: [] }
 
   // O upsert em lote nao permite saber, linha a linha, o que foi insercao ou
   // atualizacao (affectedRows vem somado), entao conferimos antes quais ja existem.
@@ -183,8 +193,36 @@ async function upsertLoteFromImport(records, connection) {
   const [existentes] = await runner.query('SELECT cpf FROM cursistas WHERE cpf IN (?)', [cpfs])
   const jaExistiam = new Set(existentes.map((row) => row.cpf))
 
+  // usuario_id tambem e chave unica: se o da planilha ja pertence a OUTRO CPF, o
+  // upsert atualizaria o cadastro daquela pessoa (nome, e-mails, funcao) em vez
+  // de inserir esta -- misturando dado pessoal entre contas. Esses registros sao
+  // separados e devolvidos como conflito, nao gravados.
+  const usuarioIds = records.map((record) => record.usuarioId).filter(Boolean)
+  const donoPorUsuarioId = new Map()
+  if (usuarioIds.length > 0) {
+    const [rows] = await runner.query(
+      'SELECT usuario_id, cpf FROM cursistas WHERE usuario_id IN (?)',
+      [usuarioIds]
+    )
+    rows.forEach((row) => donoPorUsuarioId.set(row.usuario_id, row.cpf))
+  }
+
+  const conflitos = []
+  const gravaveis = records.filter((record) => {
+    const dono = record.usuarioId && donoPorUsuarioId.get(record.usuarioId)
+    if (dono && dono !== record.cpf) {
+      conflitos.push({ usuarioId: record.usuarioId, cpf: record.cpf })
+      return false
+    }
+    return true
+  })
+
+  if (gravaveis.length === 0) {
+    return { inseridos: 0, atualizados: 0, conflitos }
+  }
+
   const valores = []
-  const placeholders = records
+  const placeholders = gravaveis
     .map((record) => {
       valores.push(
         record.usuarioId || null,
@@ -201,6 +239,9 @@ async function upsertLoteFromImport(records, connection) {
         record.emailInstitucional || null,
         record.emailPessoal || null,
         record.genero || null,
+        // Cadastro novo sem a coluna ATIVO na planilha entra como ativo; a
+        // preservacao do status de quem ja existe e feita na clausula de
+        // atualizacao (ver `atualizarStatus` abaixo).
         record.status || 'ativo'
       )
       return '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
@@ -226,14 +267,16 @@ async function upsertLoteFromImport(records, connection) {
        birth_date = COALESCE(birth_date, VALUES(birth_date)),
        email_institucional = COALESCE(VALUES(email_institucional), email_institucional),
        email_pessoal = COALESCE(VALUES(email_pessoal), email_pessoal),
-       genero = COALESCE(genero, VALUES(genero)),
-       status = VALUES(status)`,
+       genero = COALESCE(genero, VALUES(genero))${atualizarStatus ? ',\n       status = VALUES(status)' : ''}`,
     valores
   )
 
+  const atualizados = gravaveis.filter((record) => jaExistiam.has(record.cpf)).length
+
   return {
-    inseridos: records.length - jaExistiam.size,
-    atualizados: jaExistiam.size,
+    inseridos: gravaveis.length - atualizados,
+    atualizados,
+    conflitos,
   }
 }
 
@@ -293,9 +336,13 @@ async function list({ search = '', status = '', situacao = '', page = 1, perPage
     filters.push('status = ?')
     params.push(status)
   }
+  // As tres situacoes precisam ser mutuamente exclusivas para os numeros do painel
+  // fecharem. O caso que quebra isso e real: o reset de senha pelo admin zera o
+  // password_hash mas mantem o cadastro confirmado, entao "completo" tambem exige
+  // ter senha definida -- quem foi resetado volta a contar como primeiro acesso.
   if (situacao === 'pendente_primeiro_acesso') filters.push('password_hash IS NULL')
   if (situacao === 'pendente_confirmacao') filters.push('password_hash IS NOT NULL AND cadastro_confirmado = 0')
-  if (situacao === 'completo') filters.push('cadastro_confirmado = 1')
+  if (situacao === 'completo') filters.push('password_hash IS NOT NULL AND cadastro_confirmado = 1')
 
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : ''
   const limit = Math.min(Math.max(Number(perPage) || 50, 1), 200)
@@ -329,7 +376,9 @@ async function estatisticas() {
        SUM(status = 'ativo') AS ativos,
        SUM(password_hash IS NULL) AS pendentesPrimeiroAcesso,
        SUM(password_hash IS NOT NULL) AS comSenhaDefinida,
-       SUM(cadastro_confirmado = 1) AS cadastrosConfirmados,
+       -- Exige senha definida pelo mesmo motivo do filtro da listagem: quem teve a
+       -- senha resetada pelo admin mantem o cadastro confirmado e contaria duas vezes.
+       SUM(password_hash IS NOT NULL AND cadastro_confirmado = 1) AS cadastrosConfirmados,
        SUM(locked_until IS NOT NULL AND locked_until > NOW()) AS bloqueadas,
        SUM(last_access_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS ativosUltimos7Dias,
        SUM(email_institucional IS NULL AND email_pessoal IS NULL) AS semEmail,
