@@ -33,14 +33,6 @@ function PublicRoute({ children }) {
   return children
 }
 
-function AdminOnlyRoute({ children }) {
-  const { user, loading } = useAuth()
-  if (loading) return null
-  if (!user) return <Navigate to="/login" replace />
-  if (user.role !== 'administrador') return <Navigate to="/painel" replace />
-  return children
-}
-
 export default function App() {
   return (
     <BrowserRouter>
@@ -50,10 +42,14 @@ export default function App() {
         <BrandingProvider>
         <DataProvider>
         <Routes>
-          <Route path="/" element={<AdminOnlyRoute><Home /></AdminOnlyRoute>} />
-          <Route path="/catalogo-cursos" element={<AdminOnlyRoute><PublicCourses /></AdminOnlyRoute>} />
-          <Route path="/inscricoes" element={<Navigate to="/login" replace />} />
-          <Route path="/guia" element={<Navigate to="/login" replace />} />
+          {/* Site publico: qualquer visitante ve. O que exige sessao e a inscricao,
+              nao a leitura -- por isso a home e o catalogo ficam fora dos guards. */}
+          <Route path="/" element={<Home />} />
+          <Route path="/catalogo-cursos" element={<PublicCourses />} />
+          <Route path="/inscricoes" element={<Navigate to="/" replace />} />
+          <Route path="/guia" element={<Navigate to="/" replace />} />
+          {/* Login da equipe interna. Alcancado pelo rodape do site, nao pelo menu:
+              o publico do portal e o cursista, nao quem administra o programa. */}
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
           {/* Area do cursista: publica e com sessao propria, fora dos guards da
               equipe interna -- cursista nao e usuario do sistema administrativo. */}
@@ -69,7 +65,9 @@ export default function App() {
             <Route path="notificacoes" element={<Notificacoes />} />
             <Route path="perfil" element={<Perfil />} />
           </Route>
-          <Route path="*" element={<Navigate to="/login" replace />} />
+          {/* Rota desconhecida cai no site publico, nao no login: quem digita
+              errado uma URL do portal e visitante, nao alguem da equipe. */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </DataProvider>
         </BrandingProvider>

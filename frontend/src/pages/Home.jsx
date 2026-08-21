@@ -4,21 +4,11 @@ import { ArrowRight, Download } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
 import MapaParaiba from '../components/public/MapaParaiba'
+import publicApi from '../lib/publicApi'
 
 const heroImage = '/images/home/hero-capa.png'
-const avaImage = '/images/home/ava.png'
 const statsImage = '/images/home/resultados.png'
-const formUrl = 'https://forms.gle/uYrVTURKxzq6mcRV6'
 const avaUrl = 'https://pb.ava.rieh.nees.ufal.br/login/index.php'
-const videoId = 'K7sHZjRxk9g'
-
-const inscricaoSteps = [
-  { num: '1', title: 'Acesse o formulário', desc: 'Clique em "Realizar inscrição" e preencha o formulário oficial do Programa Transforma Educação PB 2026.' },
-  { num: '2', title: 'Informe seus dados', desc: 'Preencha nome completo, CPF, escola, município e trilha formativa de interesse.' },
-  { num: '3', title: 'Confirme o envio', desc: 'Após enviar, você receberá uma confirmação. Guarde o comprovante de inscrição.' },
-  { num: '4', title: 'Validação do CPF', desc: 'Acesse o portal Transforma e valide seu CPF para liberar o acesso ao Ambiente Virtual de Aprendizagem.' },
-  { num: '5', title: 'Acesse o AVA', desc: 'Com o CPF validado, entre no AVA RIEH/PB usando sua conta gov.br e inicie sua formação.' },
-]
 
 const allCourses = [
   { title: 'Google for Education', tag: 'Trilha Institucional', workload: '20h', status: 'Em andamento', image: '/images/home/curso-google.png' },
@@ -27,11 +17,11 @@ const allCourses = [
 ]
 
 const timeline = [
-  ['1', 'Inscrição', 'Realize a inscrição no formulário do Programa de Formação.'],
-  ['2', 'Acesso ao portal', 'Acesse o portal do Transforma Educação PB, na área de cursos.'],
-  ['3', 'Escolha do curso', 'Selecione o curso desejado e confira a trilha correspondente.'],
-  ['4', 'Validação do CPF', 'Informe o CPF para confirmar se sua inscrição foi localizada.'],
-  ['5', 'Acesso ao AVA', 'Após a validação, acesse o Ambiente Virtual de Aprendizagem.'],
+  ['1', 'Faça o login', 'Entre com as informações repassadas pelo seu tutor.'],
+  ['2', 'Atualize seus dados', 'Confira e atualize seus dados para a emissão dos certificados.'],
+  ['3', 'Acesse os cursos', 'Veja os cursos abertos e as suas ementas.'],
+  ['4', 'Inscreva-se nos cursos', 'Escolha quantos cursos quiser, entre os que estiverem abertos.'],
+  ['5', 'Acesse o AVA', 'Entre no curso pelo AVA na data definida para o início.'],
   ['6', 'Entrada gov.br', 'Entre no ambiente usando o sistema de autenticação do gov.br.'],
 ]
 
@@ -114,6 +104,103 @@ function HeroStats() {
             </span>
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Numero que sobe do zero ate o alvo, disparado quando entra na tela.
+ *
+ * Diferente do CountUp de "Resultados esperados": aquele anima valores fixos no
+ * codigo, este anima um numero que vem do banco e comeca indefinido -- so pode
+ * animar depois da resposta, e precisa reanimar se o valor mudar.
+ */
+function NumeroAnimado({ valor, className = '' }) {
+  const ref = useRef(null)
+  const [visivel, setVisivel] = useState(false)
+  const [atual, setAtual] = useState(0)
+
+  useEffect(() => {
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisivel(true)
+          obs.disconnect()
+        }
+      },
+      { threshold: 0.4 },
+    )
+    if (ref.current) obs.observe(ref.current)
+    return () => obs.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (!visivel || valor == null) return
+    let raf
+    const inicio = performance.now()
+    const duracao = 1600
+    const tick = (agora) => {
+      const p = Math.min((agora - inicio) / duracao, 1)
+      const ease = 1 - Math.pow(1 - p, 4)
+      setAtual(Math.round(valor * ease))
+      if (p < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [visivel, valor])
+
+  return (
+    <span ref={ref} className={`tabular-nums ${className}`}>
+      {atual.toLocaleString('pt-BR')}
+    </span>
+  )
+}
+
+/**
+ * Painel de inscricoes da home.
+ *
+ * Le a rota publica de contadores, que devolve so agregados. Se a API estiver
+ * fora, o painel simplesmente nao aparece: melhor a secao sem o numero do que
+ * uma caixa quebrada ou um zero que nao e verdade.
+ */
+function PainelInscricoes() {
+  const [dados, setDados] = useState(null)
+  const [falhou, setFalhou] = useState(false)
+
+  useEffect(() => {
+    let ativo = true
+    publicApi
+      .get('/cursistas/publico/contadores')
+      .then(({ data }) => { if (ativo) setDados(data) })
+      .catch(() => { if (ativo) setFalhou(true) })
+    return () => { ativo = false }
+  }, [])
+
+  if (falhou) return null
+
+  return (
+    <div className="w-full shrink-0 rounded-2xl border border-white/20 bg-white/10 p-8 backdrop-blur-md md:w-[340px]">
+      <span className="block text-xs font-black uppercase tracking-[0.22em] text-purple-200">
+        Inscrições confirmadas
+      </span>
+      <div className="mt-3 flex items-end gap-2">
+        <NumeroAnimado valor={dados?.inscricoes} className="text-[64px] font-black leading-none text-white" />
+      </div>
+
+      <div className="mt-6 grid grid-cols-2 gap-4 border-t border-white/15 pt-5">
+        <div>
+          <NumeroAnimado valor={dados?.cursistasInscritos} className="block text-[24px] font-black leading-none text-white" />
+          <span className="mt-1.5 block text-[11px] font-semibold uppercase tracking-wider text-white/60">
+            Cursistas
+          </span>
+        </div>
+        <div>
+          <NumeroAnimado valor={dados?.cursosAbertos} className="block text-[24px] font-black leading-none text-white" />
+          <span className="mt-1.5 block text-[11px] font-semibold uppercase tracking-wider text-white/60">
+            Cursos abertos
+          </span>
+        </div>
       </div>
     </div>
   )
@@ -384,17 +471,17 @@ export default function Home() {
         {/* ── Inscrições ── */}
         <section id="inscricoes" className="relative overflow-hidden bg-[#3b1d7a] px-[22px] py-20">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(168,85,247,.25)_0%,_transparent_60%)]" />
-          <div className="relative mx-auto max-w-[1180px]">
-            <span className="mb-3 inline-block rounded-full bg-white/15 px-3 py-1 text-xs font-black uppercase tracking-[0.3em] text-purple-200 ring-1 ring-white/20">
-              Programa 2026
-            </span>
-            <h2 className="mb-4 text-[44px] font-black leading-tight text-white">Inscrições</h2>
-            <p className="max-w-2xl text-[18px] leading-relaxed text-white/70">
-              Participe do maior programa de formação continuada da Paraíba. Inscreva-se, escolha sua trilha e inicie sua jornada de aprendizagem.
-            </p>
-            <a href={formUrl} target="_blank" rel="noreferrer" className="mt-8 inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-[16px] font-black text-[#6b21a8] shadow-xl transition hover:-translate-y-0.5 hover:shadow-2xl">
-              Realizar inscrição agora <ArrowRight size={18} />
-            </a>
+          <div className="relative mx-auto flex max-w-[1180px] flex-col gap-10 md:flex-row md:items-center md:justify-between">
+            <div>
+              <span className="mb-3 inline-block rounded-full bg-white/15 px-3 py-1 text-xs font-black uppercase tracking-[0.3em] text-purple-200 ring-1 ring-white/20">
+                Programa 2026
+              </span>
+              <h2 className="mb-4 text-[44px] font-black leading-tight text-white">Inscrições</h2>
+              <p className="max-w-2xl text-[18px] leading-relaxed text-white/70">
+                Participe do maior programa de formação continuada da Paraíba. Inscreva-se, escolha sua trilha e inicie sua jornada de aprendizagem.
+              </p>
+            </div>
+            <PainelInscricoes />
           </div>
         </section>
 
@@ -460,40 +547,29 @@ export default function Home() {
 
         {/* ── CTA + Video ── */}
         <section className="bg-gradient-to-r from-[#3b1d7a] via-[#6f35b5] to-[#a855f7]">
-          <div className="mx-auto grid max-w-[1240px] items-center gap-10 px-[22px] py-16 md:grid-cols-[0.9fr_1.1fr]">
-            <div>
-              <span className="mb-4 inline-block rounded-full bg-white/15 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-white/80 ring-1 ring-white/25">
-                Formacao continuada
-              </span>
-              <h2 className="mb-4 text-[40px] font-black uppercase leading-tight text-white tracking-tight">
-                Transforme<br />sua prática
-              </h2>
-              <p className="text-[17px] leading-relaxed text-white/80">
-                Participe de formações alinhadas à realidade da rede com intenção, método e resultado.
-              </p>
-              <div className="mt-8 flex flex-wrap gap-3">
-                <Link
-                  className="inline-flex min-h-[48px] items-center justify-center rounded-xl bg-white px-7 py-3 text-[15px] font-black text-[#6f35b5] shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl"
-                  to="/catalogo-cursos"
-                >
-                  Acessar cursos
-                </Link>
-                <a
-                  className="inline-flex min-h-[48px] items-center justify-center rounded-xl border border-white/50 bg-white/15 px-7 py-3 text-[15px] font-black text-white backdrop-blur-sm transition hover:bg-white/25 hover:-translate-y-0.5"
-                  href={avaUrl} target="_blank" rel="noreferrer"
-                >
-                  Entrar no AVA
-                </a>
-              </div>
-            </div>
-            <div className="aspect-video overflow-hidden rounded-2xl border border-white/20 shadow-[0_16px_48px_rgba(0,0,0,.35)]">
-              <iframe
-                className="h-full w-full"
-                src="https://www.youtube.com/embed/K7sHZjRxk9g?rel=0&modestbranding=1&playsinline=1"
-                title="Video Transforma Educacao"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-              />
+          <div className="mx-auto max-w-[860px] px-[22px] py-20 text-center">
+            <span className="mb-4 inline-block rounded-full bg-white/15 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-white/80 ring-1 ring-white/25">
+              Formação continuada
+            </span>
+            <h2 className="mb-4 text-[40px] font-black uppercase leading-tight tracking-tight text-white">
+              Transforme<br />sua prática
+            </h2>
+            <p className="mx-auto max-w-[560px] text-[17px] leading-relaxed text-white/80">
+              Participe de formações alinhadas à realidade da rede com intenção, método e resultado.
+            </p>
+            <div className="mt-8 flex flex-wrap justify-center gap-3">
+              <Link
+                className="inline-flex min-h-[48px] items-center justify-center rounded-xl bg-white px-7 py-3 text-[15px] font-black text-[#6f35b5] shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl"
+                to="/catalogo-cursos"
+              >
+                Acessar cursos
+              </Link>
+              <a
+                className="inline-flex min-h-[48px] items-center justify-center rounded-xl border border-white/50 bg-white/15 px-7 py-3 text-[15px] font-black text-white backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-white/25"
+                href={avaUrl} target="_blank" rel="noreferrer"
+              >
+                Entrar no AVA
+              </a>
             </div>
           </div>
         </section>

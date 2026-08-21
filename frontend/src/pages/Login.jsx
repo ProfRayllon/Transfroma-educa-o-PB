@@ -123,6 +123,14 @@ export default function Login() {
           </form>
 
       </div>
+
+      {/* Caminho de volta: esta tela agora e alcancada pelo rodape do site publico. */}
+      <Link
+        to="/"
+        className="absolute bottom-6 left-1/2 -translate-x-1/2 text-xs text-gray-400 transition-colors hover:text-brand-700"
+      >
+        ← Voltar ao site
+      </Link>
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { LogIn } from 'lucide-react'
 
 const navLinkClass = ({ isActive }) =>
   `rounded-lg px-3 py-2 text-sm font-bold transition ${
@@ -37,7 +38,14 @@ export default function PublicNav() {
           <NavLink to="/catalogo-cursos" className={navLinkClass}>Cursos</NavLink>
           <button type="button" onClick={() => goToSection('inscricoes')} className={navBtnClass}>Inscrições</button>
           <button type="button" onClick={() => goToSection('guia')} className={navBtnClass}>Guia</button>
-          <NavLink to="/login" className={navLinkClass}>Login</NavLink>
+          {/* O login do menu e o do cursista: e ele o publico do portal. A equipe
+              entra pelo rodape, em /login. */}
+          <Link
+            to="/area-do-cursista"
+            className="ml-2 inline-flex items-center gap-1.5 rounded-lg bg-[#6f35b5] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#5a2b94]"
+          >
+            <LogIn size={15} /> Área do Cursista
+          </Link>
         </nav>
       </div>
     </header>

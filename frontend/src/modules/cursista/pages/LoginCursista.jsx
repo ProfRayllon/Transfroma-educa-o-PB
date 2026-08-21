@@ -107,11 +107,9 @@ export default function LoginCursista() {
           </p>
         </form>
 
-        {/* Caminho de volta para quem e da equipe e caiu aqui por engano. */}
-        <p className="text-center text-xs text-gray-500 mt-4">
-          É da equipe do programa?{' '}
-          <Link to="/login" className="font-medium text-brand-700 hover:text-brand-900 underline underline-offset-2">
-            Entre pela área da equipe
+        <p className="text-center text-xs text-gray-500 mt-5">
+          <Link to="/" className="text-gray-400 hover:text-brand-700">
+            ← Voltar ao site
           </Link>
         </p>
       </div>

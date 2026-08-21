@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { Lock } from 'lucide-react'
 
 export default function PublicFooter() {
   return (
@@ -9,7 +10,6 @@ export default function PublicFooter() {
           <p className="leading-7 text-[#374151]">
             <strong className="text-[#1c1033]">Gerência Executiva de Formação e Desenvolvimento dos Profissionais da Educação (GEFDP)</strong>
           </p>
-          <p className="mt-1 leading-7 text-[#566176]">Secretaria de Estado da Educação - SEE</p>
           <div className="mt-5 border-t border-[#e9d5ff] pt-5 text-[#566176]">
             <p>Centro Administrativo Integrado - Bloco 01 - 3 Andar</p>
             <p>CEP: 58015-900 | João Pessoa/PB</p>
@@ -29,18 +29,19 @@ export default function PublicFooter() {
             <span className="block text-xs font-black uppercase tracking-wider text-[#a855f7]">Instagram</span>
             <a className="font-bold text-[#1c1033] hover:text-[#7336C0] hover:underline" href="https://instagram.com/educaformapb" target="_blank" rel="noreferrer">@educaformapb</a>
           </div>
-          <div className="flex gap-4 pt-1 text-[#566176]">
-            <Link className="hover:text-[#7336C0] hover:underline" to="/">Home</Link>
-            <Link className="hover:text-[#7336C0] hover:underline" to="/catalogo-cursos">Cursos</Link>
-            <Link className="hover:text-[#7336C0] hover:underline" to="/inscricoes">Inscrições</Link>
-            <Link className="hover:text-[#7336C0] hover:underline" to="/guia">Guia</Link>
-            <Link className="hover:text-[#7336C0] hover:underline" to="/login">Login</Link>
-          </div>
         </div>
       </div>
 
-      <div className="mx-auto mt-10 max-w-[1180px] border-t border-[#e9d5ff] pt-6 text-center text-xs text-[#9ca3af]">
-        © 2026 Transforma Educação PB · GEFDP · Secretaria de Estado da Educação
+      <div className="mx-auto mt-10 flex max-w-[1180px] flex-col items-center gap-3 border-t border-[#e9d5ff] pt-6 text-center text-xs text-[#9ca3af]">
+        <p>© 2026 Transforma Educação PB · GEFDP · Governo do Estado da Paraíba</p>
+        {/* Entrada da equipe. Discreta de proposito: o portal e do cursista, e
+            este link so precisa ser encontravel por quem ja sabe que existe. */}
+        <Link
+          to="/login"
+          className="inline-flex items-center gap-1.5 text-[#b6a8cc] transition hover:text-[#7336C0] hover:underline"
+        >
+          <Lock size={11} /> Acesso administrativo
+        </Link>
       </div>
     </footer>
   )
