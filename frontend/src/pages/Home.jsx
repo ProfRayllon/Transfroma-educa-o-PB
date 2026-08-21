@@ -4,7 +4,6 @@ import { ArrowRight, Download } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
 import MapaParaiba from '../components/public/MapaParaiba'
-import publicApi from '../lib/publicApi'
 
 const heroImage = '/images/home/hero-capa.png'
 const statsImage = '/images/home/resultados.png'
@@ -104,103 +103,6 @@ function HeroStats() {
             </span>
           </div>
         ))}
-      </div>
-    </div>
-  )
-}
-
-/**
- * Numero que sobe do zero ate o alvo, disparado quando entra na tela.
- *
- * Diferente do CountUp de "Resultados esperados": aquele anima valores fixos no
- * codigo, este anima um numero que vem do banco e comeca indefinido -- so pode
- * animar depois da resposta, e precisa reanimar se o valor mudar.
- */
-function NumeroAnimado({ valor, className = '' }) {
-  const ref = useRef(null)
-  const [visivel, setVisivel] = useState(false)
-  const [atual, setAtual] = useState(0)
-
-  useEffect(() => {
-    const obs = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setVisivel(true)
-          obs.disconnect()
-        }
-      },
-      { threshold: 0.4 },
-    )
-    if (ref.current) obs.observe(ref.current)
-    return () => obs.disconnect()
-  }, [])
-
-  useEffect(() => {
-    if (!visivel || valor == null) return
-    let raf
-    const inicio = performance.now()
-    const duracao = 1600
-    const tick = (agora) => {
-      const p = Math.min((agora - inicio) / duracao, 1)
-      const ease = 1 - Math.pow(1 - p, 4)
-      setAtual(Math.round(valor * ease))
-      if (p < 1) raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [visivel, valor])
-
-  return (
-    <span ref={ref} className={`tabular-nums ${className}`}>
-      {atual.toLocaleString('pt-BR')}
-    </span>
-  )
-}
-
-/**
- * Painel de inscricoes da home.
- *
- * Le a rota publica de contadores, que devolve so agregados. Se a API estiver
- * fora, o painel simplesmente nao aparece: melhor a secao sem o numero do que
- * uma caixa quebrada ou um zero que nao e verdade.
- */
-function PainelInscricoes() {
-  const [dados, setDados] = useState(null)
-  const [falhou, setFalhou] = useState(false)
-
-  useEffect(() => {
-    let ativo = true
-    publicApi
-      .get('/cursistas/publico/contadores')
-      .then(({ data }) => { if (ativo) setDados(data) })
-      .catch(() => { if (ativo) setFalhou(true) })
-    return () => { ativo = false }
-  }, [])
-
-  if (falhou) return null
-
-  return (
-    <div className="w-full shrink-0 rounded-2xl border border-white/20 bg-white/10 p-8 backdrop-blur-md md:w-[340px]">
-      <span className="block text-xs font-black uppercase tracking-[0.22em] text-purple-200">
-        Inscrições confirmadas
-      </span>
-      <div className="mt-3 flex items-end gap-2">
-        <NumeroAnimado valor={dados?.inscricoes} className="text-[64px] font-black leading-none text-white" />
-      </div>
-
-      <div className="mt-6 grid grid-cols-2 gap-4 border-t border-white/15 pt-5">
-        <div>
-          <NumeroAnimado valor={dados?.cursistasInscritos} className="block text-[24px] font-black leading-none text-white" />
-          <span className="mt-1.5 block text-[11px] font-semibold uppercase tracking-wider text-white/60">
-            Cursistas
-          </span>
-        </div>
-        <div>
-          <NumeroAnimado valor={dados?.cursosAbertos} className="block text-[24px] font-black leading-none text-white" />
-          <span className="mt-1.5 block text-[11px] font-semibold uppercase tracking-wider text-white/60">
-            Cursos abertos
-          </span>
-        </div>
       </div>
     </div>
   )
@@ -468,20 +370,27 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── Inscrições ── */}
-        <section id="inscricoes" className="relative overflow-hidden bg-[#3b1d7a] px-[22px] py-20">
+        {/* ── O Programa ── */}
+        <section id="programa" className="relative overflow-hidden bg-[#3b1d7a] px-[22px] py-24">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(168,85,247,.25)_0%,_transparent_60%)]" />
-          <div className="relative mx-auto flex max-w-[1180px] flex-col gap-10 md:flex-row md:items-center md:justify-between">
-            <div>
-              <span className="mb-3 inline-block rounded-full bg-white/15 px-3 py-1 text-xs font-black uppercase tracking-[0.3em] text-purple-200 ring-1 ring-white/20">
-                Programa 2026
-              </span>
-              <h2 className="mb-4 text-[44px] font-black leading-tight text-white">Inscrições</h2>
-              <p className="max-w-2xl text-[18px] leading-relaxed text-white/70">
-                Participe do maior programa de formação continuada da Paraíba. Inscreva-se, escolha sua trilha e inicie sua jornada de aprendizagem.
-              </p>
-            </div>
-            <PainelInscricoes />
+          <div className="relative mx-auto max-w-[820px] text-center">
+            <span className="mb-4 inline-block rounded-full bg-white/15 px-3 py-1 text-xs font-black uppercase tracking-[0.3em] text-purple-200 ring-1 ring-white/20">
+              Programa 2026
+            </span>
+            <h2 className="mb-6 text-[44px] font-black leading-tight text-white">
+              O Programa Transforma
+            </h2>
+            <p className="text-[19px] leading-relaxed text-white/80">
+              O <strong className="font-black text-white">Transforma Educação PB</strong> é o programa de
+              formação continuada dos profissionais da educação da rede estadual, conduzido pela
+              Gerência Executiva de Formação e Desenvolvimento dos Profissionais da Educação (GEFDP).
+            </p>
+            <p className="mt-5 text-[17px] leading-relaxed text-white/65">
+              São trilhas formativas construídas a partir da realidade da rede — formação institucional,
+              gestão pedagógica, educação socioemocional, tecnologia e educação inclusiva — para
+              fortalecer a prática de quem está na sala de aula e na gestão da escola. Os cursos
+              acontecem no AVA RIEH/PB, com certificação para quem conclui.
+            </p>
           </div>
         </section>
 

@@ -137,22 +137,6 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
   }
 
   // ---------------------------------------------------------------------------
-  // Area publica (sem sessao)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Contadores da pagina inicial.
-   *
-   * Unica rota do modulo sem autenticacao. Devolve so numeros agregados: quantas
-   * inscricoes, quantos cursistas distintos, quantos cursos abertos. Nao ha como
-   * identificar ninguem a partir disso, e o servico ja aplica cache de 1 minuto
-   * para a home nao virar carga no banco.
-   */
-  router.get('/publico/contadores', tratar(async (req, res) => {
-    res.json(await service.contadoresPublicos())
-  }))
-
-  // ---------------------------------------------------------------------------
   // Area do cursista
   // ---------------------------------------------------------------------------
 

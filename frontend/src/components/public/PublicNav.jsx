@@ -36,7 +36,7 @@ export default function PublicNav() {
         <nav className="flex items-center gap-0.5">
           <NavLink to="/" className={navLinkClass} end>Home</NavLink>
           <NavLink to="/catalogo-cursos" className={navLinkClass}>Cursos</NavLink>
-          <button type="button" onClick={() => goToSection('inscricoes')} className={navBtnClass}>Inscrições</button>
+          <button type="button" onClick={() => goToSection('programa')} className={navBtnClass}>O Programa</button>
           <button type="button" onClick={() => goToSection('guia')} className={navBtnClass}>Guia</button>
           {/* O login do menu e o do cursista: e ele o publico do portal. A equipe
               entra pelo rodape, em /login. */}

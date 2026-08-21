@@ -13,52 +13,6 @@ function erro(statusCode, message) {
 const EDICAO_ATUAL = process.env.EDICAO_ATUAL || String(new Date().getFullYear())
 
 /**
- * Contadores da pagina inicial publica.
- *
- * Devolve SO agregados -- totais, nunca linhas. A rota que consome isto e aberta
- * a qualquer visitante, entao tudo o que sai daqui e publico por definicao: um
- * campo a mais viraria vazamento, nao recurso.
- */
-const CACHE_CONTADORES_MS = 60 * 1000
-let cacheContadores = { em: 0, valor: null }
-
-async function contadoresPublicos() {
-  requireMysql()
-
-  // A home e a pagina mais aberta do sistema e estes numeros mudam devagar.
-  // Sem o cache, cada visita (e cada F5) viraria duas consultas no MySQL da VPS.
-  const agora = Date.now()
-  if (cacheContadores.valor && agora - cacheContadores.em < CACHE_CONTADORES_MS) {
-    return cacheContadores.valor
-  }
-
-  const [[inscricoes]] = await getPool().execute(
-    `SELECT COUNT(*) AS total, COUNT(DISTINCT cursista_id) AS cursistas
-     FROM inscricoes
-     WHERE status = 'inscrito' AND edition = ?`,
-    [EDICAO_ATUAL]
-  )
-
-  const [[cursos]] = await getPool().query(
-    `SELECT COUNT(*) AS abertos
-     FROM courses
-     WHERE enrollment_opens_at IS NOT NULL
-       AND enrollment_closes_at IS NOT NULL
-       AND NOW() BETWEEN enrollment_opens_at AND enrollment_closes_at`
-  )
-
-  const valor = {
-    edicao: EDICAO_ATUAL,
-    inscricoes: Number(inscricoes.total || 0),
-    cursistasInscritos: Number(inscricoes.cursistas || 0),
-    cursosAbertos: Number(cursos.abertos || 0),
-  }
-
-  cacheContadores = { em: agora, valor }
-  return valor
-}
-
-/**
  * Cursos abertos para inscricao agora.
  * As duas datas nulas significam curso fechado: o padrao e nao aceitar inscricao,
  * para nenhum curso abrir por descuido de cadastro.
@@ -290,7 +244,6 @@ async function atualizarMeuCadastro({ cursistaId, dados, req }) {
 module.exports = {
   EDICAO_ATUAL,
   CAMPOS_OBRIGATORIOS,
-  contadoresPublicos,
   listarCursosAbertos,
   listarMinhasInscricoes,
   inscrever,
