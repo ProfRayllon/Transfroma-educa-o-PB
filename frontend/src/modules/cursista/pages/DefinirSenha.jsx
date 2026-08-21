@@ -23,6 +23,12 @@ export default function DefinirSenha() {
   ]
   const podeEnviar = regras.every((regra) => regra.ok) && (senhaPendente || senhaAtual.length > 0)
 
+  // Erro esperado no primeiro acesso: a pessoa acabou de entrar com o CPF e
+  // repete o CPF como senha nova. A lista de regras sozinha nao explica isso --
+  // ela so mostra "Letras e números" apagado, sem dizer o motivo.
+  const digitados = novaSenha.replace(/\D/g, '')
+  const pareceCpf = digitados.length === 11 && !/[a-zA-Z]/.test(novaSenha)
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     setErro('')
@@ -65,7 +71,8 @@ export default function DefinirSenha() {
           {senhaPendente && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
               Enquanto a senha for o seu CPF, outra pessoa que saiba o seu CPF consegue
-              entrar na sua conta. Por isso a troca é obrigatória.
+              entrar na sua conta. Por isso a troca é obrigatória —{' '}
+              <strong>escolha uma senha diferente do seu CPF</strong>.
             </div>
           )}
 
@@ -124,6 +131,17 @@ export default function DefinirSenha() {
               />
             </div>
           </div>
+
+          {pareceCpf && (
+            <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
+              <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" />
+              <span>
+                <strong>A senha não pode ser o seu CPF.</strong> É justamente o que
+                estamos trocando aqui. Crie uma senha nova, com letras e números —
+                por exemplo, o nome da sua escola com o ano.
+              </span>
+            </div>
+          )}
 
           <ul className="space-y-1.5">
             {regras.map((regra) => (
