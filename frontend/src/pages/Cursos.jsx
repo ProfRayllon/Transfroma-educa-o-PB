@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   BookOpen,
   Calendar,
+  CalendarClock,
   Camera,
   CheckCircle,
   ChevronDown,
@@ -394,12 +395,23 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
   )
 }
 
+function paraDatetimeLocal(valor) {
+  if (!valor) return ''
+  const texto = String(valor)
+  const match = texto.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/)
+  return match ? `${match[1]}T${match[2]}` : ''
+}
+
 function CourseModal({ course, open, onClose, onSave, participants = { supervisors: [], coordinators: [], producers: [], revisors: [] }, saving = false, error = null }) {
   const fileRef = useRef(null)
   const [imageError, setImageError] = useState('')
   const [form, setForm] = useState(() => course
     ? {
       ...course,
+      // O input datetime-local so aceita "AAAA-MM-DDTHH:mm"; a API devolve
+      // "AAAA-MM-DDTHH:mm:ss". Sem o corte, o campo abre vazio na edicao.
+      enrollmentOpensAt: paraDatetimeLocal(course.enrollmentOpensAt),
+      enrollmentClosesAt: paraDatetimeLocal(course.enrollmentClosesAt),
       producerIds: course.producerIds || course.producers?.map((producer) => producer.id) || [],
       revisorIds: course.revisorIds || course.revisors?.map((revisor) => revisor.id) || [],
     }
@@ -414,6 +426,8 @@ function CourseModal({ course, open, onClose, onSave, participants = { superviso
     coordinatorName: '',
     startDate: '',
     deadline: '',
+    enrollmentOpensAt: '',
+    enrollmentClosesAt: '',
     image: null,
     producerIds: [],
     revisorIds: [],
@@ -702,6 +716,42 @@ function CourseModal({ course, open, onClose, onSave, participants = { superviso
               onChange={handleChange}
               className="input-field"
             />
+          </div>
+
+          {/* Janela de inscricao dos cursistas. Com as duas datas em branco o curso
+              nao aparece para inscricao -- o padrao e fechado, para nenhum curso
+              abrir por descuido de cadastro. */}
+          <div className="col-span-2 border-t border-gray-100 pt-4 mt-1">
+            <div className="flex items-center gap-2 mb-1">
+              <CalendarClock size={14} className="text-brand-600" />
+              <span className="text-sm font-semibold text-gray-800">Inscrição dos cursistas</span>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">
+              O curso só aparece na Área do Cursista dentro deste período. Deixe em
+              branco para manter as inscrições fechadas.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Inscrições abrem em</label>
+                <input
+                  name="enrollmentOpensAt"
+                  type="datetime-local"
+                  value={form.enrollmentOpensAt || ''}
+                  onChange={handleChange}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Inscrições encerram em</label>
+                <input
+                  name="enrollmentClosesAt"
+                  type="datetime-local"
+                  value={form.enrollmentClosesAt || ''}
+                  onChange={handleChange}
+                  className="input-field"
+                />
+              </div>
+            </div>
           </div>
         </div>
 

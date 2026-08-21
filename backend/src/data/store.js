@@ -106,6 +106,10 @@ function mapCourseRow(row) {
     revisors: parseJsonArray(row.revisors).filter((revisor) => revisor.id),
     startDate: formatDate(row.start_date),
     deadline: formatDate(row.deadline),
+    // Janela de inscricao dos cursistas. Sem as duas datas o curso nao aceita
+    // inscricao -- o padrao e fechado.
+    enrollmentOpensAt: row.enrollment_opens_at ? formatDate(row.enrollment_opens_at, true) : null,
+    enrollmentClosesAt: row.enrollment_closes_at ? formatDate(row.enrollment_closes_at, true) : null,
     image: row.image,
     statusAva: row.status_ava || 'nao_publicado',
     createdAt: formatDate(row.created_at, true),
@@ -1195,8 +1199,8 @@ async function createCourse(payload) {
 
   const [result] = await pool.execute(
     `INSERT INTO courses
-     (name, primary_trail, secondary_trail, total_sessions, supervisor_id, supervisor_name, coordinator_id, coordinator_name, start_date, deadline, image)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (name, primary_trail, secondary_trail, total_sessions, supervisor_id, supervisor_name, coordinator_id, coordinator_name, start_date, deadline, enrollment_opens_at, enrollment_closes_at, image)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       payload.name,
       payload.primaryTrail,
@@ -1208,6 +1212,8 @@ async function createCourse(payload) {
       payload.coordinatorName,
       payload.startDate || null,
       payload.deadline || null,
+      payload.enrollmentOpensAt || null,
+      payload.enrollmentClosesAt || null,
       payload.image || null,
     ]
   )
@@ -1246,7 +1252,8 @@ async function updateCourse(id, payload) {
 
   await pool.execute(
     `UPDATE courses
-     SET name = ?, primary_trail = ?, secondary_trail = ?, total_sessions = ?, supervisor_id = ?, supervisor_name = ?, coordinator_id = ?, coordinator_name = ?, start_date = ?, deadline = ?, image = ?
+     SET name = ?, primary_trail = ?, secondary_trail = ?, total_sessions = ?, supervisor_id = ?, supervisor_name = ?, coordinator_id = ?, coordinator_name = ?, start_date = ?, deadline = ?,
+         enrollment_opens_at = ?, enrollment_closes_at = ?, image = ?
      WHERE id = ?`,
     [
       payload.name,
@@ -1259,6 +1266,8 @@ async function updateCourse(id, payload) {
       payload.coordinatorName,
       payload.startDate || null,
       payload.deadline || null,
+      payload.enrollmentOpensAt || null,
+      payload.enrollmentClosesAt || null,
       payload.image || null,
       id,
     ]

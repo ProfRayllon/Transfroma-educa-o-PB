@@ -14,6 +14,7 @@ import Producao from './pages/Producao'
 import Ementa from './pages/Ementa'
 import Frequencia from './pages/Frequencia'
 import Acessos from './pages/Acessos'
+import CursistasAdmin from './pages/Cursistas'
 import Notificacoes from './pages/Notificacoes'
 import Perfil from './pages/Perfil'
 import CursistaRoutes from './modules/cursista/CursistaRoutes'
@@ -64,6 +65,7 @@ export default function App() {
             <Route path="producao" element={<Producao />} />
             <Route path="frequencia" element={<Frequencia />} />
             <Route path="acessos" element={<Acessos />} />
+            <Route path="cursistas" element={<CursistasAdmin />} />
             <Route path="notificacoes" element={<Notificacoes />} />
             <Route path="perfil" element={<Perfil />} />
           </Route>

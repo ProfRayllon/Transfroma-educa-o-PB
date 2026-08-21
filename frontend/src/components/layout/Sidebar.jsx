@@ -4,7 +4,7 @@ import { useTheme } from '../../context/ThemeContext'
 import { useAvatar } from '../../context/AvatarContext'
 import {
   LayoutDashboard, BookOpen, FileText, ShieldCheck, CalendarCheck,
-  LogOut, ChevronLeft, ChevronRight, Camera, Sun, Moon, Globe,
+  LogOut, ChevronLeft, ChevronRight, Camera, Sun, Moon, Globe, Users,
 } from 'lucide-react'
 
 const isCoordinatorRole = (user) => user?.role === 'coordenador' || (user?.function || '').toLowerCase().includes('coordenador')
@@ -27,6 +27,7 @@ const navItems = [
     label: 'Frequência',
     visible: (user) => user?.role === 'administrador' || user?.role === 'supervisor' || isCoordinatorRole(user),
   },
+  { to: '/cursistas', icon: Users, label: 'Cursistas', visible: (user) => user?.role === 'administrador' },
   { to: '/acessos', icon: ShieldCheck, label: 'Acessos', visible: (user) => user?.role === 'administrador' },
   { to: '/', icon: Globe, label: 'Site', adminOnly: true },
 ]

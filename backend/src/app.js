@@ -171,6 +171,17 @@ async function canEditMaterial(user, material) {
   )
 }
 
+/**
+ * O input datetime-local envia "2026-08-21T14:30"; o MySQL espera
+ * "2026-08-21 14:30:00". Vazio vira NULL, que e o que fecha as inscricoes.
+ */
+function normalizeDateTime(valor) {
+  const texto = String(valor ?? '').trim()
+  if (!texto) return null
+  const match = texto.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(:\d{2})?/)
+  return match ? `${match[1]} ${match[2]}${match[3] || ':00'}` : null
+}
+
 async function coursePayload(body) {
   const payload = {
     name: String(body.name || '').trim(),
@@ -185,7 +196,15 @@ async function coursePayload(body) {
     revisorIds: Array.isArray(body.revisorIds) ? body.revisorIds.map(Number).filter(Boolean) : [],
     startDate: body.startDate || null,
     deadline: body.deadline || null,
+    // Janela de inscricao dos cursistas (datetime-local -> DATETIME do MySQL).
+    enrollmentOpensAt: normalizeDateTime(body.enrollmentOpensAt),
+    enrollmentClosesAt: normalizeDateTime(body.enrollmentClosesAt),
     image: body.image || null,
+  }
+
+  if (payload.enrollmentOpensAt && payload.enrollmentClosesAt
+      && payload.enrollmentClosesAt <= payload.enrollmentOpensAt) {
+    return { error: 'O encerramento das inscricoes deve ser depois da abertura.' }
   }
 
   const missing = []
