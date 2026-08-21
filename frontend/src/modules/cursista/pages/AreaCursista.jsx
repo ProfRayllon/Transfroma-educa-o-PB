@@ -1,39 +1,21 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  AlertTriangle, BookOpen, CalendarCheck, CheckCircle, GraduationCap,
-  Fingerprint, KeyRound, LogOut, Mail, Phone, Save, School, MapPin, Briefcase,
+  AlertTriangle, BookOpen, CalendarCheck, CheckCircle, KeyRound,
+  LogOut, MapPin, UserCog,
 } from 'lucide-react'
 import { useCursista } from '../CursistaContext'
-import cursistaApi, { getCursistaErrorMessage, formatarCpf } from '../api'
-
-function Campo({ icon: Icon, label, valor }) {
-  return (
-    <div className="flex items-start gap-2.5">
-      <Icon size={15} className="text-gray-400 mt-0.5 flex-shrink-0" />
-      <div className="min-w-0">
-        <div className="text-[11px] uppercase tracking-wide text-gray-400">{label}</div>
-        <div className="text-sm text-gray-800 break-words">{valor || '—'}</div>
-      </div>
-    </div>
-  )
-}
+import cursistaApi, { getCursistaErrorMessage } from '../api'
 
 export default function AreaCursista() {
-  const { cursista, atualizarContato, encerrar } = useCursista()
+  const { cursista, encerrar } = useCursista()
   const navigate = useNavigate()
 
   const [cursos, setCursos] = useState([])
   const [inscricoes, setInscricoes] = useState({ atuais: [], concluidos: [] })
   const [carregando, setCarregando] = useState(true)
   const [aviso, setAviso] = useState(null)
-  const [salvando, setSalvando] = useState(false)
   const [processando, setProcessando] = useState(null)
-  const [contato, setContato] = useState({ email: '', phone: '' })
-
-  useEffect(() => {
-    if (cursista) setContato({ email: cursista.email || '', phone: cursista.phone || '' })
-  }, [cursista])
 
   const carregar = useCallback(async () => {
     try {
@@ -44,7 +26,10 @@ export default function AreaCursista() {
       setCursos(abertos.data)
       setInscricoes(minhas.data)
     } catch (error) {
-      setAviso({ tipo: 'erro', texto: getCursistaErrorMessage(error, 'Erro ao carregar seus cursos.') })
+      // 428 (cadastro pendente) e tratado pelo guard de rota, nao vira aviso aqui.
+      if (error.response?.status !== 428) {
+        setAviso({ tipo: 'erro', texto: getCursistaErrorMessage(error, 'Erro ao carregar seus cursos.') })
+      }
     } finally {
       setCarregando(false)
     }
@@ -83,19 +68,6 @@ export default function AreaCursista() {
     }
   }
 
-  const salvarContato = async (event) => {
-    event.preventDefault()
-    setSalvando(true)
-    try {
-      await atualizarContato(contato)
-      mostrar('ok', 'Dados atualizados.')
-    } catch (error) {
-      mostrar('erro', error.message)
-    } finally {
-      setSalvando(false)
-    }
-  }
-
   const sair = () => {
     encerrar()
     navigate('/area-do-cursista/entrar', { replace: true })
@@ -103,15 +75,21 @@ export default function AreaCursista() {
 
   if (!cursista) return null
 
+  const primeiroNome = String(cursista.name || '').split(' ')[0]
+
   return (
     <div className="min-h-screen bg-[#f4f6fa]">
       <header className="bg-white border-b border-gray-100">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between gap-3 flex-wrap">
-          <div>
-            <h1 className="text-lg font-black text-[#1c1033]">Área do Cursista</h1>
-            <p className="text-xs text-gray-500">Transforma Educação PB</p>
+          <div className="min-w-0">
+            <h1 className="text-lg font-black text-[#1c1033] truncate">Olá, {primeiroNome}</h1>
+            <p className="text-xs text-gray-500">Transforma Educação PB — Área do Cursista</p>
           </div>
           <div className="flex items-center gap-2">
+            <Link to="/area-do-cursista/cadastro" className="btn-secondary text-xs py-2">
+              <UserCog size={13} />
+              Meus dados
+            </Link>
             <Link to="/area-do-cursista/senha" className="btn-secondary text-xs py-2">
               <KeyRound size={13} />
               Alterar senha
@@ -136,60 +114,6 @@ export default function AreaCursista() {
           </div>
         )}
 
-        {/* Dados do cursista */}
-        <section className="card">
-          <h2 className="text-sm font-semibold text-gray-800 mb-4">Meus dados</h2>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
-            <Campo icon={GraduationCap} label="Nome completo" valor={cursista.name} />
-            <Campo icon={Fingerprint} label="CPF" valor={formatarCpf(cursista.cpf)} />
-            <Campo icon={Briefcase} label="Cargo" valor={cursista.position} />
-            <Campo icon={School} label="Escola" valor={cursista.school} />
-            <Campo icon={MapPin} label="Município" valor={cursista.municipality} />
-            <Campo icon={MapPin} label="Regional" valor={cursista.regional} />
-          </div>
-
-          <form onSubmit={salvarContato} className="border-t border-gray-100 pt-4">
-            <p className="text-xs text-gray-500 mb-3">
-              Você pode atualizar seus dados de contato. Nome, CPF e lotação vêm da base
-              oficial da rede e alimentam o certificado — para corrigi-los, procure a coordenação.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">E-mail</label>
-                <div className="relative">
-                  <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="email"
-                    value={contato.email}
-                    onChange={(event) => setContato((c) => ({ ...c, email: event.target.value }))}
-                    className="input-field pl-9"
-                    placeholder="seu.email@exemplo.com"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Telefone</label>
-                <div className="relative">
-                  <Phone size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    value={contato.phone}
-                    onChange={(event) => setContato((c) => ({ ...c, phone: event.target.value }))}
-                    className="input-field pl-9"
-                    placeholder="83999990000"
-                    inputMode="numeric"
-                  />
-                </div>
-              </div>
-            </div>
-            <button type="submit" disabled={salvando} className="btn-primary mt-3 text-sm disabled:opacity-50">
-              <Save size={14} />
-              {salvando ? 'Salvando...' : 'Salvar contato'}
-            </button>
-          </form>
-        </section>
-
-        {/* Cursos abertos */}
         <section className="card">
           <h2 className="text-sm font-semibold text-gray-800 mb-1">Cursos com inscrição aberta</h2>
           <p className="text-xs text-gray-500 mb-4">Você pode se inscrever em quantos cursos quiser.</p>
@@ -200,6 +124,7 @@ export default function AreaCursista() {
             <div className="text-center py-8">
               <CalendarCheck size={28} className="mx-auto text-gray-300 mb-2" />
               <p className="text-sm text-gray-500">Nenhum curso com inscrição aberta no momento.</p>
+              <p className="text-xs text-gray-400 mt-1">Assim que as inscrições abrirem, os cursos aparecem aqui.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -238,7 +163,6 @@ export default function AreaCursista() {
           )}
         </section>
 
-        {/* Minhas inscricoes e historico */}
         <section className="card">
           <h2 className="text-sm font-semibold text-gray-800 mb-4">Minhas inscrições</h2>
 
@@ -277,6 +201,25 @@ export default function AreaCursista() {
             </div>
           )}
         </section>
+
+        {cursista.vinculos?.length > 0 && (
+          <section className="card">
+            <h2 className="text-sm font-semibold text-gray-800 mb-3">
+              {cursista.vinculos.length > 1 ? 'Suas escolas' : 'Sua escola'}
+            </h2>
+            <ul className="space-y-2">
+              {cursista.vinculos.map((vinculo) => (
+                <li key={vinculo.ordem} className="flex items-start gap-2.5 text-sm">
+                  <MapPin size={14} className="text-gray-400 mt-0.5 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-gray-800">{vinculo.escola}</div>
+                    <div className="text-[11px] text-gray-500">{vinculo.gre}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </main>
     </div>
   )

@@ -10,6 +10,7 @@ import axios from 'axios'
 export const CURSISTA_TOKEN_KEY = 'transforma_cursista_token'
 export const CURSISTA_UNAUTHORIZED_EVENT = 'transforma:cursista-unauthorized'
 export const CURSISTA_SENHA_PENDENTE_EVENT = 'transforma:cursista-senha-pendente'
+export const CURSISTA_CADASTRO_PENDENTE_EVENT = 'transforma:cursista-cadastro-pendente'
 
 const cursistaApi = axios.create({
   baseURL: `${import.meta.env.VITE_API_BASE_URL || '/api'}/cursistas`,
@@ -31,10 +32,15 @@ cursistaApi.interceptors.response.use(
       window.dispatchEvent(new Event(CURSISTA_UNAUTHORIZED_EVENT))
     }
 
-    // 428: autenticado, mas a senha inicial ainda nao foi trocada. O backend
-    // bloqueia todas as rotas nesse estado; aqui levamos o cursista para a troca.
+    // 428: autenticado, mas falta concluir uma etapa obrigatoria. O backend
+    // distingue qual delas; aqui so encaminhamos para a tela correspondente.
     if (status === 428) {
-      window.dispatchEvent(new Event(CURSISTA_SENHA_PENDENTE_EVENT))
+      const dados = error.response?.data || {}
+      if (dados.precisaConfirmarCadastro) {
+        window.dispatchEvent(new Event(CURSISTA_CADASTRO_PENDENTE_EVENT))
+      } else {
+        window.dispatchEvent(new Event(CURSISTA_SENHA_PENDENTE_EVENT))
+      }
     }
 
     return Promise.reject(error)

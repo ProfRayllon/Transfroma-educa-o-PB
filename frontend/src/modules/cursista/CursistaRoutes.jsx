@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { CursistaProvider, useCursista } from './CursistaContext'
 import LoginCursista from './pages/LoginCursista'
 import DefinirSenha from './pages/DefinirSenha'
+import CompletarCadastro from './pages/CompletarCadastro'
 import AreaCursista from './pages/AreaCursista'
 
 function Carregando() {
@@ -15,12 +16,13 @@ function Carregando() {
 /**
  * Protege a area do cursista.
  *
- * Tres estados: sem sessao (vai para o login), sessao com senha ainda nao trocada
- * (so a tela de senha) e sessao completa. O backend aplica as mesmas regras -- aqui
- * e so a navegacao, nunca a autorizacao.
+ * O acesso tem quatro estados, nesta ordem: sem sessao -> senha pendente ->
+ * cadastro pendente -> liberado. Cada tela declara ate onde aceita ser aberta.
+ * O backend impoe as mesmas regras (428) -- aqui e so navegacao, nunca
+ * autorizacao.
  */
-function ExigirCursista({ children, permitirSenhaPendente = false }) {
-  const { cursista, carregando, senhaPendente } = useCursista()
+function ExigirCursista({ children, aceita = 'liberado' }) {
+  const { cursista, carregando, senhaPendente, cadastroPendente } = useCursista()
   const location = useLocation()
 
   if (carregando) return <Carregando />
@@ -29,17 +31,22 @@ function ExigirCursista({ children, permitirSenhaPendente = false }) {
     return <Navigate to="/area-do-cursista/entrar" replace state={{ de: location.pathname }} />
   }
 
-  if (senhaPendente && !permitirSenhaPendente) {
+  if (senhaPendente && aceita !== 'senha') {
     return <Navigate to="/area-do-cursista/senha" replace />
+  }
+
+  if (cadastroPendente && aceita === 'liberado') {
+    return <Navigate to="/area-do-cursista/cadastro" replace />
   }
 
   return children
 }
 
 function RedirecionarSeLogado({ children }) {
-  const { cursista, carregando, senhaPendente } = useCursista()
+  const { cursista, carregando, senhaPendente, cadastroPendente } = useCursista()
   if (carregando) return <Carregando />
   if (senhaPendente) return <Navigate to="/area-do-cursista/senha" replace />
+  if (cadastroPendente) return <Navigate to="/area-do-cursista/cadastro" replace />
   if (cursista) return <Navigate to="/area-do-cursista" replace />
   return children
 }
@@ -48,18 +55,10 @@ export default function CursistaRoutes() {
   return (
     <CursistaProvider>
       <Routes>
-        <Route
-          path="entrar"
-          element={<RedirecionarSeLogado><LoginCursista /></RedirecionarSeLogado>}
-        />
-        <Route
-          path="senha"
-          element={<ExigirCursista permitirSenhaPendente><DefinirSenha /></ExigirCursista>}
-        />
-        <Route
-          index
-          element={<ExigirCursista><AreaCursista /></ExigirCursista>}
-        />
+        <Route path="entrar" element={<RedirecionarSeLogado><LoginCursista /></RedirecionarSeLogado>} />
+        <Route path="senha" element={<ExigirCursista aceita="senha"><DefinirSenha /></ExigirCursista>} />
+        <Route path="cadastro" element={<ExigirCursista aceita="cadastro"><CompletarCadastro /></ExigirCursista>} />
+        <Route index element={<ExigirCursista><AreaCursista /></ExigirCursista>} />
         <Route path="*" element={<Navigate to="/area-do-cursista" replace />} />
       </Routes>
     </CursistaProvider>
