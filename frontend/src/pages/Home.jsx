@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Clock, Download, LayoutGrid } from 'lucide-react'
+import { ArrowRight, ChevronLeft, ChevronRight, Clock, Download, LayoutGrid } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
 import MapaParaiba from '../components/public/MapaParaiba'
 import CapaCurso from '../components/public/CapaCurso'
-import { duracaoCurso, nomeTrilha } from '../lib/curso'
+import { duracaoCurso, nomeTrilha, ordenarPorInscricao } from '../lib/curso'
 import publicApi from '../lib/publicApi'
 import { useCursista } from '../modules/cursista/CursistaContext'
 import cursistaApi from '../modules/cursista/api'
@@ -311,13 +311,54 @@ export default function Home() {
     return [...vistas.entries()]
   }, [cursos])
 
+  // Filtra pela trilha e joga os cursos com inscricao aberta para a frente.
   const visibleCourses = useMemo(
-    () => (trilhaAtiva ? cursos.filter((c) => c.trail === trilhaAtiva) : cursos),
+    () => ordenarPorInscricao(trilhaAtiva ? cursos.filter((c) => c.trail === trilhaAtiva) : cursos),
     [cursos, trilhaAtiva],
   )
 
+  /**
+   * Ate onde da para rolar, para as setas nao mentirem.
+   *
+   * Uma seta que aponta para um lado onde nao ha mais nada e ruido: a pessoa
+   * clica e a tela nao se mexe. Cada uma so aparece quando existe conteudo
+   * naquela direcao.
+   */
+  const [rolagem, setRolagem] = useState({ temAntes: false, temDepois: false })
+
+  const medirRolagem = useCallback(() => {
+    const el = carouselRef.current
+    if (!el) return
+    // Tolerancia de 4px: a largura de rolagem raramente fecha exata por causa
+    // de arredondamento de subpixel, e sem folga a seta da direita ficaria
+    // acesa para sempre no fim da lista.
+    const folga = 4
+    setRolagem({
+      temAntes: el.scrollLeft > folga,
+      temDepois: el.scrollLeft + el.clientWidth < el.scrollWidth - folga,
+    })
+  }, [])
+
+  useEffect(() => {
+    const el = carouselRef.current
+    if (!el) return
+
+    medirRolagem()
+    el.addEventListener('scroll', medirRolagem, { passive: true })
+
+    // A largura muda ao redimensionar a janela e ao trocar o filtro de trilha;
+    // sem observar, a seta continuaria como estava na medicao anterior.
+    const observador = new ResizeObserver(medirRolagem)
+    observador.observe(el)
+
+    return () => {
+      el.removeEventListener('scroll', medirRolagem)
+      observador.disconnect()
+    }
+  }, [medirRolagem, visibleCourses])
+
   const scrollCarousel = (dir) => {
-    carouselRef.current?.scrollBy({ left: dir * 380, behavior: 'smooth' })
+    carouselRef.current?.scrollBy({ left: dir * 360, behavior: 'smooth' })
   }
 
   return (
@@ -373,11 +414,17 @@ export default function Home() {
             </div>
           )}
 
-          {/* Carrossel com seta sobreposta */}
+          {/*
+            Carrossel com as setas nas laterais, fora dos cards.
+            A area de rolagem recebe margem lateral no desktop (`lg:mx-14`) e as
+            setas ocupam essa faixa -- antes elas ficavam sobre o card, tapando
+            justamente a arte do curso. No celular nao ha faixa a reservar: a
+            rolagem e por toque e as setas somem.
+          */}
           <div className="relative">
             <div
               ref={carouselRef}
-              className="flex gap-5 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              className="flex gap-5 overflow-x-auto pb-2 lg:mx-14 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               style={{ scrollSnapType: 'x mandatory' }}
             >
               {visibleCourses.length === 0 && (
@@ -431,13 +478,27 @@ export default function Home() {
               })}
             </div>
 
-            {/* Seta direita sobreposta (estilo da referência) */}
-            <button
-              onClick={() => scrollCarousel(1)}
-              className="absolute -right-4 top-1/2 z-10 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white shadow-[0_4px_16px_rgba(0,0,0,.15)] text-[#6f35b5] transition hover:bg-[#6f35b5] hover:text-white"
-            >
-              <ArrowRight size={18} />
-            </button>
+            {rolagem.temAntes && (
+              <button
+                type="button"
+                onClick={() => scrollCarousel(-1)}
+                aria-label="Ver os cursos anteriores"
+                className="absolute left-0 top-1/2 z-10 hidden h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-[#ede9f6] bg-white text-[#6f35b5] shadow-[0_4px_16px_rgba(0,0,0,.15)] transition hover:bg-[#6f35b5] hover:text-white lg:grid"
+              >
+                <ChevronLeft size={20} />
+              </button>
+            )}
+
+            {rolagem.temDepois && (
+              <button
+                type="button"
+                onClick={() => scrollCarousel(1)}
+                aria-label="Ver os próximos cursos"
+                className="absolute right-0 top-1/2 z-10 hidden h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-[#ede9f6] bg-white text-[#6f35b5] shadow-[0_4px_16px_rgba(0,0,0,.15)] transition hover:bg-[#6f35b5] hover:text-white lg:grid"
+              >
+                <ChevronRight size={20} />
+              </button>
+            )}
           </div>
         </section>
 
