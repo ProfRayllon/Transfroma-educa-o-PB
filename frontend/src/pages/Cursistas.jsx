@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle, CheckCircle, Clock, Download, FileSpreadsheet, Filter,
-  KeyRound, Lock, MailX, Pencil, Search, ShieldAlert, Trash2, Upload,
+  KeyRound, Loader2, Lock, MailX, Pencil, Search, ShieldAlert, Trash2, Upload,
   UserCheck, UserPlus, Users,
 } from 'lucide-react'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
@@ -192,6 +192,16 @@ export default function Cursistas() {
   const [aviso, setAviso] = useState(null)
 
   const [importando, setImportando] = useState(false)
+  /**
+   * Andamento da importacao.
+   *
+   * `fase: 'enviando'` traz o percentual real do upload, que o axios reporta.
+   * `fase: 'processando'` nao tem percentual -- o servidor grava tudo numa
+   * transacao e nao ha como saber o meio do caminho -- entao mostra o tempo
+   * decorrido. Com treze mil linhas a espera passa de um minuto, e um botao
+   * cinza por um minuto nao diz se esta trabalhando, travou ou morreu.
+   */
+  const [progresso, setProgresso] = useState(null)
   const [resultadoImport, setResultadoImport] = useState(null)
   const [exportando, setExportando] = useState(false)
   const [confirmarReset, setConfirmarReset] = useState(null)
@@ -247,19 +257,52 @@ export default function Cursistas() {
   const importar = async (event) => {
     const arquivo = event.target.files?.[0]
     if (!arquivo) return
+
     setImportando(true)
     setResultadoImport(null)
+    setProgresso({ fase: 'enviando', percentual: 0, segundos: 0 })
+
+    const inicio = Date.now()
+    const relogio = setInterval(() => {
+      setProgresso((atual) => (atual ? { ...atual, segundos: Math.floor((Date.now() - inicio) / 1000) } : atual))
+    }, 1000)
+
     try {
       // Envia os bytes do .xlsx direto; base64 inflaria o arquivo em 33% a toa.
       const { data } = await api.post('/cursistas/admin/cursistas/importar', arquivo, {
         headers: { 'Content-Type': TIPO_XLSX },
+        onUploadProgress: (evento) => {
+          const percentual = evento.total ? Math.round((evento.loaded * 100) / evento.total) : 0
+          setProgresso((atual) => ({
+            ...atual,
+            // Terminado o envio, o que resta e o servidor gravando.
+            fase: percentual >= 100 ? 'processando' : 'enviando',
+            percentual,
+          }))
+        },
       })
       setResultadoImport(data)
       await Promise.all([carregarEstatisticas(), carregarLista()])
     } catch (error) {
-      mostrar('erro', getApiErrorMessage(error, 'Erro ao importar a base.'))
+      /**
+       * Conexao perdida nao quer dizer importacao perdida.
+       *
+       * O nginx corta a conexao que passa de 60 s, mas o servidor continua e a
+       * transacao commita do mesmo jeito. Anunciar "erro ao importar" faria a
+       * coordenacao repetir a carga achando que nada entrou -- ou pior, achar
+       * que a base ficou pela metade. Sem resposta do servidor, a unica coisa
+       * honesta a dizer e que nao deu para saber, e onde conferir.
+       */
+      if (!error.response) {
+        await Promise.all([carregarEstatisticas(), carregarLista()])
+        mostrar('erro', 'A conexão caiu antes da resposta, mas a importação pode ter concluído no servidor. Confira o total em "Cursistas na base" — se estiver certo, não precisa repetir. Repetir também é seguro: a importação é por CPF e não duplica ninguém.')
+      } else {
+        mostrar('erro', getApiErrorMessage(error, 'Erro ao importar a base.'))
+      }
     } finally {
+      clearInterval(relogio)
       setImportando(false)
+      setProgresso(null)
       if (arquivoRef.current) arquivoRef.current.value = ''
     }
   }
@@ -390,6 +433,45 @@ export default function Cursistas() {
         }`}>
           {aviso.tipo === 'erro' ? <AlertTriangle size={16} className="mt-0.5" /> : <CheckCircle size={16} className="mt-0.5" />}
           <span>{aviso.texto}</span>
+        </div>
+      )}
+
+      {progresso && (
+        <div className="card border-brand-200 bg-brand-50/40">
+          <div className="flex items-center gap-3 mb-3">
+            <Loader2 size={17} className="text-brand-700 animate-spin flex-shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-gray-800">
+                {progresso.fase === 'enviando' ? 'Enviando a planilha...' : 'Gravando os cadastros...'}
+              </div>
+              <div className="text-xs text-gray-500 mt-0.5">
+                {progresso.fase === 'enviando'
+                  ? `${progresso.percentual}% enviado`
+                  : 'O servidor está gravando tudo de uma vez. Não feche nem recarregue esta página.'}
+              </div>
+            </div>
+            <div className="text-right flex-shrink-0">
+              <div className="text-lg font-bold leading-none text-brand-800 tabular-nums">{progresso.segundos}s</div>
+              <div className="text-[10px] uppercase tracking-wide text-gray-400">decorridos</div>
+            </div>
+          </div>
+
+          <div className="h-1.5 rounded-full bg-brand-100 overflow-hidden">
+            {progresso.fase === 'enviando' ? (
+              <div className="h-full bg-brand-700 transition-all duration-300" style={{ width: `${progresso.percentual}%` }} />
+            ) : (
+              // Sem percentual: a gravacao e uma transacao unica, e inventar uma
+              // barra que avanca sozinha mentiria sobre o andamento.
+              <div className="h-full w-1/3 bg-brand-700 animate-pulse" />
+            )}
+          </div>
+
+          {progresso.fase === 'processando' && progresso.segundos > 25 && (
+            <p className="text-xs text-gray-500 mt-3 leading-relaxed">
+              Com 13 mil linhas isso leva cerca de um minuto. Se a conexão cair antes da
+              resposta, a gravação continua no servidor — basta conferir o total depois.
+            </p>
+          )}
         </div>
       )}
 
