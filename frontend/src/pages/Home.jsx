@@ -415,16 +415,21 @@ export default function Home() {
           )}
 
           {/*
-            Carrossel com as setas nas laterais, fora dos cards.
-            A area de rolagem recebe margem lateral no desktop (`lg:mx-14`) e as
-            setas ocupam essa faixa -- antes elas ficavam sobre o card, tapando
-            justamente a arte do curso. No celular nao ha faixa a reservar: a
-            rolagem e por toque e as setas somem.
+            Carrossel com as setas na margem da pagina, fora do container.
+
+            Elas ja estiveram sobre os cards (tapavam a arte) e depois numa faixa
+            reservada dentro da area de rolagem -- que resolvia a sobreposicao
+            mas custava 112px de largura, e ai o terceiro card cortava: tres
+            cards pedem 1060px e sobravam 1024px.
+
+            O espaco existe FORA: o container tem 1180px no maximo e a tela do
+            desktop e bem mais larga. As setas ocupam essa sobra, e o carrossel
+            fica com a largura inteira -- os tres cards cabem sem corte.
           */}
           <div className="relative">
             <div
               ref={carouselRef}
-              className="flex gap-5 overflow-x-auto pb-2 lg:mx-14 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              className="flex gap-5 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               style={{ scrollSnapType: 'x mandatory' }}
             >
               {visibleCourses.length === 0 && (
@@ -478,12 +483,18 @@ export default function Home() {
               })}
             </div>
 
+            {/*
+              `xl` (1280px) e nao `lg` (1024px): abaixo disso a sobra ao lado do
+              container de 1180px nao cabe uma seta de 44px, e ela sairia da
+              tela. Nessa faixa a rolagem fica por toque e trackpad, que e o
+              gesto natural de tablet.
+            */}
             {rolagem.temAntes && (
               <button
                 type="button"
                 onClick={() => scrollCarousel(-1)}
                 aria-label="Ver os cursos anteriores"
-                className="absolute left-0 top-1/2 z-10 hidden h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-[#ede9f6] bg-white text-[#6f35b5] shadow-[0_4px_16px_rgba(0,0,0,.15)] transition hover:bg-[#6f35b5] hover:text-white lg:grid"
+                className="absolute -left-16 top-1/2 z-10 hidden h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-[#ede9f6] bg-white text-[#6f35b5] shadow-[0_4px_16px_rgba(0,0,0,.15)] transition hover:bg-[#6f35b5] hover:text-white xl:grid"
               >
                 <ChevronLeft size={20} />
               </button>
@@ -494,7 +505,7 @@ export default function Home() {
                 type="button"
                 onClick={() => scrollCarousel(1)}
                 aria-label="Ver os próximos cursos"
-                className="absolute right-0 top-1/2 z-10 hidden h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-[#ede9f6] bg-white text-[#6f35b5] shadow-[0_4px_16px_rgba(0,0,0,.15)] transition hover:bg-[#6f35b5] hover:text-white lg:grid"
+                className="absolute -right-16 top-1/2 z-10 hidden h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-[#ede9f6] bg-white text-[#6f35b5] shadow-[0_4px_16px_rgba(0,0,0,.15)] transition hover:bg-[#6f35b5] hover:text-white xl:grid"
               >
                 <ChevronRight size={20} />
               </button>
