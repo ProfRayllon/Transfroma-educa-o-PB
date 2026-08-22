@@ -111,7 +111,12 @@ async function listarMinhasInscricoes(cursistaId) {
             c.name AS course_name, c.primary_trail, c.secondary_trail, c.total_sessions,
             c.workload_hours, c.enrollment_opens_at, c.enrollment_closes_at,
             (c.image LIKE 'data:image/%') AS tem_imagem,
-            UNIX_TIMESTAMP(c.updated_at) AS versao_capa
+            UNIX_TIMESTAMP(c.updated_at) AS versao_capa,
+            -- Se o cancelamento ainda e permitido. Decidido aqui, com NOW() do
+            -- banco, pela mesma razao da situacao do catalogo: e esta a regra
+            -- que cancelarInscricao aplica, e calcular de outro jeito no front
+            -- faria a tela oferecer um botao que o servidor recusaria.
+            (NOW() BETWEEN c.enrollment_opens_at AND c.enrollment_closes_at) AS pode_cancelar
      FROM inscricoes i
      JOIN courses c ON c.id = i.course_id
      WHERE i.cursista_id = ?
@@ -130,6 +135,7 @@ async function listarMinhasInscricoes(cursistaId) {
     hasImage: Boolean(Number(row.tem_imagem)),
     imageVersion: Number(row.versao_capa || 0),
     enrollmentClosesAt: row.enrollment_closes_at,
+    podeCancelar: Boolean(Number(row.pode_cancelar)),
     edition: row.edition,
     status: row.status,
     enrolledAt: row.enrolled_at,

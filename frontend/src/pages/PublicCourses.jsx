@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, ArrowRight, BookOpen, CheckCircle, Clock, GraduationCap, LogIn } from 'lucide-react'
+import { AlertTriangle, ArrowRight, BookOpen, CheckCircle, Clock, GraduationCap, LogIn, X } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
 import Modal from '../components/ui/Modal'
@@ -80,6 +80,19 @@ export default function PublicCourses() {
     }
   }
 
+  const cancelar = async (curso) => {
+    setProcessando(curso.id)
+    try {
+      await cursistaApi.delete(`/inscricoes/${curso.id}`)
+      await carregarInscricoes()
+      mostrar('ok', `Inscrição em "${curso.name}" cancelada.`)
+    } catch (error) {
+      mostrar('erro', getCursistaErrorMessage(error, 'Não foi possível cancelar a inscrição.'))
+    } finally {
+      setProcessando(null)
+    }
+  }
+
   const trilhas = useMemo(() => {
     const vistas = new Map()
     cursos.forEach((curso) => {
@@ -128,11 +141,24 @@ export default function PublicCourses() {
       )
     }
 
+    // Inscrito: o selo confirma e o botao ao lado desfaz. Enquanto a janela
+    // estiver aberta a pessoa pode mudar de ideia sem sair do catalogo.
     if (inscritoEm.has(curso.id)) {
       return (
-        <span className={`${classeBase} border border-green-200 bg-green-50 text-green-700`}>
-          <CheckCircle size={tamanho === 'card' ? 13 : 15} /> Inscrito
-        </span>
+        <>
+          <span className={`${classeBase} border border-green-200 bg-green-50 text-green-700`}>
+            <CheckCircle size={tamanho === 'card' ? 13 : 15} /> Inscrito
+          </span>
+          <button
+            type="button"
+            onClick={() => cancelar(curso)}
+            disabled={processando === curso.id}
+            className={`${classeBase} border border-[#e9d5ff] text-[#7c6a9c] hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:opacity-40`}
+          >
+            <X size={tamanho === 'card' ? 13 : 15} />
+            {processando === curso.id ? 'Cancelando...' : 'Cancelar'}
+          </button>
+        </>
       )
     }
 
