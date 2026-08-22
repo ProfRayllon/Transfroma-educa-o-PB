@@ -91,7 +91,7 @@ module.exports = function criarRotasPublicas() {
 
     const [rows] = await getPool().query(
       `SELECT c.id, c.name, c.primary_trail, c.secondary_trail, c.total_sessions,
-              c.enrollment_opens_at, c.enrollment_closes_at,
+              c.workload_hours, c.enrollment_opens_at, c.enrollment_closes_at,
               -- Mesmo criterio da rota de imagem: se o data URI nao for de
               -- imagem, a rota recusa e o front mostraria capa quebrada.
               (c.image LIKE 'data:image/%') AS tem_imagem,
@@ -110,6 +110,7 @@ module.exports = function criarRotasPublicas() {
       primaryTrail: row.primary_trail,
       trail: row.secondary_trail,
       totalSessions: row.total_sessions,
+      workloadHours: row.workload_hours ?? null,
       objective: row.objetivo || null,
       hasImage: Boolean(Number(row.tem_imagem)),
       /**

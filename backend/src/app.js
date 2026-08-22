@@ -188,6 +188,9 @@ async function coursePayload(body) {
     primaryTrail: String(body.primaryTrail || '').trim(),
     trail: String(body.trail || '').trim(),
     totalSessions: Number(body.totalSessions) || 0,
+    // Carga horaria do curso, em horas. Opcional: fica nula ate a equipe
+    // informar, e o site cai para o numero de encontros nesse caso.
+    workloadHours: Number(body.workloadHours) > 0 ? Math.round(Number(body.workloadHours)) : null,
     supervisorId: Number(body.supervisorId) || null,
     supervisorName: String(body.supervisorName || '').trim(),
     coordinatorId: Number(body.coordinatorId) || null,
@@ -214,10 +217,16 @@ async function coursePayload(body) {
   if (!payload.supervisorId) missing.push('supervisor')
   if (!payload.coordinatorId) missing.push('coordenador')
   if (payload.producerIds.length === 0) missing.push('professores/produtores')
-  if (payload.totalSessions <= 0) missing.push('carga horaria total')
+  // Este campo sempre foi o numero de encontros; o rotulo dizia "carga horaria"
+  // e confundia, agora que existe uma carga horaria de verdade ao lado.
+  if (payload.totalSessions <= 0) missing.push('total de encontros')
 
   if (missing.length > 0) {
     return { error: `Preencha os campos obrigatorios: ${missing.join(', ')}.` }
+  }
+
+  if (payload.workloadHours !== null && payload.workloadHours > 2000) {
+    return { error: 'A carga horaria deve ser menor que 2000 horas.' }
   }
 
   if (payload.image && Buffer.byteLength(payload.image, 'utf8') > 4 * 1024 * 1024) {

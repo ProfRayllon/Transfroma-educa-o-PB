@@ -4,7 +4,8 @@ import { ArrowRight, Clock, Download, LayoutGrid } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
 import MapaParaiba from '../components/public/MapaParaiba'
-import CapaCurso, { nomeTrilha } from '../components/public/CapaCurso'
+import CapaCurso from '../components/public/CapaCurso'
+import { duracaoCurso, nomeTrilha } from '../lib/curso'
 import publicApi from '../lib/publicApi'
 import { useCursista } from '../modules/cursista/CursistaContext'
 import cursistaApi from '../modules/cursista/api'
@@ -414,9 +415,9 @@ export default function Home() {
                         <span className="rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-black text-[#6f35b5]">
                           {nomeTrilha(course.trail)}
                         </span>
-                        {course.totalSessions > 0 && (
+                        {duracaoCurso(course) && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-[#f1f5f9] px-3 py-1 text-xs font-black text-[#566176]">
-                            <Clock size={11} /> {course.totalSessions} encontros
+                            <Clock size={11} /> {duracaoCurso(course).texto}
                           </span>
                         )}
                       </div>

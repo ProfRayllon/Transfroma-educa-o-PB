@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { useCursista } from '../CursistaContext'
 import cursistaApi, { getCursistaErrorMessage } from '../api'
+import { duracaoCurso } from '../../../lib/curso'
 import CursistaShell, { CartaoCursista as Cartao, TituloCartao as TituloSecao } from '../CursistaShell'
 
 export default function AreaCursista() {
@@ -135,9 +136,9 @@ export default function AreaCursista() {
                       <div className="text-[11px] font-bold uppercase tracking-wider text-[#9070c8]">{curso.primaryTrail}</div>
                       <h3 className="mt-1 text-[15px] font-black leading-snug text-[#1c1033]">{curso.name}</h3>
                       <p className="mt-1 text-[13px] text-[#566176]">{curso.trail}</p>
-                      {curso.totalSessions > 0 && (
+                      {duracaoCurso(curso) && (
                         <p className="mt-2 inline-flex items-center gap-1.5 text-[12px] text-[#7c6a9c]">
-                          <Clock size={12} /> {curso.totalSessions} encontros
+                          <Clock size={12} /> {duracaoCurso(curso).texto}
                         </p>
                       )}
                     </div>

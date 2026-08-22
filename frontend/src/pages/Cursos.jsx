@@ -466,7 +466,11 @@ function CourseModal({ course, open, onClose, onSave, participants = { superviso
 
     setForm((current) => ({
       ...current,
-      [name]: name === 'totalSessions' ? Number(value) : value,
+      // Campo numerico vazio vira string '': converter direto daria NaN, e o
+      // input passaria a nao aceitar digitacao. Vazio fica como null.
+      [name]: ['totalSessions', 'workloadHours'].includes(name)
+        ? (value === '' ? null : Number(value))
+        : value,
     }))
   }
 
@@ -519,6 +523,7 @@ function CourseModal({ course, open, onClose, onSave, participants = { superviso
       producerIds: (form.producerIds || []).map(Number).filter(Boolean),
       revisorIds: (form.revisorIds || []).map(Number).filter(Boolean),
       totalSessions: Number(form.totalSessions) || 0,
+      workloadHours: Number(form.workloadHours) > 0 ? Number(form.workloadHours) : null,
     })
   }
 
@@ -694,6 +699,44 @@ function CourseModal({ course, open, onClose, onSave, participants = { superviso
               )}
             </div>
             <p className="text-xs text-gray-400 mt-1">Opcional. Os revisores selecionados ficam disponiveis para atribuicao por conteudo.</p>
+          </div>
+
+          {/* Carga horaria e o que o site mostra ao cursista; encontros e o
+              controle interno da producao. Ficam juntos para nao serem
+              confundidos um com o outro. */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">
+              Carga horária <span className="font-normal text-gray-400">— aparece no site</span>
+            </label>
+            <div className="relative">
+              <input
+                name="workloadHours"
+                type="number"
+                min="1"
+                max="2000"
+                value={form.workloadHours ?? ''}
+                onChange={handleChange}
+                className="input-field pr-9"
+                placeholder="Ex: 20"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">horas</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">
+              Total de encontros <span className="text-red-500">*</span>
+            </label>
+            <input
+              name="totalSessions"
+              type="number"
+              min="1"
+              value={form.totalSessions ?? ''}
+              onChange={handleChange}
+              required
+              className="input-field"
+              placeholder="Ex: 12"
+            />
           </div>
 
           <div>

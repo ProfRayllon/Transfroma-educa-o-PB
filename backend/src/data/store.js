@@ -96,6 +96,7 @@ function mapCourseRow(row) {
     primaryTrail: row.primary_trail,
     trail: row.secondary_trail,
     totalSessions: row.total_sessions,
+    workloadHours: row.workload_hours ?? null,
     supervisorId: row.supervisor_id,
     supervisorName: row.supervisor_name,
     supervisorAvatar: row.supervisor_avatar || null,
@@ -382,7 +383,7 @@ async function ensureMysqlSchema() {
      FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE()
        AND TABLE_NAME = 'courses'
-       AND COLUMN_NAME IN ('supervisor_id', 'coordinator_id', 'status_ava')`
+       AND COLUMN_NAME IN ('supervisor_id', 'coordinator_id', 'status_ava', 'workload_hours')`
   )
   const existingCourseColumns = new Set(courseColumns.map((column) => column.COLUMN_NAME))
 
@@ -396,6 +397,12 @@ async function ensureMysqlSchema() {
 
   if (!existingCourseColumns.has('status_ava')) {
     await pool.execute("ALTER TABLE courses ADD COLUMN status_ava ENUM('nao_publicado','publicado') NOT NULL DEFAULT 'nao_publicado'")
+  }
+
+  // Carga horaria do curso. Fica NULL enquanto a equipe nao informar -- o site
+  // cai para o numero de encontros nesse caso, em vez de anunciar "0h".
+  if (!existingCourseColumns.has('workload_hours')) {
+    await pool.execute('ALTER TABLE courses ADD COLUMN workload_hours INT DEFAULT NULL AFTER total_sessions')
   }
 
   await pool.execute(`
@@ -1199,13 +1206,14 @@ async function createCourse(payload) {
 
   const [result] = await pool.execute(
     `INSERT INTO courses
-     (name, primary_trail, secondary_trail, total_sessions, supervisor_id, supervisor_name, coordinator_id, coordinator_name, start_date, deadline, enrollment_opens_at, enrollment_closes_at, image)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (name, primary_trail, secondary_trail, total_sessions, workload_hours, supervisor_id, supervisor_name, coordinator_id, coordinator_name, start_date, deadline, enrollment_opens_at, enrollment_closes_at, image)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       payload.name,
       payload.primaryTrail,
       payload.trail,
       Number(payload.totalSessions) || 0,
+      payload.workloadHours ?? null,
       payload.supervisorId || null,
       payload.supervisorName,
       payload.coordinatorId || null,
@@ -1252,7 +1260,7 @@ async function updateCourse(id, payload) {
 
   await pool.execute(
     `UPDATE courses
-     SET name = ?, primary_trail = ?, secondary_trail = ?, total_sessions = ?, supervisor_id = ?, supervisor_name = ?, coordinator_id = ?, coordinator_name = ?, start_date = ?, deadline = ?,
+     SET name = ?, primary_trail = ?, secondary_trail = ?, total_sessions = ?, workload_hours = ?, supervisor_id = ?, supervisor_name = ?, coordinator_id = ?, coordinator_name = ?, start_date = ?, deadline = ?,
          enrollment_opens_at = ?, enrollment_closes_at = ?, image = ?
      WHERE id = ?`,
     [
@@ -1260,6 +1268,7 @@ async function updateCourse(id, payload) {
       payload.primaryTrail,
       payload.trail,
       Number(payload.totalSessions) || 0,
+      payload.workloadHours ?? null,
       payload.supervisorId || null,
       payload.supervisorName,
       payload.coordinatorId || null,

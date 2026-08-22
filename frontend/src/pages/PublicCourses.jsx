@@ -4,7 +4,8 @@ import { AlertTriangle, ArrowRight, BookOpen, CheckCircle, Clock, GraduationCap,
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
 import Modal from '../components/ui/Modal'
-import CapaCurso, { nomeTrilha } from '../components/public/CapaCurso'
+import CapaCurso from '../components/public/CapaCurso'
+import { duracaoCurso, nomeTrilha } from '../lib/curso'
 import publicApi from '../lib/publicApi'
 import { useCursista } from '../modules/cursista/CursistaContext'
 import cursistaApi, { getCursistaErrorMessage } from '../modules/cursista/api'
@@ -240,9 +241,9 @@ export default function PublicCourses() {
                         <span className="rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-black text-[#6f35b5]">
                           {nomeTrilha(curso.trail)}
                         </span>
-                        {curso.totalSessions > 0 && (
+                        {duracaoCurso(curso) && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-[#f1f5f9] px-3 py-1 text-xs font-black text-[#566176]">
-                            <Clock size={11} /> {curso.totalSessions} encontros
+                            <Clock size={11} /> {duracaoCurso(curso).texto}
                           </span>
                         )}
                       </div>
@@ -305,9 +306,17 @@ export default function PublicCourses() {
                 <span className="rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-black text-[#6f35b5]">
                   {nomeTrilha(selecionado.trail)}
                 </span>
+                {/* No detalhe cabem os dois: a carga horaria e o que interessa
+                    a quem se inscreve, e os encontros dizem como ela se
+                    distribui. Nos cards fica so a carga, por espaco. */}
+                {Number(selecionado.workloadHours) > 0 && (
+                  <span className="rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-black text-[#6f35b5]">
+                    {selecionado.workloadHours} horas
+                  </span>
+                )}
                 {selecionado.totalSessions > 0 && (
                   <span className="rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-black text-[#6f35b5]">
-                    {selecionado.totalSessions} encontros
+                    {selecionado.totalSessions} {selecionado.totalSessions === 1 ? 'encontro' : 'encontros'}
                   </span>
                 )}
                 <span className="rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-black text-[#6f35b5]">

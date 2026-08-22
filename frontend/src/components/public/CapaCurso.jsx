@@ -1,16 +1,5 @@
 import { useState } from 'react'
-
-const NOMES_TRILHA = {
-  'Educacao Socioemocional': 'Educação Socioemocional',
-  'Educacao, Ciencia e Tecnologia': 'Educação, Ciência e Tecnologia',
-  'Area de Ciencias Humanas': 'Ciências Humanas',
-  'Area de Matematica e Ciencias da Natureza': 'Matemática e Ciências da Natureza',
-  'Area de Linguagens': 'Linguagens',
-  'Gestao Pedagogica': 'Gestão Pedagógica',
-  'Inclusao, Diversidade e Equidade': 'Inclusão, Diversidade e Equidade',
-}
-
-export const nomeTrilha = (valor) => NOMES_TRILHA[valor] || valor || 'Trilha'
+import { nomeTrilha } from '../../lib/curso'
 
 // Acima desta diferenca de proporcao, preencher o quadro cortaria tanto da arte
 // que o resultado deixa de ser reconhecivel. 1.6 cobre o caso real: um banner
