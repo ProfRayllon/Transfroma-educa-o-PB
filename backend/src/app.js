@@ -36,7 +36,7 @@ const COURSE_TRAILS = {
   ],
 }
 
-const USER_ROLES = ['administrador', 'coordenador', 'supervisor', 'professor', 'tutor', 'tecnico', 'gestao', 'revisor', 'supervisor_tutoria', 'ti']
+const USER_ROLES = ['administrador', 'coordenador', 'supervisor', 'professor', 'tutor', 'tecnico', 'gestao', 'revisor', 'supervisor_tutoria', 'ti', 'gerencia']
 const COURSE_STATUS_AVA_VALUES = ['nao_publicado', 'publicado']
 const USER_STATUSES = ['ativo', 'inativo', 'pendente', 'desligado', 'substituido']
 
@@ -109,8 +109,28 @@ function canManageModule(user, course) {
     || isModuleProducer(user, course)
 }
 
+/**
+ * Perfis com poder total sobre o dominio de Cursos.
+ *
+ * 'gerencia' e um administrador restrito a Cursos: dentro desta tela faz tudo o
+ * que o administrador faz -- criar, editar e excluir qualquer curso, mexer na
+ * ementa e no status do AVA -- e fora dela nao enxerga nada. Por isso ele entra
+ * junto do administrador SO nas checagens deste dominio, e em nenhuma outra:
+ * usuarios, frequencia, producao e cursistas continuam fechados para ele.
+ *
+ * Esta funcao existe para essa distincao ficar em um lugar so. Espalhar
+ * `role === 'administrador' || role === 'gerencia'` pelo arquivo faria a proxima
+ * regra de curso nascer sem a gerencia, e o perfil viraria um administrador
+ * pela metade -- que enxerga o botao e leva 403 ao clicar.
+ */
+const PERFIS_COM_PODER_EM_CURSOS = ['administrador', 'gerencia']
+
+function mandaEmCursos(user) {
+  return PERFIS_COM_PODER_EM_CURSOS.includes(user?.role)
+}
+
 function canManageCourses(user) {
-  return user?.role === 'administrador' || user?.role === 'supervisor' || isCoordinator(user)
+  return mandaEmCursos(user) || user?.role === 'supervisor' || isCoordinator(user)
 }
 
 function isTI(user) {
@@ -120,7 +140,7 @@ function isTI(user) {
 // Status no AVA (do curso e de cada conteudo). O perfil vem do banco, e nao do token JWT,
 // para que uma troca de perfil passe a valer na hora, sem exigir novo login.
 function canSetStatusAva(user) {
-  return isTI(user) || user?.role === 'administrador'
+  return isTI(user) || mandaEmCursos(user)
 }
 
 function canManageProduction(user) {
@@ -769,7 +789,7 @@ app.put('/api/courses/:id', auth, async (req, res) => {
   if (!current) return res.status(404).json({ message: 'Curso nao encontrado.' })
 
   if (
-    actor.role !== 'administrador'
+    !mandaEmCursos(actor)
     && current.coordinatorId !== actor.id
     && current.coordinatorName !== actor.name
     && current.supervisorId !== actor.id
@@ -822,7 +842,7 @@ app.delete('/api/courses/:id', auth, async (req, res) => {
     const current = await store.getCourseById(req.params.id)
     if (!current) return res.status(404).json({ message: 'Curso nao encontrado.' })
     if (
-      actor.role !== 'administrador'
+      !mandaEmCursos(actor)
       && current.coordinatorId !== actor.id
       && current.coordinatorName !== actor.name
       && current.supervisorId !== actor.id
@@ -1390,7 +1410,7 @@ app.put('/api/ementas/:courseId', auth, async (req, res) => {
     const isSup = actor.role === 'supervisor' && (course.supervisorId === actor.id || course.supervisorName === actor.name)
     const isCoord2 = isCoord && (course.coordinatorId === actor.id || course.coordinatorName === actor.name)
 
-    if (actor.role !== 'administrador' && !isProducer && !isSup && !isCoord2) {
+    if (!mandaEmCursos(actor) && !isProducer && !isSup && !isCoord2) {
       return res.status(403).json({ message: 'Voce nao tem permissao para editar esta ementa.' })
     }
 
@@ -1412,9 +1432,10 @@ app.patch('/api/ementas/:courseId/status', auth, async (req, res) => {
     if (!ementa) return res.status(404).json({ message: 'Ementa nao encontrada.' })
 
     const isCoord = isCoordinator(actor)
-    // Admin e coordenacao do curso podem sempre alterar qualquer status (professor/supervisor/
-    // coordenador), mesma regra aplicada em materials (PATCH /api/materials/:id/status).
-    const isPrivileged = actor.role === 'administrador' || (isCoord && (course.coordinatorId === actor.id || course.coordinatorName === actor.name))
+    // Admin, gerencia e coordenacao do curso podem sempre alterar qualquer status
+    // (professor/supervisor/coordenador), mesma regra aplicada em materials
+    // (PATCH /api/materials/:id/status).
+    const isPrivileged = mandaEmCursos(actor) || (isCoord && (course.coordinatorId === actor.id || course.coordinatorName === actor.name))
     const update = {}
 
     if (req.body.professorStatus) {

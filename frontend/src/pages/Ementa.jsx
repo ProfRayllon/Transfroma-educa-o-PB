@@ -7,6 +7,7 @@ import {
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 import api, { getApiErrorMessage } from '../lib/api'
+import { mandaEmCursos } from '../lib/perfil'
 
 const STEPS = [
   { id: 1, title: 'Identificação', desc: 'Dados do curso (automático)' },
@@ -505,9 +506,10 @@ export default function Ementa() {
 
   const course = courses.find((c) => c.id === Number(courseId))
   const isCoord = user?.role === 'coordenador' || String(user?.function || '').toLowerCase().includes('coordenador')
-  const isAdmin = user?.role === 'administrador'
-  // Admin e coordenacao do curso podem sempre alterar qualquer status (professor/supervisor/
-  // coordenador), mesma regra aplicada na producao (Producao.jsx e ModulosWorkspace.jsx).
+  const isAdmin = mandaEmCursos(user)
+  // Admin, gerencia e coordenacao do curso podem sempre alterar qualquer status
+  // (professor/supervisor/coordenador), mesma regra aplicada na producao
+  // (Producao.jsx e ModulosWorkspace.jsx).
   const isPrivileged = isAdmin || (isCoord && (course?.coordinatorId === user?.id || course?.coordinatorName === user?.name))
 
   const canEdit = !!(

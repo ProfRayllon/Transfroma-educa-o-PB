@@ -6,6 +6,7 @@ import api, { getApiErrorMessage } from '../lib/api'
 
 const ROLE_LABELS = {
   administrador: 'Administrador',
+  gerencia: 'Gerência',
   coordenador: 'Coordenador',
   supervisor: 'Supervisor',
   professor: 'Professor',

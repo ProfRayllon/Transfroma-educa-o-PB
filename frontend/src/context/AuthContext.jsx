@@ -105,6 +105,12 @@ export const useAuth = () => {
 
 const PERMISSIONS = {
   administrador: ['all'],
+  // Administrador restrito a Cursos: dentro da tela faz tudo, e fora dela nao
+  // enxerga nada. Nao recebe 'all' de proposito -- 'all' e o que abre Acessos,
+  // Cursistas e Frequencia, que nao sao dele.
+  gerencia: [
+    'view_cursos', 'edit_cursos', 'edit_status_ava',
+  ],
   supervisor: [
     'view_producao', 'edit_producao', 'approve_material',
     'view_pessoas', 'edit_frequencia', 'edit_ocorrencias',

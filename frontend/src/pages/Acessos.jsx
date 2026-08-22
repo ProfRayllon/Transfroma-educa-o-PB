@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext'
 import api, { getApiErrorMessage } from '../lib/api'
 
 const MANAGED_ROLES = [
+  { value: 'gerencia', label: 'Gerência' },
   { value: 'coordenador', label: 'Coordenador' },
   { value: 'supervisor', label: 'Supervisor' },
   { value: 'professor', label: 'Professor' },
@@ -25,6 +26,7 @@ const FILTER_ROLES = [
 
 const ROLE_LABELS = {
   administrador: 'Administrador',
+  gerencia: 'Gerência',
   coordenador: 'Coordenador',
   supervisor: 'Supervisor',
   professor: 'Professor',
@@ -92,6 +94,7 @@ const TECH_AREAS = [
 
 const PERMISSIONS_MAP = {
   administrador: ['Acessa tudo', 'Cria usuarios', 'Edita permissoes', 'Visualiza todas as telas', 'Edita todos os registros'],
+  gerencia: ['Acessa somente a tela de Cursos', 'Ve todos os cursos', 'Cria, edita e exclui qualquer curso', 'Edita ementa e status no AVA', 'Nao acessa Acessos, Cursistas, Frequencia nem Producao'],
   coordenador: ['Acessa cursos vinculados', 'Cria e edita cursos vinculados', 'Atribui atividades', 'Acompanha producao dos seus cursos'],
   supervisor: ['Acessa Producao', 'Aprova materiais', 'Edita ocorrencias', 'Registra frequencia', 'Visualiza relatorios'],
   professor: ['Acessa Producao', 'Cadastra materiais', 'Edita os proprios materiais', 'Visualiza status da revisao'],

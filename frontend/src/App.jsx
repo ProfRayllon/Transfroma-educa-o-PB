@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { DataProvider } from './context/DataContext'
 import { BrandingProvider } from './context/BrandingContext'
@@ -19,18 +19,35 @@ import Notificacoes from './pages/Notificacoes'
 import Perfil from './pages/Perfil'
 import CursistaRoutes from './modules/cursista/CursistaRoutes'
 import { CursistaProvider } from './modules/cursista/CursistaContext'
+import { podeAcessar, telaInicial } from './lib/perfil'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
+  const { pathname } = useLocation()
+
   if (loading) return <div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-10 w-10 border-4 border-brand-700 border-t-transparent" /></div>
   if (!user) return <Navigate to="/login" replace />
+
+  /**
+   * Perfil restrito a certas telas nao entra nas outras nem digitando o
+   * endereco. Esconder o item do menu nunca foi restringir: qualquer pessoa
+   * autenticada que digitasse /acessos abria a tela. As chamadas de API eram
+   * recusadas pelo backend, entao dado nenhum vazava -- mas a pessoa via uma
+   * tela quebrada, cheia de erro, em vez de simplesmente nao chegar la.
+   *
+   * Isto NAO substitui a checagem do servidor, que continua sendo a que vale.
+   */
+  if (!podeAcessar(user, pathname)) return <Navigate to={telaInicial(user)} replace />
+
   return children
 }
 
 function PublicRoute({ children }) {
   const { user, loading } = useAuth()
   if (loading) return null
-  if (user) return <Navigate to="/painel" replace />
+  // Para a tela inicial do perfil, e nao para /painel fixo: a gerencia nao
+  // acessa o painel e cairia num redirecionamento logo apos entrar.
+  if (user) return <Navigate to={telaInicial(user)} replace />
   return children
 }
 

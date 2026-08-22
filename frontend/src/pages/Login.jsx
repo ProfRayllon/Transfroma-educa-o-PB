@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useBranding } from '../context/BrandingContext'
+import { telaInicial } from '../lib/perfil'
 import { ArrowRight, Eye, EyeOff, GraduationCap, Lock, Mail, ShieldCheck } from 'lucide-react'
 
 export default function Login() {
@@ -19,8 +20,10 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      await login(email, password)
-      navigate('/painel')
+      const usuario = await login(email, password)
+      // A tela inicial depende do perfil: /painel e do administrador, e mandar
+      // todo mundo para la fazia a gerencia entrar e ser redirecionada na hora.
+      navigate(telaInicial(usuario))
     } catch (err) {
       setError(err.message)
     } finally {

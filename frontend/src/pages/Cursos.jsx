@@ -24,6 +24,7 @@ import Badge from '../components/ui/Badge'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 import api, { getApiErrorMessage } from '../lib/api'
+import { mandaEmCursos } from '../lib/perfil'
 
 const PRIMARY_TRAILS = {
   'TRILHAS TRANSVERSAIS': [
@@ -197,7 +198,7 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
   const ementaApproved = ementaStatus?.coordinatorStatus === 'valido'
   const alert = deadlineBadge(course.deadline)
   const [statusAvaSaving, setStatusAvaSaving] = useState(false)
-  const canEditStatusAva = user?.role === 'ti' || user?.role === 'administrador'
+  const canEditStatusAva = user?.role === 'ti' || mandaEmCursos(user)
 
   const handleStatusAvaChange = async (event) => {
     const value = event.target.value
@@ -209,10 +210,10 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
     }
   }
 
-  // Mesma regra do backend (DELETE /api/courses/:id): admin sempre pode; coordenador/supervisor
-  // so podem excluir o proprio curso.
+  // Mesma regra do backend (DELETE /api/courses/:id): admin e gerencia sempre podem;
+  // coordenador/supervisor so podem excluir o proprio curso.
   const isCoord = user?.role === 'coordenador' || (user?.function || '').toLowerCase().includes('coordenador')
-  const canDeleteThis = user?.role === 'administrador'
+  const canDeleteThis = mandaEmCursos(user)
     || (isCoord && (course.coordinatorId === user?.id || course.coordinatorName === user?.name))
     || (user?.role === 'supervisor' && (course.supervisorId === user?.id || course.supervisorName === user?.name))
 
@@ -842,7 +843,7 @@ export default function Cursos() {
   }, [])
 
   const isCoordinator = user?.role === 'coordenador' || (user?.function || '').toLowerCase().includes('coordenador')
-  const canManage = user?.role === 'administrador' || user?.role === 'supervisor' || isCoordinator
+  const canManage = mandaEmCursos(user) || user?.role === 'supervisor' || isCoordinator
 
   const filterOptions = useMemo(() => ({
     primaryTrails: Array.from(new Set(courses.map((course) => course.primaryTrail).filter(Boolean))),

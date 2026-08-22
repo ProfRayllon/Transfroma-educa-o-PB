@@ -34,6 +34,7 @@ const navItems = [
 
 const roleLabels = {
   administrador: 'Administrador',
+  gerencia: 'Gerência',
   coordenador: 'Coordenador',
   supervisor: 'Supervisor',
   professor: 'Professor',

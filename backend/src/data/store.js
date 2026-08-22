@@ -208,8 +208,11 @@ function materialsCourseJoin(materialAlias = 'm', courseAlias = 'c') {
   return `${courseAlias}.id = ${materialAlias}.course_id OR (${materialAlias}.course_id IS NULL AND ${courseAlias}.name = ${materialAlias}.course)`
 }
 
+// 'gerencia' e um administrador restrito a Cursos: ve todos os cursos, como o
+// administrador. Sem isto o filtro cairia no `WHERE 1 = 0` do final e a tela
+// abriria vazia -- que e como um perfil novo falha por omissao, sem erro nenhum.
 function canSeeAllCourses(user) {
-  return user?.role === 'administrador' || user?.role === 'ti'
+  return user?.role === 'administrador' || user?.role === 'ti' || user?.role === 'gerencia'
 }
 
 function mapPeopleRow(row) {
@@ -330,7 +333,7 @@ async function ensureMysqlSchema() {
   // cada boot, esquecer um perfil ja gravado no banco derruba a API no start
   // (ER_WARN_DATA_TRUNCATED ao tentar encolher o ENUM).
   await pool.execute(
-    "ALTER TABLE users MODIFY role ENUM('administrador','coordenador','supervisor','professor','tutor','tecnico','gestao','revisor','supervisor_tutoria','ti') NOT NULL DEFAULT 'professor'"
+    "ALTER TABLE users MODIFY role ENUM('administrador','coordenador','supervisor','professor','tutor','tecnico','gestao','revisor','supervisor_tutoria','ti','gerencia') NOT NULL DEFAULT 'professor'"
   )
 
   const [userExtraColumns] = await pool.execute(
