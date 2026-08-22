@@ -16,10 +16,11 @@ FROM nginx:1.27-alpine
 
 COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
 
-# Valida a configuracao no build, e nao no boot. Sem isso, um erro de sintaxe
-# passa pelo deploy inteiro e so aparece com o nginx recusando subir -- ou seja,
-# com o site fora do ar. Aqui, o build falha e a versao anterior continua no ar.
-RUN nginx -t
+# NAO adicione `RUN nginx -t` aqui. Ja foi tentado e quebra o build: o nginx
+# resolve o hostname de `proxy_pass http://api:3001` ao ler a configuracao, e
+# durante o build nao existe a rede do compose onde o host `api` vive --
+# "host not found in upstream". A configuracao esta certa; ela so nao e
+# validavel fora do compose.
 
 COPY --from=build /app/dist /usr/share/nginx/html
 
