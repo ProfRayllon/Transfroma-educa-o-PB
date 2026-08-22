@@ -293,9 +293,20 @@ export default function Cursistas() {
        * que a base ficou pela metade. Sem resposta do servidor, a unica coisa
        * honesta a dizer e que nao deu para saber, e onde conferir.
        */
+      const status = error.response?.status
+
       if (!error.response) {
         await Promise.all([carregarEstatisticas(), carregarLista()])
         mostrar('erro', 'A conexão caiu antes da resposta, mas a importação pode ter concluído no servidor. Confira o total em "Cursistas na base" — se estiver certo, não precisa repetir. Repetir também é seguro: a importação é por CPF e não duplica ninguém.')
+      } else if (status === 413) {
+        /**
+         * 413 vem do nginx, nao da API: e uma pagina HTML de erro, sem o campo
+         * `message` que a tela le. Sem este caso, o arquivo grande demais dava
+         * "Erro ao importar a base" -- que nao diz o que houve nem o que fazer,
+         * e manda a pessoa procurar defeito na planilha.
+         */
+        const mb = (arquivo.size / 1024 / 1024).toFixed(1)
+        mostrar('erro', `O arquivo tem ${mb} MB e o servidor aceita até 8 MB. Nada foi importado. Salve a planilha sem formatação, imagens ou abas extras — a base de 13 mil linhas costuma ficar perto de 2 MB.`)
       } else {
         mostrar('erro', getApiErrorMessage(error, 'Erro ao importar a base.'))
       }

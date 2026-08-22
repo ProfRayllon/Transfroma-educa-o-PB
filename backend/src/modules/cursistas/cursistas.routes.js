@@ -52,11 +52,21 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
     keyGenerator: (req) => ipKeyGenerator(req.ip),
   })
 
-  // A importacao carrega ~13 mil registros; poucas execucoes por hora bastam e
-  // evitam que um erro de operacao vire carga repetida no banco.
+  /**
+   * Freio da importacao.
+   *
+   * Cinco por hora era apertado demais na pratica: montar a base e um vaivem de
+   * corrigir a planilha e subir de novo -- acento errado, coluna faltando, lote
+   * parcial -- e o limite estourava no meio do trabalho, transformando um erro
+   * de digitacao numa espera de uma hora.
+   *
+   * Quinze continua cumprindo o proposito, que e impedir que um clique repetido
+   * ou um script vire carga continua no banco, sem atrapalhar quem esta
+   * legitimamente ajustando a base.
+   */
   const limiteImportacao = rateLimit({
     windowMs: 60 * 60 * 1000,
-    limit: 5,
+    limit: 15,
     standardHeaders: true,
     legacyHeaders: false,
     message: { message: 'Limite de importacoes por hora atingido.' },
