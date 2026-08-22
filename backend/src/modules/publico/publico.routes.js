@@ -79,12 +79,15 @@ module.exports = function criarRotasPublicas() {
   /**
    * Catalogo de cursos.
    *
-   * O objetivo geral so sai quando a ementa foi validada pela coordenacao: ate
-   * la e rascunho em construcao pelo professor, e rascunho nao vai para o site.
+   * O texto da ementa so sai quando ela foi validada pela coordenacao: ate la e
+   * rascunho em construcao pelo professor, e rascunho nao vai para o site.
    *
-   * A imagem NAO vem aqui. Sao data URIs de ~2 MB no banco; oito cursos seriam
-   * ~18 MB de JSON a cada visita, numa VPS de 957 MB. A lista diz apenas se ha
-   * imagem e o navegador busca cada uma pela rota abaixo, que tem cache.
+   * Nem a imagem nem a ementa inteira vem aqui:
+   * - a capa e um data URI de ~2 MB por curso;
+   * - as ementas somam ~68 KB de texto, e a maioria das visitas nem abre o
+   *   detalhe de um curso.
+   * A lista traz so um resumo curto para o card; o resto vem sob demanda pelas
+   * rotas de imagem e de ementa.
    */
   router.get('/cursos', tratar(async (req, res) => {
     requireMysql()
@@ -98,7 +101,15 @@ module.exports = function criarRotasPublicas() {
               -- Versao da capa. Ver o comentario de imageVersion abaixo.
               UNIX_TIMESTAMP(c.updated_at) AS versao,
               ${SQL_SITUACAO} AS situacao,
-              CASE WHEN e.coordinator_status = 'valido' THEN e.general_objective END AS objetivo
+              -- Resumo do card: a contextualizacao situa o curso melhor do que o
+              -- objetivo geral, que e escrito na linguagem do documento. Cortado
+              -- no SQL para o texto longo nao trafegar inteiro.
+              CASE WHEN e.coordinator_status = 'valido'
+                   THEN LEFT(COALESCE(NULLIF(TRIM(e.contextualization), ''), e.general_objective), 400)
+              END AS resumo,
+              -- Se ha ementa publicavel, para o front so oferecer "Saber mais"
+              -- quando existe algo para mostrar.
+              (e.coordinator_status = 'valido') AS tem_ementa
          FROM courses c
          LEFT JOIN ementas e ON e.course_id = c.id
         ORDER BY c.primary_trail, c.name`
@@ -111,7 +122,8 @@ module.exports = function criarRotasPublicas() {
       trail: row.secondary_trail,
       totalSessions: row.total_sessions,
       workloadHours: row.workload_hours ?? null,
-      objective: row.objetivo || null,
+      resumo: row.resumo || null,
+      hasEmenta: Boolean(Number(row.tem_ementa)),
       hasImage: Boolean(Number(row.tem_imagem)),
       /**
        * Marca de versao da capa, para o front variar a URL da imagem.
@@ -130,6 +142,61 @@ module.exports = function criarRotasPublicas() {
       enrollmentClosesAt: row.enrollment_closes_at,
       situacao: traduzirSituacao(row.situacao),
     })))
+  }))
+
+  /**
+   * Ementa publica de um curso, por secao.
+   *
+   * Devolvida so quando a coordenacao validou. As secoes vem numa lista ordenada
+   * em vez de um objeto de campos: e ela que define a ordem das abas na tela, e
+   * assim uma secao nova entra aqui sem o front precisar saber o nome da coluna.
+   *
+   * Secao vazia nao entra -- aba clicavel que abre em branco e pior do que aba
+   * que nao existe. Hoje `programmatic_content` esta vazio em todos os cursos.
+   */
+  router.get('/cursos/:id/ementa', tratar(async (req, res) => {
+    requireMysql()
+
+    const id = Number(req.params.id)
+    if (!Number.isInteger(id) || id <= 0) return res.status(404).json({ message: 'Curso nao encontrado.' })
+
+    const [[linha]] = await getPool().execute(
+      `SELECT e.contextualization, e.justification, e.relevance,
+              e.general_objective, e.specific_objectives,
+              e.technical_competencies, e.pedagogical_competencies, e.socioemotional_competencies,
+              e.syllabus_description, e.programmatic_content, e.educational_resources,
+              e.evaluation_criteria, e.evaluation_instruments, e.references_list
+         FROM ementas e
+        WHERE e.course_id = ? AND e.coordinator_status = 'valido'
+        LIMIT 1`,
+      [id]
+    )
+
+    if (!linha) return res.status(404).json({ message: 'Ementa nao disponivel para este curso.' })
+
+    const SECOES = [
+      ['contextualizacao', 'Contextualização', linha.contextualization],
+      ['justificativa', 'Justificativa', linha.justification],
+      ['relevancia', 'Relevância', linha.relevance],
+      ['objetivo-geral', 'Objetivo geral', linha.general_objective],
+      ['objetivos-especificos', 'Objetivos específicos', linha.specific_objectives],
+      ['competencias-tecnicas', 'Competências técnicas', linha.technical_competencies],
+      ['competencias-pedagogicas', 'Competências pedagógicas', linha.pedagogical_competencies],
+      ['competencias-socioemocionais', 'Competências socioemocionais', linha.socioemotional_competencies],
+      ['ementa', 'Ementa', linha.syllabus_description],
+      ['conteudo-programatico', 'Conteúdo programático', linha.programmatic_content],
+      ['recursos', 'Recursos educacionais', linha.educational_resources],
+      ['criterios-avaliacao', 'Critérios de avaliação', linha.evaluation_criteria],
+      ['instrumentos-avaliacao', 'Instrumentos de avaliação', linha.evaluation_instruments],
+      ['referencias', 'Referências', linha.references_list],
+    ]
+
+    res.json({
+      courseId: id,
+      secoes: SECOES
+        .filter(([, , texto]) => String(texto || '').trim())
+        .map(([chave, titulo, texto]) => ({ id: chave, titulo, texto: String(texto).trim() })),
+    })
   }))
 
   /** Imagem de capa de um curso, decodificada do data URI guardado no banco. */
