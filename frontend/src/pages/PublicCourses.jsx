@@ -19,96 +19,6 @@ const SITUACOES = {
   fechado: { texto: 'Em breve', classe: 'bg-amber-300/90 text-amber-900' },
 }
 
-/**
- * Ementa do curso em abas.
- *
- * O texto vem sob demanda, ao abrir o detalhe: as ementas somam ~68 KB e a
- * maioria das visitas ao catalogo nao chega a abrir nenhum curso.
- *
- * As secoes e a ordem delas vem do servidor. Assim uma secao nova aparece aqui
- * sem mexer nesta tela, e secao vazia simplesmente nao vira aba -- aba clicavel
- * que abre em branco e pior do que aba que nao existe.
- */
-function EmentaCurso({ curso }) {
-  const [secoes, setSecoes] = useState(null)
-  const [ativa, setAtiva] = useState(0)
-  const [estado, setEstado] = useState('carregando')
-
-  useEffect(() => {
-    if (!curso?.id) return
-    let ativo = true
-    setEstado('carregando')
-    setAtiva(0)
-
-    if (!curso.hasEmenta) { setEstado('indisponivel'); return }
-
-    publicApi
-      .get(`/publico/cursos/${curso.id}/ementa`)
-      .then(({ data }) => {
-        if (!ativo) return
-        setSecoes(data.secoes || [])
-        setEstado((data.secoes || []).length ? 'pronto' : 'indisponivel')
-      })
-      .catch(() => { if (ativo) setEstado('indisponivel') })
-
-    return () => { ativo = false }
-  }, [curso?.id, curso?.hasEmenta])
-
-  if (estado === 'carregando') {
-    return (
-      <div className="rounded-xl border border-[#e9d5ff] bg-white p-5">
-        <div className="h-3 w-40 animate-pulse rounded bg-[#f1edf8]" />
-        <div className="mt-4 space-y-2">
-          <div className="h-3 w-full animate-pulse rounded bg-[#f6f2fc]" />
-          <div className="h-3 w-5/6 animate-pulse rounded bg-[#f6f2fc]" />
-        </div>
-      </div>
-    )
-  }
-
-  if (estado === 'indisponivel') {
-    return (
-      <div className="rounded-xl border border-[#e9d5ff] bg-white p-5">
-        <p className="leading-7 text-[#9070c8]">
-          A ementa deste curso ainda está em elaboração e será publicada assim que for validada pela coordenação.
-        </p>
-      </div>
-    )
-  }
-
-  const secao = secoes[ativa] || secoes[0]
-
-  return (
-    <div className="rounded-xl border border-[#e9d5ff] bg-white p-5">
-      {/* Abas discretas: a selecionada e a unica preenchida, as demais so
-          ganham cor ao passar o mouse. */}
-      <div className="mb-4 flex flex-wrap gap-1.5 border-b border-[#f1ebf9] pb-4">
-        {secoes.map((s, i) => (
-          <button
-            key={s.id}
-            type="button"
-            onClick={() => setAtiva(i)}
-            className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
-              i === ativa
-                ? 'bg-[#6f35b5] text-white'
-                : 'text-[#7c6a9c] hover:bg-[#faf5ff] hover:text-[#6f35b5]'
-            }`}
-          >
-            {s.titulo}
-          </button>
-        ))}
-      </div>
-
-      <h4 className="mb-2 text-xs font-black uppercase tracking-wider text-[#a855f7]">{secao.titulo}</h4>
-      {/* `whitespace-pre-line` preserva as quebras que o professor digitou --
-          varias secoes sao listas escritas uma por linha. */}
-      <p className="max-h-[320px] overflow-y-auto whitespace-pre-line leading-7 text-[#566176]">
-        {secao.texto}
-      </p>
-    </div>
-  )
-}
-
 export default function PublicCourses() {
   const { cursista, cadastroPendente } = useCursista()
 
@@ -447,7 +357,22 @@ export default function PublicCourses() {
               )}
             </div>
 
-            <EmentaCurso curso={selecionado} />
+            {/* So a contextualizacao: a ementa inteira em abas ficou densa
+                demais para quem esta so decidindo se o curso interessa. */}
+            <div className="rounded-xl border border-[#e9d5ff] bg-white p-5">
+              <h4 className="mb-2 text-xs font-black uppercase tracking-wider text-[#a855f7]">
+                Contextualização
+              </h4>
+              {selecionado.resumo ? (
+                // `whitespace-pre-line` mantem as quebras que o professor
+                // digitou, em vez de emendar tudo num paragrafo so.
+                <p className="whitespace-pre-line leading-7 text-[#566176]">{selecionado.resumo}</p>
+              ) : (
+                <p className="leading-7 text-[#9070c8]">
+                  A ementa deste curso ainda está em elaboração e será publicada assim que for validada pela coordenação.
+                </p>
+              )}
+            </div>
 
             {selecionado.situacao === 'aberto' && !cursista && (
               <div className="flex items-start gap-3 rounded-xl border border-[#ddd6fe] bg-[#faf5ff] p-4">
