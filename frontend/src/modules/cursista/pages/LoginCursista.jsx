@@ -36,7 +36,7 @@ export default function LoginCursista() {
   return (
     <CursistaShell
       bloqueado
-      largura="max-w-md"
+      larguraConteudo="max-w-md"
       badge="Área do Cursista"
       titulo="Entre com o seu CPF"
       descricao="Acesse para atualizar os seus dados e se inscrever nos cursos do Transforma Educação PB."

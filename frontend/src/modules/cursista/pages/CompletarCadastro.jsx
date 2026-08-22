@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  AlertTriangle, Briefcase, CheckCircle, Fingerprint,
-  GraduationCap, Mail, MapPin, Phone, Save, School,
+  AlertTriangle, BookOpen, Briefcase, Building2, CalendarDays, CheckCircle,
+  Fingerprint, GraduationCap, Mail, MapPin, Phone, Save, School,
 } from 'lucide-react'
 import { useCursista } from '../CursistaContext'
 import { formatarCpf } from '../api'
@@ -12,6 +12,14 @@ const GENEROS = [
   '', 'Mulher cisgênero', 'Homem cisgênero', 'Mulher transgênero',
   'Homem transgênero', 'Não-binário', 'Outros', 'Prefiro não informar',
 ]
+
+// A data vem como "AAAA-MM-DD". Montar com `new Date(texto)` a leria como UTC e
+// poderia exibir o dia anterior; por isso a montagem e por partes.
+function formatarData(valor) {
+  if (!valor) return ''
+  const [ano, mes, dia] = String(valor).split('-')
+  return dia && mes && ano ? `${dia}/${mes}/${ano}` : valor
+}
 
 function formatarTelefone(valor) {
   const d = String(valor || '').replace(/\D/g, '').slice(0, 11)
@@ -124,7 +132,10 @@ export default function CompletarCadastro() {
           Dados da rede estadual
         </TituloCartao>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Quatro colunas: o cartao agora ocupa a largura do site, e em tres
+            colunas sobrava espaco vazio a direita. Campos que so existem para
+            parte da rede (eixo, curso tecnico) aparecem quando preenchidos. */}
+        <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <DadoFixo icon={GraduationCap} label="Nome completo" valor={cursista.name} />
           <DadoFixo icon={Fingerprint} label="CPF" valor={formatarCpf(cursista.cpf)} />
           <DadoFixo icon={Briefcase} label="Função" valor={cursista.funcao} />
@@ -133,6 +144,15 @@ export default function CompletarCadastro() {
           )}
           {cursista.eixoTecnologico && (
             <DadoFixo icon={School} label="Eixo tecnológico" valor={cursista.eixoTecnologico} />
+          )}
+          {cursista.cursoTecnico && (
+            <DadoFixo icon={BookOpen} label="Curso técnico" valor={cursista.cursoTecnico} />
+          )}
+          {cursista.dataInicioRede && (
+            <DadoFixo icon={CalendarDays} label="Início na rede" valor={formatarData(cursista.dataInicioRede)} />
+          )}
+          {cursista.qtdeVinculos > 1 && (
+            <DadoFixo icon={Building2} label="Vínculos" valor={`${cursista.qtdeVinculos} escolas`} />
           )}
         </div>
 
@@ -173,7 +193,9 @@ export default function CompletarCadastro() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {/* Tres colunas na tela larga: com duas, cada campo passaria de 550px
+              e o formulario ficaria esticado depois que o cartao cresceu. */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div>
               <label className="mb-1.5 block text-xs font-bold text-[#566176]">
                 Data de nascimento <span className="text-red-500">*</span>
@@ -233,7 +255,7 @@ export default function CompletarCadastro() {
               </div>
             </div>
 
-            <div className="sm:col-span-2">
+            <div className="sm:col-span-2 lg:col-span-1">
               <label className="mb-1.5 block text-xs font-bold text-[#566176]">
                 Gênero <span className="font-normal text-[#9070c8]">— opcional</span>
               </label>
@@ -260,7 +282,9 @@ export default function CompletarCadastro() {
               ))}
             </ul>
 
-            <button type="submit" disabled={!completo || salvando} className={`${BOTAO_PRINCIPAL} w-full`}>
+            {/* Botao de largura propria, e nao 100%: num cartao de 1180px ele
+                viraria uma faixa atravessando a tela inteira. */}
+            <button type="submit" disabled={!completo || salvando} className={`${BOTAO_PRINCIPAL} w-full sm:w-auto`}>
               <Save size={15} />
               {salvando ? 'Salvando...' : cadastroPendente ? 'Confirmar cadastro e continuar' : 'Salvar alterações'}
             </button>

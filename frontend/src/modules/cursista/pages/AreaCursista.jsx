@@ -76,7 +76,6 @@ export default function AreaCursista() {
 
   return (
     <CursistaShell
-      largura="max-w-[1000px]"
       badge="Área do Cursista"
       titulo={`Olá, ${primeiroNome}`}
       descricao={

@@ -19,6 +19,15 @@ const logoFilter =
  * - livre (alterar senha, rever os dados): menu completo, porque a pessoa esta
  *   apenas visitando uma tela e pode ir para qualquer outra.
  */
+/**
+ * Largura do conteudo, igual a do resto do site (home e catalogo usam a mesma).
+ *
+ * E o que faz o titulo de todas as telas comecar na mesma coluna: cada tela da
+ * area usava uma largura propria, entao "Ola, fulano" e "Meus dados" apareciam
+ * deslocados para dentro em relacao ao catalogo.
+ */
+const LARGURA_PADRAO = 'max-w-[1180px]'
+
 export default function CursistaShell({
   bloqueado = false,
   badge,
@@ -26,8 +35,12 @@ export default function CursistaShell({
   descricao,
   acao,
   children,
-  largura = 'max-w-3xl',
+  // Limite so do conteudo, para formulario de campo unico nao esticar por 1180px.
+  // Fica alinhado a esquerda, e nao centralizado, para comecar na mesma coluna
+  // do titulo -- centralizar quebraria justamente o alinhamento que buscamos.
+  larguraConteudo = '',
 }) {
+  const largura = LARGURA_PADRAO
   const { cursista, senhaPendente, encerrar } = useCursista()
   const navigate = useNavigate()
 
@@ -93,8 +106,10 @@ export default function CursistaShell({
           </div>
         </section>
 
-        <div className={`mx-auto ${largura} space-y-5 px-[22px] py-10`}>
-          {children}
+        <div className={`mx-auto ${largura} px-[22px] py-10`}>
+          <div className={`space-y-5 ${larguraConteudo}`}>
+            {children}
+          </div>
         </div>
       </main>
 

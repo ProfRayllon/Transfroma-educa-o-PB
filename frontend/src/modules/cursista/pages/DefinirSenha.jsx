@@ -53,7 +53,7 @@ export default function DefinirSenha() {
   return (
     <CursistaShell
       bloqueado={senhaPendente}
-      largura="max-w-2xl"
+      larguraConteudo="max-w-2xl"
       badge={senhaPendente ? 'Primeiro acesso' : 'Minha conta'}
       titulo={senhaPendente ? 'Crie a sua senha' : 'Alterar senha'}
       descricao={
