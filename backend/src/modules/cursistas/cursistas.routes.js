@@ -7,6 +7,7 @@ const { ipKeyGenerator } = require('express-rate-limit')
 const auth = require('./cursistas.auth')
 const repo = require('./cursistas.repo')
 const service = require('./cursistas.service')
+const admin = require('./cursistas.admin')
 const { importar } = require('./cursistas.import')
 const { exportarInscritos, marcarComoExportadas } = require('./cursistas.export')
 const { normalizeCpf } = require('../../shared/cpf')
@@ -131,6 +132,10 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
         if (status >= 500) console.error('[cursistas]', error)
         res.status(status).json({
           message: status >= 500 ? 'Erro interno do servidor.' : error.message,
+          // Dados que a tela precisa para tratar a recusa -- hoje, o que seria
+          // apagado junto com um cursista. So em erro de cliente: em 500 nada
+          // sai daqui, para detalhe interno nao virar resposta.
+          ...(status < 500 && error.payload ? error.payload : {}),
         })
       }
     }
@@ -217,9 +222,67 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
       search: req.body?.search || '',
       status: req.body?.status || '',
       situacao: req.body?.situacao || '',
+      origem: req.body?.origem || '',
       page: req.body?.page,
       perPage: req.body?.perPage,
     }))
+  }))
+
+  // ---------------------------------------------------------------------------
+  // Manutencao do cadastro
+  //
+  // Criar, editar e excluir um cursista de cada vez. A importacao continua sendo
+  // o caminho da carga em massa; estas rotas cobrem a correcao pontual, que pela
+  // planilha exigiria reimportar tudo -- e que no caso da exclusao a importacao
+  // nem faz, porque ela nunca remove ninguem.
+  //
+  // Restritas a 'administrador', como o resto deste bloco: aqui se troca o CPF
+  // (que e o login) e se apaga cadastro com inscricao, as duas operacoes de
+  // maior alcance do modulo.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * `:id` vem da URL e nao e confiavel. Sem esta conferencia, "abc" viraria NaN
+   * e chegaria ao driver do MySQL como parametro invalido -- erro 500 no lugar
+   * do 404 que o caso merece.
+   */
+  function idDaRota(req) {
+    const id = Number(req.params.id)
+    if (!Number.isInteger(id) || id <= 0) {
+      throw Object.assign(new Error('Cursista nao encontrado.'), { statusCode: 404 })
+    }
+    return id
+  }
+
+  router.post('/admin/cursistas', ...soAdmin, tratar(async (req, res) => {
+    const actor = await getUsuarioInterno(req.user.id)
+    res.status(201).json(await admin.criar({ corpo: req.body, actor, req }))
+  }))
+
+  router.get('/admin/cursistas/:id', ...soAdmin, tratar(async (req, res) => {
+    const actor = await getUsuarioInterno(req.user.id)
+    res.json(await admin.detalhar({ id: idDaRota(req), actor, req }))
+  }))
+
+  router.put('/admin/cursistas/:id', ...soAdmin, tratar(async (req, res) => {
+    const actor = await getUsuarioInterno(req.user.id)
+    res.json(await admin.atualizar({ id: idDaRota(req), corpo: req.body, actor, req }))
+  }))
+
+  /**
+   * A confirmacao das inscricoes vem na query, e nao no corpo: DELETE com corpo
+   * e aceito pelo Express mas ignorado por parte dos proxies, e uma confirmacao
+   * que se perde no caminho vira exclusao recusada sem explicacao.
+   */
+  router.delete('/admin/cursistas/:id', ...soAdmin, tratar(async (req, res) => {
+    const actor = await getUsuarioInterno(req.user.id)
+    const resultado = await admin.excluir({
+      id: idDaRota(req),
+      confirmarInscricoes: String(req.query.confirmarInscricoes) === 'true',
+      actor,
+      req,
+    })
+    res.json(resultado)
   }))
 
   // Recebe o .xlsx como bytes, nao como texto ou base64: a base dos 13 mil pesa
@@ -263,9 +326,9 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
       req,
     })
 
-    // A conta volta ao estado de primeiro acesso: o CPF autentica de novo e a
-    // troca de senha e exigida na entrada seguinte.
-    res.json({ message: 'Senha resetada. O cursista entra com o CPF e define uma nova senha.' })
+    // A conta volta ao estado de primeiro acesso: a senha padrao autentica de
+    // novo e a troca e exigida na entrada seguinte.
+    res.json({ message: 'Senha resetada. O cursista entra com a senha padrao e define uma nova.' })
   }))
 
   /**

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle, CheckCircle, Clock, Download, FileSpreadsheet, Filter,
-  KeyRound, Lock, MailX, Search, ShieldAlert, Upload, UserCheck, Users,
+  KeyRound, Lock, MailX, Pencil, Search, ShieldAlert, Trash2, Upload,
+  UserCheck, UserPlus, Users,
 } from 'lucide-react'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import Modal from '../components/ui/Modal'
+import FormularioCursista from '../components/cursistas/FormularioCursista'
 import api, { getApiErrorMessage } from '../lib/api'
 
 const SITUACOES = [
@@ -12,6 +14,14 @@ const SITUACOES = [
   { value: 'pendente_primeiro_acesso', label: 'Nunca acessou' },
   { value: 'pendente_confirmacao', label: 'Acessou, cadastro incompleto' },
   { value: 'completo', label: 'Cadastro confirmado' },
+]
+
+// Filtro de origem: e o que permite achar, no meio de treze mil importados, os
+// cadastros que a coordenacao criou a mao -- para conferir ou desfazer.
+const ORIGENS = [
+  { value: '', label: 'Toda a base' },
+  { value: 'importado', label: 'Veio da planilha' },
+  { value: 'manual', label: 'Criado a mão' },
 ]
 
 const TIPO_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -176,6 +186,7 @@ export default function Cursistas() {
   const [lista, setLista] = useState({ items: [], total: 0, page: 1, perPage: 50 })
   const [busca, setBusca] = useState('')
   const [situacao, setSituacao] = useState('')
+  const [origem, setOrigem] = useState('')
   const [pagina, setPagina] = useState(1)
   const [carregando, setCarregando] = useState(true)
   const [aviso, setAviso] = useState(null)
@@ -185,6 +196,10 @@ export default function Cursistas() {
   const [exportando, setExportando] = useState(false)
   const [confirmarReset, setConfirmarReset] = useState(null)
   const arquivoRef = useRef(null)
+
+  // `null` = fechado; `{ id }` = editando; `{ id: null }` = criando.
+  const [formulario, setFormulario] = useState(null)
+  const [confirmarExclusao, setConfirmarExclusao] = useState(null)
 
   const mostrar = (tipo, texto) => {
     setAviso({ tipo, texto })
@@ -206,7 +221,7 @@ export default function Cursistas() {
       // POST, e nao GET com query string: o termo pode ser um CPF, e a URL
       // completa iria para o access.log do nginx e para o historico do navegador.
       const { data } = await api.post('/cursistas/admin/cursistas/buscar', {
-        search: busca, situacao, page: pagina, perPage: 50,
+        search: busca, situacao, origem, page: pagina, perPage: 50,
       })
       setLista(data)
     } catch (error) {
@@ -214,7 +229,7 @@ export default function Cursistas() {
     } finally {
       setCarregando(false)
     }
-  }, [busca, situacao, pagina])
+  }, [busca, situacao, origem, pagina])
 
   const carregarResumoCursos = useCallback(async () => {
     try {
@@ -290,12 +305,44 @@ export default function Cursistas() {
     if (!confirmarReset) return
     try {
       await api.post(`/cursistas/admin/cursistas/${confirmarReset.id}/resetar-senha`)
-      mostrar('ok', `Senha de ${confirmarReset.name} resetada. Ele entra com o CPF e define uma nova.`)
+      mostrar('ok', `Senha de ${confirmarReset.name} resetada. A conta volta ao primeiro acesso: entra com a senha padrão e define uma nova.`)
       await Promise.all([carregarEstatisticas(), carregarLista()])
     } catch (error) {
       mostrar('erro', getApiErrorMessage(error, 'Erro ao resetar a senha.'))
     } finally {
       setConfirmarReset(null)
+    }
+  }
+
+  const aoSalvarCadastro = async (cursista, { criado }) => {
+    mostrar('ok', criado
+      ? `${cursista.name} cadastrado. Ele acessa com o CPF e a senha padrão.`
+      : `Cadastro de ${cursista.name} atualizado.${cursista.cpfAlterado ? ' O CPF de acesso mudou — avise-o.' : ''}`)
+    await Promise.all([carregarEstatisticas(), carregarLista()])
+  }
+
+  /**
+   * Exclui o cadastro, em dois passos quando ha inscricoes.
+   *
+   * O backend recusa com 409 na primeira tentativa se o cursista tem inscricao,
+   * informando quantas. A tela reabre a confirmacao dizendo o numero -- e a
+   * unica parte da exclusao que nao volta, entao quem confirma precisa saber o
+   * que esta perdendo antes, e nao depois.
+   */
+  const excluir = async (cursista, confirmandoInscricoes = false) => {
+    try {
+      await api.delete(`/cursistas/admin/cursistas/${cursista.id}`, {
+        params: confirmandoInscricoes ? { confirmarInscricoes: 'true' } : {},
+      })
+      mostrar('ok', `Cadastro de ${cursista.name} excluído.`)
+      await Promise.all([carregarEstatisticas(), carregarLista(), carregarResumoCursos()])
+    } catch (error) {
+      const dados = error.response?.data
+      if (error.response?.status === 409 && dados?.precisaConfirmarInscricoes) {
+        setConfirmarExclusao({ cursista, dependencias: dados.dependencias })
+        return
+      }
+      mostrar('erro', getApiErrorMessage(error, 'Erro ao excluir o cadastro.'))
     }
   }
 
@@ -317,6 +364,9 @@ export default function Cursistas() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <input ref={arquivoRef} type="file" accept=".xlsx" onChange={importar} className="hidden" />
+          <button onClick={() => setFormulario({ id: null })} className="btn-secondary text-sm">
+            <UserPlus size={14} /> Novo cursista
+          </button>
           <button
             onClick={() => arquivoRef.current?.click()}
             disabled={importando}
@@ -426,6 +476,13 @@ export default function Cursistas() {
                 {SITUACOES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
             </div>
+            <select
+              value={origem}
+              onChange={(e) => { setOrigem(e.target.value); setPagina(1) }}
+              className="select-field text-xs py-2 w-40"
+            >
+              {ORIGENS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
           </div>
         </div>
 
@@ -438,7 +495,7 @@ export default function Cursistas() {
                 <th className="table-header px-3 w-28">Matrícula</th>
                 <th className="table-header px-3 w-44">Situação</th>
                 <th className="table-header px-3 w-36">Último acesso</th>
-                <th className="table-header px-3 w-28">Ações</th>
+                <th className="table-header px-3 w-32">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -449,10 +506,12 @@ export default function Cursistas() {
                   <td colSpan={6} className="table-cell text-center py-12">
                     <Users size={28} className="mx-auto text-gray-300 mb-2" />
                     <p className="text-sm text-gray-500">
-                      {busca || situacao ? 'Nenhum cursista encontrado com esses filtros.' : 'Nenhum cursista na base ainda.'}
+                      {busca || situacao || origem ? 'Nenhum cursista encontrado com esses filtros.' : 'Nenhum cursista na base ainda.'}
                     </p>
-                    {!busca && !situacao && (
-                      <p className="text-xs text-gray-400 mt-1">Use "Importar base (.xlsx)" para carregar os cadastros.</p>
+                    {!busca && !situacao && !origem && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        Use "Importar base (.xlsx)" para carregar os cadastros, ou "Novo cursista" para criar um a um.
+                      </p>
                     )}
                   </td>
                 </tr>
@@ -461,7 +520,16 @@ export default function Cursistas() {
                 return (
                   <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                     <td className="table-cell px-3">
-                      <div className="text-gray-800 truncate max-w-xs" title={c.name}>{c.name}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-gray-800 truncate max-w-xs" title={c.name}>{c.name}</span>
+                        {/* So o cadastro manual ganha etiqueta: marcar os treze mil
+                            importados seria ruido em cada linha da tabela. */}
+                        {c.origem === 'manual' && (
+                          <span className="badge border border-brand-200 bg-brand-50 text-brand-700 flex-shrink-0" title="Criado à mão pela coordenação">
+                            manual
+                          </span>
+                        )}
+                      </div>
                       {c.funcao && <div className="text-[11px] text-gray-400 truncate max-w-xs">{c.funcao}</div>}
                     </td>
                     <td className="table-cell px-3 font-mono text-[11px] text-gray-500">{c.cpf}</td>
@@ -475,14 +543,30 @@ export default function Cursistas() {
                       {c.lastAccessAt ? new Date(c.lastAccessAt).toLocaleDateString('pt-BR') : '—'}
                     </td>
                     <td className="table-cell px-3">
-                      <button
-                        onClick={() => setConfirmarReset(c)}
-                        disabled={!c.passwordDefined}
-                        title={c.passwordDefined ? 'Resetar senha' : 'Ainda não definiu senha'}
-                        className="p-1.5 text-gray-400 hover:bg-brand-50 hover:text-brand-700 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-400"
-                      >
-                        <KeyRound size={14} />
-                      </button>
+                      <div className="flex items-center gap-0.5">
+                        <button
+                          onClick={() => setFormulario({ id: c.id })}
+                          title="Editar cadastro"
+                          className="p-1.5 text-gray-400 hover:bg-brand-50 hover:text-brand-700 rounded-lg transition-colors"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => setConfirmarReset(c)}
+                          disabled={!c.passwordDefined}
+                          title={c.passwordDefined ? 'Resetar senha' : 'Ainda não definiu senha'}
+                          className="p-1.5 text-gray-400 hover:bg-brand-50 hover:text-brand-700 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-400"
+                        >
+                          <KeyRound size={14} />
+                        </button>
+                        <button
+                          onClick={() => setConfirmarExclusao({ cursista: c, dependencias: null })}
+                          title="Excluir cadastro"
+                          className="p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
@@ -533,9 +617,16 @@ export default function Cursistas() {
               )}
             </div>
 
-            <div className="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5 text-xs text-gray-600">
-              Quem já tinha senha continua com ela. A importação atualiza o cadastro
-              e nunca derruba o acesso de quem já entrou.
+            <div className="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5 text-xs text-gray-600 space-y-1.5">
+              <p>
+                <strong>A importação soma, não substitui.</strong> Só as linhas do arquivo
+                são tocadas — quem já estava na base e não aparece nele continua
+                exatamente como estava. Nada é excluído por importação.
+              </p>
+              <p>
+                Quem já tinha senha continua com ela: a importação atualiza o cadastro
+                e nunca derruba o acesso de quem já entrou.
+              </p>
             </div>
 
             {resultadoImport.rejeitados > 0 && (
@@ -565,10 +656,32 @@ export default function Cursistas() {
         title="Resetar senha"
         message={
           confirmarReset
-            ? `A senha de ${confirmarReset.name} volta a ser o CPF, e ele terá que criar uma nova no próximo acesso. Confirma?`
+            ? `A conta de ${confirmarReset.name} volta ao primeiro acesso: ele entra com a senha padrão e é obrigado a criar uma nova. Confirma?`
             : ''
         }
         confirmLabel="Resetar"
+      />
+
+      <FormularioCursista
+        open={Boolean(formulario)}
+        cursistaId={formulario?.id || null}
+        onClose={() => setFormulario(null)}
+        onSalvo={aoSalvarCadastro}
+      />
+
+      {/* Duas confirmações: a segunda só aparece quando o backend recusa a
+          primeira por haver inscrições, e aí ela diz quantas. */}
+      <ConfirmDialog
+        open={Boolean(confirmarExclusao)}
+        onClose={() => setConfirmarExclusao(null)}
+        onConfirm={() => excluir(confirmarExclusao.cursista, Boolean(confirmarExclusao.dependencias))}
+        title={confirmarExclusao?.dependencias ? 'Este cursista tem inscrições' : 'Excluir cadastro'}
+        message={
+          !confirmarExclusao ? '' : confirmarExclusao.dependencias
+            ? `${confirmarExclusao.cursista.name} tem ${confirmarExclusao.dependencias.inscricoes} inscrição(ões) registrada(s), que serão apagadas junto e não podem ser recuperadas. Excluir mesmo assim?`
+            : `O cadastro de ${confirmarExclusao.cursista.name} será apagado e o CPF ficará livre para um novo cadastro. Isso não pode ser desfeito. Confirma?`
+        }
+        confirmLabel={confirmarExclusao?.dependencias ? 'Excluir com as inscrições' : 'Excluir'}
       />
     </div>
   )

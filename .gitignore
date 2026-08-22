@@ -23,7 +23,6 @@ Thumbs.db
 database/import/*.csv
 database/import/*.xlsx
 database/import/*.xls
-!database/import/modelo_base_cursistas.csv
 base-cursistas/
 *_cursistas_real*
 *base_real*

@@ -24,6 +24,19 @@ const ACOES = {
   INSCRICAO_CANCELADA: 'inscricao_cancelada',
   BASE_IMPORTADA: 'base_importada',
   BASE_EXPORTADA: 'base_exportada',
+
+  // Manutencao do cadastro pela coordenacao. Separadas das acoes do proprio
+  // cursista de proposito: quando um dado divergir do que a pessoa informou,
+  // a trilha precisa dizer se quem mudou foi ela ou a equipe.
+  CURSISTA_CRIADO_ADMIN: 'cursista_criado_admin',
+  CURSISTA_EDITADO_ADMIN: 'cursista_editado_admin',
+  CURSISTA_EXCLUIDO_ADMIN: 'cursista_excluido_admin',
+  // O CPF e o login. Trocar significa que a pessoa entra por outro numero a
+  // partir dali, entao merece uma acao propria e nao se dilui em "editado".
+  CPF_ALTERADO_ADMIN: 'cpf_alterado_admin',
+  // Abrir o cadastro completo expoe o CPF inteiro na tela. Registrar o acesso e
+  // o que a LGPD pede de quem trata dado pessoal: saber quem viu o que.
+  CADASTRO_ABERTO_ADMIN: 'cadastro_aberto_admin',
 }
 
 function clientIp(req) {

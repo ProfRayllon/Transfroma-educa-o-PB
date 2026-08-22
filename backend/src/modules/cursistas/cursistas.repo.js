@@ -36,6 +36,9 @@ function mapCursista(row, { fullCpf = false } = {}) {
     genero: row.genero || '',
 
     status: row.status,
+    // 'importado' e o padrao da coluna, entao base antiga (antes da coluna
+    // existir) continua respondendo o valor certo.
+    origem: row.origem || 'importado',
     passwordDefined: Boolean(row.password_hash),
     cadastroConfirmado: Boolean(row.cadastro_confirmado),
     dataConfirmacao: row.data_confirmacao || null,
@@ -165,6 +168,202 @@ async function atualizarCadastro(id, dados) {
   )
 }
 
+// ---------------------------------------------------------------------------
+// Manutencao do cadastro pela coordenacao
+//
+// Estas funcoes escrevem em colunas que a tela do cursista nunca alcanca (nome,
+// CPF, funcao, escolas). Quem chama e o servico administrativo, que valida antes
+// -- aqui nao ha regra de negocio, so a gravacao.
+// ---------------------------------------------------------------------------
+
+/** Colunas que a coordenacao edita. Fora desta lista nada e gravado. */
+const CAMPOS_EDITAVEIS = [
+  ['cpf', 'cpf'],
+  ['usuarioId', 'usuario_id'],
+  ['name', 'name'],
+  ['funcao', 'funcao'],
+  ['componenteCurricular', 'componente_curricular'],
+  ['eixoTecnologico', 'eixo_tecnologico'],
+  ['cursoTecnico', 'curso_tecnico'],
+  ['formacaoEncontrada', 'formacao_encontrada'],
+  ['dataInicioRede', 'data_inicio_rede'],
+  ['birthDate', 'birth_date'],
+  ['emailInstitucional', 'email_institucional'],
+  ['emailPessoal', 'email_pessoal'],
+  ['phone', 'phone'],
+  ['genero', 'genero'],
+  ['status', 'status'],
+]
+
+/**
+ * Cria um cadastro a mao.
+ *
+ * Nasce sem `password_hash`, igual a quem veio da planilha: a pessoa entra com a
+ * senha padrao e e obrigada a troca-la. Duplicar aqui a logica de primeiro
+ * acesso so criaria uma segunda porta para manter em dia.
+ */
+async function criarManual(dados, connection) {
+  const runner = connection || getPool()
+  const colunas = ['origem']
+  const valores = ['manual']
+
+  for (const [chave, coluna] of CAMPOS_EDITAVEIS) {
+    if (dados[chave] === undefined) continue
+    colunas.push(coluna)
+    valores.push(dados[chave])
+  }
+  // qtde_vinculos acompanha as escolas informadas, como na importacao.
+  colunas.push('qtde_vinculos')
+  valores.push(dados.vinculos?.length || 1)
+
+  const [resultado] = await runner.query(
+    `INSERT INTO cursistas (${colunas.join(', ')}) VALUES (${colunas.map(() => '?').join(', ')})`,
+    valores
+  )
+  return resultado.insertId
+}
+
+/**
+ * Grava a edicao e devolve os nomes dos campos que realmente mudaram.
+ *
+ * A lista de mudancas vai para a auditoria. Sao os NOMES, nunca os valores: a
+ * trilha registra que o CPF foi alterado, jamais qual era ou qual passou a ser.
+ */
+async function atualizarPeloAdmin(id, dados, atual, connection) {
+  const runner = connection || getPool()
+  const sets = []
+  const valores = []
+  const alterados = []
+
+  /**
+   * Compara o que veio do formulario com o que esta no banco.
+   *
+   * O cuidado com data nao e detalhe: o driver devolve coluna DATE como objeto
+   * Date, e o formulario manda "1985-03-14". Comparados como texto, nunca sao
+   * iguais -- e ai toda edicao gravaria a data de novo e a anunciaria como
+   * alterada na auditoria, mesmo sem ninguem ter tocado nela. A trilha existe
+   * para dizer o que mudou; enche-la de mudanca que nao houve a torna inutil.
+   *
+   * Usa as partes locais da data, e nao toISOString(): a Date vem montada no
+   * fuso do processo, e converter para UTC deslocaria o dia em qualquer fuso de
+   * offset positivo.
+   */
+  const mesmoValor = (a, b) => {
+    const normaliza = (valor) => {
+      if (valor === null || valor === undefined || valor === '') return null
+      if (valor instanceof Date) {
+        const p = (n) => String(n).padStart(2, '0')
+        return `${valor.getFullYear()}-${p(valor.getMonth() + 1)}-${p(valor.getDate())}`
+      }
+      return String(valor)
+    }
+    return normaliza(a) === normaliza(b)
+  }
+
+  for (const [chave, coluna] of CAMPOS_EDITAVEIS) {
+    if (dados[chave] === undefined) continue
+    if (mesmoValor(dados[chave], atual[coluna])) continue
+    sets.push(`${coluna} = ?`)
+    valores.push(dados[chave])
+    alterados.push(chave)
+  }
+
+  if (dados.vinculos !== undefined) {
+    sets.push('qtde_vinculos = ?')
+    valores.push(dados.vinculos.length || 1)
+  }
+
+  if (sets.length > 0) {
+    await runner.query(`UPDATE cursistas SET ${sets.join(', ')} WHERE id = ?`, [...valores, id])
+  }
+
+  return alterados
+}
+
+/** Regrava as escolas do cursista. Lista vazia remove todas. */
+async function definirVinculos(cursistaId, vinculos, connection) {
+  const runner = connection || getPool()
+  await runner.query('DELETE FROM cursista_vinculos WHERE cursista_id = ?', [cursistaId])
+  if (!vinculos?.length) return
+
+  const valores = []
+  const placeholders = []
+  vinculos.forEach((vinculo, indice) => {
+    valores.push(cursistaId, indice + 1, vinculo.inep || null, vinculo.gre || null, vinculo.escola || null)
+    placeholders.push('(?, ?, ?, ?, ?)')
+  })
+  await runner.query(
+    `INSERT INTO cursista_vinculos (cursista_id, ordem, inep, gre, escola) VALUES ${placeholders.join(', ')}`,
+    valores
+  )
+}
+
+/**
+ * O que some junto com o cadastro.
+ *
+ * Serve para a tela avisar antes de excluir: as inscricoes tem ON DELETE
+ * CASCADE, entao apagar a pessoa apaga tambem o registro de que ela se
+ * inscreveu -- e isso nao volta. A auditoria nao entra na conta porque foi
+ * criada sem FK justamente para sobreviver a exclusao.
+ */
+async function contarDependencias(id) {
+  requireMysql()
+  const [[linha]] = await getPool().execute(
+    `SELECT
+       (SELECT COUNT(*) FROM inscricoes WHERE cursista_id = ?) AS inscricoes,
+       (SELECT COUNT(*) FROM inscricoes WHERE cursista_id = ? AND status = 'inscrito') AS inscricoesAtivas,
+       (SELECT COUNT(*) FROM cursista_vinculos WHERE cursista_id = ?) AS vinculos`,
+    [id, id, id]
+  )
+  return {
+    inscricoes: Number(linha.inscricoes || 0),
+    inscricoesAtivas: Number(linha.inscricoesAtivas || 0),
+    vinculos: Number(linha.vinculos || 0),
+  }
+}
+
+async function excluir(id) {
+  requireMysql()
+  const [resultado] = await getPool().execute('DELETE FROM cursistas WHERE id = ?', [id])
+  return resultado.affectedRows > 0
+}
+
+/**
+ * Confere se CPF ou USUARIO_ID ja pertencem a outra pessoa.
+ *
+ * As duas colunas sao UNIQUE, entao o banco recusaria de qualquer jeito -- mas
+ * com um erro de driver que nao diz nada a quem esta preenchendo o formulario.
+ * Conferir antes permite responder qual campo esta em uso e de quem.
+ */
+async function encontrarConflito({ cpf, usuarioId, exceto = null }) {
+  requireMysql()
+  const condicoes = []
+  const params = []
+  if (cpf) { condicoes.push('cpf = ?'); params.push(cpf) }
+  if (usuarioId) { condicoes.push('usuario_id = ?'); params.push(usuarioId) }
+  if (condicoes.length === 0) return null
+
+  let sql = `SELECT id, cpf, usuario_id, name FROM cursistas WHERE (${condicoes.join(' OR ')})`
+  if (exceto) { sql += ' AND id <> ?'; params.push(exceto) }
+
+  const [linhas] = await getPool().execute(`${sql} LIMIT 1`, params)
+  const conflito = linhas[0]
+  if (!conflito) return null
+
+  return {
+    campo: cpf && conflito.cpf === cpf ? 'cpf' : 'usuarioId',
+    id: conflito.id,
+    name: conflito.name,
+  }
+}
+
+/** Linha crua, para a edicao comparar o que mudou. */
+async function findRawById(id) {
+  requireMysql()
+  const [linhas] = await getPool().execute('SELECT * FROM cursistas WHERE id = ? LIMIT 1', [id])
+  return linhas[0] || null
+}
+
 /**
  * Insere ou atualiza um lote de cursistas da base oficial.
  *
@@ -257,10 +456,19 @@ async function upsertLoteFromImport(records, connection, { atualizarStatus = fal
      ON DUPLICATE KEY UPDATE
        usuario_id = COALESCE(VALUES(usuario_id), usuario_id),
        name = VALUES(name),
-       funcao = VALUES(funcao),
-       componente_curricular = VALUES(componente_curricular),
-       eixo_tecnologico = VALUES(eixo_tecnologico),
-       curso_tecnico = VALUES(curso_tecnico),
+       -- COALESCE, e nao atribuicao direta, por causa da importacao parcial.
+       -- Um lote de 20 linhas montado so com a aba USUARIOS chega aqui sem
+       -- nenhum dado funcional, e a atribuicao direta apagaria funcao,
+       -- componente e eixo dessas 20 pessoas sem avisar ninguem -- justamente
+       -- de quem se queria corrigir outra coisa.
+       --
+       -- Efeito colateral aceito: a planilha nao consegue mais LIMPAR um destes
+       -- campos, so troca-lo. Limpar passou a ser trabalho da tela de edicao,
+       -- onde a acao e explicita e fica na auditoria.
+       funcao = COALESCE(VALUES(funcao), funcao),
+       componente_curricular = COALESCE(VALUES(componente_curricular), componente_curricular),
+       eixo_tecnologico = COALESCE(VALUES(eixo_tecnologico), eixo_tecnologico),
+       curso_tecnico = COALESCE(VALUES(curso_tecnico), curso_tecnico),
        formacao_encontrada = VALUES(formacao_encontrada),
        qtde_vinculos = VALUES(qtde_vinculos),
        data_inicio_rede = COALESCE(VALUES(data_inicio_rede), data_inicio_rede),
@@ -315,7 +523,7 @@ async function substituirVinculos(records, connection) {
   )
 }
 
-async function list({ search = '', status = '', situacao = '', page = 1, perPage = 50 }) {
+async function list({ search = '', status = '', situacao = '', origem = '', page = 1, perPage = 50 }) {
   requireMysql()
   const filters = []
   const params = []
@@ -335,6 +543,12 @@ async function list({ search = '', status = '', situacao = '', page = 1, perPage
   if (status) {
     filters.push('status = ?')
     params.push(status)
+  }
+  // Filtro de origem: e o que permite achar os cadastros criados a mao no meio
+  // de treze mil importados, para conferir ou desfazer.
+  if (origem === 'manual' || origem === 'importado') {
+    filters.push('origem = ?')
+    params.push(origem)
   }
   // As tres situacoes precisam ser mutuamente exclusivas para os numeros do painel
   // fecharem. O caso que quebra isso e real: o reset de senha pelo admin zera o
@@ -450,4 +664,13 @@ module.exports = {
   substituirVinculos,
   list,
   estatisticas,
+
+  // Manutencao pela coordenacao
+  criarManual,
+  atualizarPeloAdmin,
+  definirVinculos,
+  contarDependencias,
+  excluir,
+  encontrarConflito,
+  findRawById,
 }

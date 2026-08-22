@@ -1,4 +1,0 @@
-cpf;nome_completo;data_nascimento;email;telefone;matricula;cargo;escola;municipio;regional
-01234567890;MARIA DA SILVA SANTOS;1985-03-14;maria.silva@see.pb.gov.br;83999990000;123456-7;Professor;EEEFM Exemplo Um;Joao Pessoa;1a GRE
-09876543229;JOSE CARLOS DE OLIVEIRA;1979-11-02;jose.oliveira@see.pb.gov.br;83988880000;765432-1;Supervisor Escolar;EEEFM Exemplo Dois;Campina Grande;3a GRE
-52998224725;ANA BEATRIZ FERREIRA LIMA;1990-07-23;ana.lima@see.pb.gov.br;83977770000;246810-3;Gestor Escolar;EEEFM Exemplo Tres;Patos;5a GRE
