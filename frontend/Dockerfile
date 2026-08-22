@@ -16,11 +16,23 @@ FROM nginx:1.27-alpine
 
 COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
 
-# NAO adicione `RUN nginx -t` aqui. Ja foi tentado e quebra o build: o nginx
-# resolve o hostname de `proxy_pass http://api:3001` ao ler a configuracao, e
-# durante o build nao existe a rede do compose onde o host `api` vive --
-# "host not found in upstream". A configuracao esta certa; ela so nao e
-# validavel fora do compose.
+# Valida a sintaxe da configuracao no build, e nao no boot.
+#
+# `nginx -t` direto nao funciona aqui: o nginx resolve o hostname de
+# `proxy_pass http://api:3001` ao ler a configuracao, e durante o build nao
+# existe a rede do compose onde o host `api` vive -- falha com "host not found
+# in upstream" mesmo com a configuracao correta. Por isso o teste roda sobre uma
+# copia com o nome trocado por um IP; o que se quer verificar aqui e sintaxe, e
+# ela nao depende de para onde o proxy aponta.
+#
+# Sem isto, erro de sintaxe atravessa o deploy inteiro e so aparece com o nginx
+# recusando subir -- ou seja, com o site fora do ar. Assim o build falha e a
+# versao anterior continua servindo.
+RUN cp /etc/nginx/conf.d/default.conf /tmp/original.conf \
+ && sed -i 's|http://api:3001|http://127.0.0.1:3001|g' /etc/nginx/conf.d/default.conf \
+ && nginx -t \
+ && cp /tmp/original.conf /etc/nginx/conf.d/default.conf \
+ && rm /tmp/original.conf
 
 COPY --from=build /app/dist /usr/share/nginx/html
 
