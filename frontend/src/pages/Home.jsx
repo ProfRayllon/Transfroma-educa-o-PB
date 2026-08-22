@@ -444,6 +444,19 @@ export default function Home() {
               )}
               {visibleCourses.map((course) => {
                 const situacao = SITUACOES[course.situacao] || SITUACOES.fechado
+                /**
+                 * So o curso com inscricao aberta fica "aceso".
+                 *
+                 * Quem chega na Home varre a fila de olho, e sem essa distincao
+                 * um curso que ainda nem tem data parece tao disponivel quanto o
+                 * que aceita inscricao hoje -- a pessoa clica, chega no catalogo
+                 * e nao tem botao. O cinza responde antes do clique.
+                 *
+                 * Continua clicavel de proposito, e a cor volta ao passar o
+                 * mouse: quem quer conhecer um curso que ainda vai abrir
+                 * precisa conseguir chegar na ementa.
+                 */
+                const aberto = course.situacao === 'aberto'
                 return (
                   // A capa deixa de ser fundo do card e ganha area propria, no
                   // mesmo formato quadrado da arte. Antes, o titulo ficava por
@@ -452,17 +465,30 @@ export default function Home() {
                   <Link
                     key={course.id}
                     to="/catalogo-cursos"
-                    className="group flex w-[340px] shrink-0 flex-col overflow-hidden rounded-2xl border border-[#e9d5ff] bg-white shadow-[0_8px_28px_rgba(17,24,39,.10)] transition hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(111,53,181,.22)]"
+                    className={`group flex w-[340px] shrink-0 flex-col overflow-hidden rounded-2xl border bg-white transition hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(111,53,181,.22)] ${
+                      aberto
+                        ? 'border-[#e9d5ff] shadow-[0_8px_28px_rgba(17,24,39,.10)]'
+                        : 'border-[#e5e7eb] shadow-[0_8px_28px_rgba(17,24,39,.06)]'
+                    }`}
                     style={{ scrollSnapAlign: 'start' }}
                   >
                     <div className="relative aspect-square overflow-hidden bg-[#f1edf8]">
-                      <CapaCurso curso={course} />
+                      <CapaCurso
+                        curso={course}
+                        className={aberto ? '' : 'grayscale transition duration-300 group-hover:grayscale-0'}
+                      />
+                      {/* Camada cinza sobre a arte. Vem antes da etiqueta no
+                          DOM para nao cobri-la: o estado do curso precisa
+                          continuar legivel justamente no card apagado. */}
+                      {!aberto && (
+                        <div className="pointer-events-none absolute inset-0 bg-slate-500/25 transition duration-300 group-hover:opacity-0" />
+                      )}
                       <span className={`absolute left-3 top-3 rounded-full px-3 py-1 text-xs font-black backdrop-blur-sm ${situacao.classe}`}>
                         {situacao.texto}
                       </span>
                     </div>
 
-                    <div className="flex flex-1 flex-col p-5">
+                    <div className={`flex flex-1 flex-col p-5 transition duration-300 ${aberto ? '' : 'opacity-60 group-hover:opacity-100'}`}>
                       <div className="mb-2 flex flex-wrap gap-2">
                         <span className="rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-black text-[#6f35b5]">
                           {nomeTrilha(course.trail)}
