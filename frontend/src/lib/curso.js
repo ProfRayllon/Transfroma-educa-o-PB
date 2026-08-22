@@ -32,6 +32,33 @@ export const nomeTrilha = (valor) => NOMES_TRILHA[valor] || valor || 'Trilha'
  * Devolve null quando nao ha nenhum dos dois, para a tela poder omitir a
  * etiqueta inteira em vez de exibir um rotulo sem valor.
  */
+/**
+ * Quando a inscricao abre ou fecha, em texto.
+ *
+ * "Em breve" sozinho fez a equipe achar que a data nao tinha salvado: o curso
+ * mostrava a etiqueta sem dizer que a janela comecava dali a algumas horas.
+ * Dizer a data resolve a duvida antes de ela existir.
+ *
+ * As datas chegam da API em ISO com fuso; o Date do navegador ja converte para
+ * o horario local de quem le.
+ */
+export function quandoInscricao(curso) {
+  const formatar = (valor) => new Date(valor).toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+  })
+
+  if (curso?.situacao === 'em_breve' && curso.enrollmentOpensAt) {
+    return `Inscrições abrem em ${formatar(curso.enrollmentOpensAt)}`
+  }
+  if (curso?.situacao === 'aberto' && curso.enrollmentClosesAt) {
+    return `Inscreva-se até ${formatar(curso.enrollmentClosesAt)}`
+  }
+  if (curso?.situacao === 'encerrado' && curso.enrollmentClosesAt) {
+    return `Inscrições encerradas em ${formatar(curso.enrollmentClosesAt)}`
+  }
+  return null
+}
+
 export function duracaoCurso(curso) {
   if (Number(curso?.workloadHours) > 0) {
     return { texto: `${curso.workloadHours}h`, tipo: 'carga' }

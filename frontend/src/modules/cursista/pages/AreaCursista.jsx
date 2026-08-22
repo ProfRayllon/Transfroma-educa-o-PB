@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  AlertTriangle, BookOpen, CalendarCheck, CheckCircle, Clock,
+  AlertTriangle, CalendarCheck, CheckCircle, Clock,
   GraduationCap, MapPin, UserCog,
 } from 'lucide-react'
 import { useCursista } from '../CursistaContext'
 import cursistaApi, { getCursistaErrorMessage } from '../api'
-import { duracaoCurso } from '../../../lib/curso'
+import { duracaoCurso, nomeTrilha } from '../../../lib/curso'
+import CapaCurso from '../../../components/public/CapaCurso'
 import CursistaShell, { CartaoCursista as Cartao, TituloCartao as TituloSecao } from '../CursistaShell'
 
 export default function AreaCursista() {
@@ -131,15 +132,19 @@ export default function AreaCursista() {
                         : 'border-[#e9e3f4] bg-[#faf8fd] hover:border-[#c4b5fd]'
                     }`}
                   >
-                    <div>
-                      <div className="text-[11px] font-bold uppercase tracking-wider text-[#9070c8]">{curso.primaryTrail}</div>
-                      <h3 className="mt-1 text-[15px] font-black leading-snug text-[#1c1033]">{curso.name}</h3>
-                      <p className="mt-1 text-[13px] text-[#566176]">{curso.trail}</p>
-                      {duracaoCurso(curso) && (
-                        <p className="mt-2 inline-flex items-center gap-1.5 text-[12px] text-[#7c6a9c]">
-                          <Clock size={12} /> {duracaoCurso(curso).texto}
-                        </p>
-                      )}
+                    <div className="flex gap-4">
+                      <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-[#f1edf8]">
+                        <CapaCurso curso={curso} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-bold uppercase tracking-wider text-[#9070c8]">{nomeTrilha(curso.trail)}</div>
+                        <h3 className="mt-1 text-[15px] font-black leading-snug text-[#1c1033]">{curso.name}</h3>
+                        {duracaoCurso(curso) && (
+                          <p className="mt-1.5 inline-flex items-center gap-1.5 text-[12px] text-[#7c6a9c]">
+                            <Clock size={12} /> {duracaoCurso(curso).texto}
+                          </p>
+                        )}
+                      </div>
                     </div>
 
                     {curso.inscrito ? (
@@ -177,15 +182,28 @@ export default function AreaCursista() {
             {inscricoes.atuais.length === 0 ? (
               <p className="text-sm text-[#566176]">Você ainda não se inscreveu em nenhum curso desta edição.</p>
             ) : (
-              <ul className="space-y-2.5">
+              <ul className="grid gap-3 md:grid-cols-2">
                 {inscricoes.atuais.map((inscricao) => (
-                  <li key={inscricao.id} className="flex items-center gap-3 rounded-xl border border-[#e9e3f4] bg-[#faf8fd] px-4 py-3">
-                    <BookOpen size={16} className="flex-shrink-0 text-[#6f35b5]" />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-bold text-[#1c1033]">{inscricao.courseName}</div>
-                      <div className="text-[12px] text-[#7c6a9c]">{inscricao.trail}</div>
+                  <li key={inscricao.id} className="flex items-center gap-4 rounded-xl border border-[#e9e3f4] bg-[#faf8fd] p-3">
+                    {/* Miniatura da capa. A imagem vem pela rota publica, com
+                        cache -- a lista traz so a marca de versao. */}
+                    <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-[#f1edf8]">
+                      <CapaCurso curso={{ id: inscricao.courseId, hasImage: inscricao.hasImage, imageVersion: inscricao.imageVersion, trail: inscricao.trail }} />
                     </div>
-                    <span className="flex-shrink-0 text-xs font-bold text-[#9070c8]">{inscricao.edition}</span>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="text-sm font-black leading-snug text-[#1c1033]">{inscricao.courseName}</h4>
+                      <p className="mt-0.5 text-[12px] text-[#7c6a9c]">{nomeTrilha(inscricao.trail)}</p>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-white px-2 py-0.5 text-[11px] font-black text-green-700">
+                          <CheckCircle size={11} /> Inscrito
+                        </span>
+                        {duracaoCurso(inscricao) && (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-[#7c6a9c]">
+                            <Clock size={11} /> {duracaoCurso(inscricao).texto}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </li>
                 ))}
               </ul>

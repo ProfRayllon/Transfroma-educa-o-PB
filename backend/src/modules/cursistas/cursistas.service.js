@@ -71,7 +71,12 @@ async function listarCursosAbertos(cursistaId) {
   requireMysql()
   const [rows] = await getPool().execute(
     `SELECT c.id, c.name, c.primary_trail, c.secondary_trail, c.total_sessions,
-            c.workload_hours, c.image, c.enrollment_opens_at, c.enrollment_closes_at,
+            c.workload_hours, c.enrollment_opens_at, c.enrollment_closes_at,
+            -- A capa NAO vem inteira: e um data URI de ~2 MB por curso, e
+            -- todo cursista carregaria isso ao abrir a area. A tela busca a
+            -- imagem pela rota publica, que tem cache.
+            (c.image LIKE 'data:image/%') AS tem_imagem,
+            UNIX_TIMESTAMP(c.updated_at) AS versao_capa,
             i.id AS inscricao_id, i.status AS inscricao_status
      FROM courses c
      LEFT JOIN inscricoes i
@@ -90,7 +95,8 @@ async function listarCursosAbertos(cursistaId) {
     trail: row.secondary_trail,
     totalSessions: row.total_sessions,
     workloadHours: row.workload_hours ?? null,
-    image: row.image,
+    hasImage: Boolean(Number(row.tem_imagem)),
+    imageVersion: Number(row.versao_capa || 0),
     enrollmentClosesAt: row.enrollment_closes_at,
     inscrito: row.inscricao_status === 'inscrito',
     inscricaoId: row.inscricao_id || null,
@@ -103,7 +109,9 @@ async function listarMinhasInscricoes(cursistaId) {
   const [rows] = await getPool().execute(
     `SELECT i.id, i.course_id, i.edition, i.status, i.enrolled_at, i.completed_at,
             c.name AS course_name, c.primary_trail, c.secondary_trail, c.total_sessions,
-            c.workload_hours
+            c.workload_hours, c.enrollment_opens_at, c.enrollment_closes_at,
+            (c.image LIKE 'data:image/%') AS tem_imagem,
+            UNIX_TIMESTAMP(c.updated_at) AS versao_capa
      FROM inscricoes i
      JOIN courses c ON c.id = i.course_id
      WHERE i.cursista_id = ?
@@ -119,6 +127,9 @@ async function listarMinhasInscricoes(cursistaId) {
     trail: row.secondary_trail,
     totalSessions: row.total_sessions,
     workloadHours: row.workload_hours ?? null,
+    hasImage: Boolean(Number(row.tem_imagem)),
+    imageVersion: Number(row.versao_capa || 0),
+    enrollmentClosesAt: row.enrollment_closes_at,
     edition: row.edition,
     status: row.status,
     enrolledAt: row.enrolled_at,

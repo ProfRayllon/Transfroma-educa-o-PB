@@ -5,7 +5,7 @@ import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
 import Modal from '../components/ui/Modal'
 import CapaCurso from '../components/public/CapaCurso'
-import { duracaoCurso, nomeTrilha } from '../lib/curso'
+import { duracaoCurso, nomeTrilha, quandoInscricao } from '../lib/curso'
 import publicApi from '../lib/publicApi'
 import { useCursista } from '../modules/cursista/CursistaContext'
 import cursistaApi, { getCursistaErrorMessage } from '../modules/cursista/api'
@@ -248,6 +248,9 @@ export default function PublicCourses() {
                         )}
                       </div>
                       <h3 className="mb-2 text-[16px] font-black leading-snug text-[#1c1033]">{curso.name}</h3>
+                      {quandoInscricao(curso) && (
+                        <p className="mb-2 text-[12px] font-bold text-[#6f35b5]">{quandoInscricao(curso)}</p>
+                      )}
                       <p className="mb-4 flex-1 text-[13px] leading-relaxed text-[#566176]">
                         {curso.objective
                           ? `${curso.objective.slice(0, 150)}${curso.objective.length > 150 ? '...' : ''}`
@@ -323,6 +326,9 @@ export default function PublicCourses() {
                   {SITUACOES[selecionado.situacao]?.texto || 'Em breve'}
                 </span>
               </div>
+              {quandoInscricao(selecionado) && (
+                <p className="mt-3 text-sm font-bold text-[#6f35b5]">{quandoInscricao(selecionado)}</p>
+              )}
             </div>
 
             <div className="rounded-xl border border-[#e9d5ff] bg-white p-5">
