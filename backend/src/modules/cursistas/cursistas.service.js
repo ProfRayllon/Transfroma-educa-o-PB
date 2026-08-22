@@ -227,14 +227,24 @@ async function cancelarInscricao({ cursistaId, courseId, req }) {
 
 /**
  * Campos que o cursista precisa preencher para o cadastro ser considerado
- * completo. A base oficial nao traz nenhum deles (data de nascimento vem vazia
- * em 100% dos registros e telefone nem existe na planilha), entao e o cursista
+ * completo. A base oficial nao traz data de nascimento (vem vazia em 100% dos
+ * registros) nem telefone (a coluna nem existe na planilha), entao e o cursista
  * quem fornece.
  *
- * Genero fica de fora de proposito: e dado sensivel na LGPD (art. 5, II) e
- * exigir a declaracao pediria finalidade especifica. Continua opcional.
+ * O e-mail institucional e obrigatorio porque e o endereco pelo qual a rede
+ * fala com o profissional -- convocacao, acesso ao AVA, certificado. A base
+ * traz esse campo preenchido em menos da metade dos registros, entao quem esta
+ * sem precisa informar.
+ *
+ * Telefone e e-mail pessoal ficam OPCIONAIS: sao contato de conveniencia, e
+ * barrar a inscricao de quem nao quer informar telefone particular cobra caro
+ * por um dado que a formacao nao depende.
+ *
+ * Genero fica de fora pelo mesmo espirito, com um motivo a mais: e dado
+ * sensivel na LGPD (art. 5, II) e exigir a declaracao pediria finalidade
+ * especifica.
  */
-const CAMPOS_OBRIGATORIOS = ['birthDate', 'phone', 'email']
+const CAMPOS_OBRIGATORIOS = ['birthDate', 'emailInstitucional']
 
 const RE_EMAIL = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/
 
@@ -284,8 +294,7 @@ async function atualizarMeuCadastro({ cursistaId, dados, req }) {
 
   const faltando = []
   if (!birthDate) faltando.push('data de nascimento')
-  if (!phone) faltando.push('telefone')
-  if (!emailInstitucional && !emailPessoal) faltando.push('ao menos um e-mail')
+  if (!emailInstitucional) faltando.push('e-mail institucional')
   if (faltando.length > 0) {
     throw erro(400, `Para concluir o cadastro, informe: ${faltando.join(', ')}.`)
   }

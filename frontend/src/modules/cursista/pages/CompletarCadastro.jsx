@@ -42,9 +42,17 @@ function DadoFixo({ icon: Icon, label, valor }) {
 /**
  * Segunda etapa obrigatoria do acesso: completar e confirmar o cadastro.
  *
- * A base oficial nao traz data de nascimento (vazia em todos os registros) nem
- * telefone, e o e-mail falta em cerca de um quinto dos casos -- por isso e o
- * cursista quem fornece. Enquanto nao concluir, o backend recusa as rotas de
+ * Sao exigidos apenas dois campos, e cada um por um motivo: a data de
+ * nascimento porque a base oficial vem com ela vazia em todos os registros, e o
+ * e-mail institucional porque e por ele que a rede fala com o profissional
+ * (convocacao, AVA, certificado) -- e a base traz esse campo preenchido em
+ * menos da metade dos casos.
+ *
+ * Telefone e e-mail pessoal ficam opcionais: sao contato de conveniencia, e
+ * barrar a inscricao de quem nao quer informar telefone particular cobra caro
+ * por um dado de que a formacao nao depende.
+ *
+ * Enquanto os obrigatorios nao forem preenchidos, o backend recusa as rotas de
  * curso e inscricao.
  */
 export default function CompletarCadastro() {
@@ -74,10 +82,12 @@ export default function CompletarCadastro() {
     setForm((f) => ({ ...f, [campo]: event.target.value }))
   }
 
+  // Espelha CAMPOS_OBRIGATORIOS do backend. A lista aparece na tela como
+  // checklist, entao um item a mais aqui seria uma exigencia que o servidor nao
+  // faz -- e a pessoa ficaria travada por um campo que nem precisava preencher.
   const pendencias = [
     { ok: Boolean(form.birthDate), texto: 'Data de nascimento' },
-    { ok: String(form.phone).replace(/\D/g, '').length >= 10, texto: 'Telefone com DDD' },
-    { ok: Boolean(form.emailInstitucional || form.emailPessoal), texto: 'Ao menos um e-mail' },
+    { ok: Boolean(form.emailInstitucional), texto: 'E-mail institucional' },
   ]
   const completo = pendencias.every((p) => p.ok)
 
@@ -212,7 +222,25 @@ export default function CompletarCadastro() {
 
             <div>
               <label className="mb-1.5 block text-xs font-bold text-[#566176]">
-                Telefone com DDD <span className="text-red-500">*</span>
+                E-mail institucional <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="email"
+                  value={form.emailInstitucional}
+                  onChange={alterar('emailInstitucional')}
+                  className="input-field pl-9"
+                  placeholder="nome@see.pb.gov.br"
+                  required
+                />
+              </div>
+              <p className="mt-1 text-[11px] text-[#7c6a9c]">É por aqui que a rede fala com você.</p>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-bold text-[#566176]">
+                Telefone com DDD <span className="font-medium text-[#9070c8]">(opcional)</span>
               </label>
               <div className="relative">
                 <Phone size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -222,27 +250,14 @@ export default function CompletarCadastro() {
                   className="input-field pl-9"
                   placeholder="(83) 99999-0000"
                   inputMode="numeric"
-                  required
                 />
               </div>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-bold text-[#566176]">E-mail institucional</label>
-              <div className="relative">
-                <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="email"
-                  value={form.emailInstitucional}
-                  onChange={alterar('emailInstitucional')}
-                  className="input-field pl-9"
-                  placeholder="nome@see.pb.gov.br"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-xs font-bold text-[#566176]">E-mail pessoal</label>
+              <label className="mb-1.5 block text-xs font-bold text-[#566176]">
+                E-mail pessoal <span className="font-medium text-[#9070c8]">(opcional)</span>
+              </label>
               <div className="relative">
                 <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
