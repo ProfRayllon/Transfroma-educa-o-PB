@@ -250,39 +250,62 @@ export default function PublicCourses() {
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {visiveis.map((curso) => {
                 const situacao = SITUACOES[curso.situacao] || SITUACOES.fechado
+                /**
+                 * Mesmo tratamento da Home: so o curso com inscricao aberta fica
+                 * "aceso". Aqui o cinza para na altura dos botoes -- "Saber
+                 * mais" e justamente o que se faz num curso que ainda vai abrir,
+                 * e apagar esse botao esconderia o unico caminho para a ementa.
+                 */
+                const aberto = curso.situacao === 'aberto'
                 return (
                   <article
                     key={curso.id}
-                    className="group flex flex-col overflow-hidden rounded-2xl border border-[#e9d5ff] bg-white shadow-[0_4px_20px_rgba(111,53,181,.07)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(111,53,181,.14)]"
+                    className={`group flex flex-col overflow-hidden rounded-2xl border bg-white transition hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(111,53,181,.14)] ${
+                      aberto
+                        ? 'border-[#e9d5ff] shadow-[0_4px_20px_rgba(111,53,181,.07)]'
+                        : 'border-[#e5e7eb] shadow-[0_4px_20px_rgba(17,24,39,.05)]'
+                    }`}
                   >
                     <div className="relative aspect-square overflow-hidden bg-[#f1edf8]">
-                      <CapaCurso curso={curso} />
+                      <CapaCurso
+                        curso={curso}
+                        className={aberto ? '' : 'grayscale transition duration-300 group-hover:grayscale-0'}
+                      />
+                      {/* Antes da etiqueta no DOM, para nao cobri-la: e no card
+                          apagado que saber o estado importa mais. */}
+                      {!aberto && (
+                        <div className="pointer-events-none absolute inset-0 bg-slate-500/25 transition duration-300 group-hover:opacity-0" />
+                      )}
                       <span className={`absolute left-3 top-3 rounded-full px-3 py-1 text-xs font-black backdrop-blur-sm ${situacao.classe}`}>
                         {situacao.texto}
                       </span>
                     </div>
 
                     <div className="flex flex-1 flex-col p-5">
-                      <div className="mb-3 flex flex-wrap gap-2">
-                        <span className="rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-black text-[#6f35b5]">
-                          {nomeTrilha(curso.trail)}
-                        </span>
-                        {duracaoCurso(curso) && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#f1f5f9] px-3 py-1 text-xs font-black text-[#566176]">
-                            <Clock size={11} /> {duracaoCurso(curso).texto}
+                      <div className={`flex flex-1 flex-col transition duration-300 ${aberto ? '' : 'opacity-60 group-hover:opacity-100'}`}>
+                        <div className="mb-3 flex flex-wrap gap-2">
+                          <span className="rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-black text-[#6f35b5]">
+                            {nomeTrilha(curso.trail)}
                           </span>
+                          {duracaoCurso(curso) && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-[#f1f5f9] px-3 py-1 text-xs font-black text-[#566176]">
+                              <Clock size={11} /> {duracaoCurso(curso).texto}
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="mb-2 text-[16px] font-black leading-snug text-[#1c1033]">{curso.name}</h3>
+                        {quandoInscricao(curso) && (
+                          <p className="mb-2 text-[12px] font-bold text-[#6f35b5]">{quandoInscricao(curso)}</p>
                         )}
+                        <p className="mb-4 flex-1 text-[13px] leading-relaxed text-[#566176]">
+                          {curso.resumo
+                            ? `${curso.resumo.slice(0, 170)}${curso.resumo.length > 170 ? '...' : ''}`
+                            : 'A ementa deste curso será publicada em breve.'}
+                        </p>
                       </div>
-                      <h3 className="mb-2 text-[16px] font-black leading-snug text-[#1c1033]">{curso.name}</h3>
-                      {quandoInscricao(curso) && (
-                        <p className="mb-2 text-[12px] font-bold text-[#6f35b5]">{quandoInscricao(curso)}</p>
-                      )}
-                      <p className="mb-4 flex-1 text-[13px] leading-relaxed text-[#566176]">
-                        {curso.resumo
-                          ? `${curso.resumo.slice(0, 170)}${curso.resumo.length > 170 ? '...' : ''}`
-                          : 'A ementa deste curso será publicada em breve.'}
-                      </p>
 
+                      {/* Fora da camada de opacidade: os botoes continuam
+                          plenamente legiveis mesmo no card apagado. */}
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
