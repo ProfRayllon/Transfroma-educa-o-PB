@@ -855,22 +855,28 @@ app.patch('/api/courses/:id/status-ava', auth, async (req, res) => {
   }
 })
 
+/**
+ * Excluir curso e so do administrador.
+ *
+ * E a unica operacao de Cursos que NAO segue `mandaEmCursos`: gerencia,
+ * coordenacao e supervisao criam e editam, mas nao apagam. A assimetria e
+ * deliberada -- excluir um curso derruba junto modulos, materiais, ementa e as
+ * inscricoes de quem ja se inscreveu, e nada disso volta. Editar errado se
+ * corrige; excluir, nao.
+ *
+ * Por ser a excecao, a checagem e escrita aqui em vez de sair de uma funcao
+ * compartilhada: quem ler esta rota precisa ver a regra, e nao segui-la ate
+ * outro arquivo para descobrir que ela e diferente das vizinhas.
+ */
 app.delete('/api/courses/:id', auth, async (req, res) => {
   const actor = await store.getUserById(req.user.id)
-  if (!canManageCourses(actor)) return res.status(403).json({ message: 'Apenas administradores, coordenadores e supervisores podem excluir cursos.' })
+  if (actor?.role !== 'administrador') {
+    return res.status(403).json({ message: 'Apenas administradores podem excluir cursos.' })
+  }
 
   try {
     const current = await store.getCourseById(req.params.id)
     if (!current) return res.status(404).json({ message: 'Curso nao encontrado.' })
-    if (
-      !mandaEmCursos(actor)
-      && current.coordinatorId !== actor.id
-      && current.coordinatorName !== actor.name
-      && current.supervisorId !== actor.id
-      && current.supervisorName !== actor.name
-    ) {
-      return res.status(403).json({ message: 'Voce so pode excluir cursos cadastrados para voce.' })
-    }
 
     const deleted = await store.deleteCourse(req.params.id)
     if (!deleted) return res.status(404).json({ message: 'Curso nao encontrado.' })

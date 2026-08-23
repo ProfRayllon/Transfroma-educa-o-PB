@@ -210,12 +210,11 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
     }
   }
 
-  // Mesma regra do backend (DELETE /api/courses/:id): admin e gerencia sempre podem;
-  // coordenador/supervisor so podem excluir o proprio curso.
-  const isCoord = user?.role === 'coordenador' || (user?.function || '').toLowerCase().includes('coordenador')
-  const canDeleteThis = mandaEmCursos(user)
-    || (isCoord && (course.coordinatorId === user?.id || course.coordinatorName === user?.name))
-    || (user?.role === 'supervisor' && (course.supervisorId === user?.id || course.supervisorName === user?.name))
+  // Mesma regra do backend (DELETE /api/courses/:id): excluir e so do
+  // administrador. E a unica operacao de Cursos fora do `mandaEmCursos` --
+  // gerencia e coordenacao criam e editam, mas nao apagam, porque excluir leva
+  // junto modulos, materiais, ementa e inscricoes, e isso nao volta.
+  const canDeleteThis = user?.role === 'administrador'
 
   const courseMaterials = materials.filter((material) => materialMatchesCourse(material, course))
   const totalContents = courseMaterials.length
