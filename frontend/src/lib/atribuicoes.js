@@ -101,6 +101,38 @@ export function avisoDePrazo(item) {
   return { texto: `Prazo ${dataBr(item.prazo)}`, tom: 'normal' }
 }
 
+/**
+ * A data de calendário de um carimbo ISO, no fuso de Brasília.
+ *
+ * `en-CA` devolve "AAAA-MM-DD", que é o formato em que o prazo já chega — assim
+ * os dois viram comparáveis sem passar por `Date` de novo.
+ */
+function diaDoCarimbo(iso) {
+  return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+}
+
+/**
+ * Como o check-in se compara ao prazo.
+ *
+ * É a informação que faltava para quem avalia: "entregou" e "entregou com três
+ * dias de atraso" pedem decisões diferentes, e o sistema já tinha as duas datas
+ * guardadas sem nunca colocá-las lado a lado.
+ */
+export function relacaoComPrazo(item) {
+  if (!item.checkinEm || !item.prazo) return null
+  const dias = diasEntre(item.prazo, diaDoCarimbo(item.checkinEm))
+  if (dias === 0) return { texto: 'no dia do prazo', atrasado: false }
+  if (dias > 0) return { texto: `${dias} dia${dias !== 1 ? 's' : ''} de atraso`, atrasado: true }
+  const adiantado = Math.abs(dias)
+  return { texto: `${adiantado} dia${adiantado !== 1 ? 's' : ''} antes do prazo`, atrasado: false }
+}
+
+function diasEntre(de, ate) {
+  const [a1, m1, d1] = de.split('-').map(Number)
+  const [a2, m2, d2] = ate.split('-').map(Number)
+  return Math.round((new Date(a2, m2 - 1, d2) - new Date(a1, m1 - 1, d1)) / 86400000)
+}
+
 export const CLASSES_AVISO_PRAZO = {
   atrasado: 'text-red-600 bg-red-50 border-red-200',
   hoje: 'text-amber-700 bg-amber-50 border-amber-200',
@@ -113,4 +145,37 @@ export function corDaFrequencia(pct) {
   if (pct >= 70) return { barra: 'bg-green-500', texto: 'text-green-700' }
   if (pct >= 40) return { barra: 'bg-amber-500', texto: 'text-amber-700' }
   return { barra: 'bg-red-500', texto: 'text-red-700' }
+}
+
+/**
+ * A cor do ponto de uma atividade no calendário.
+ *
+ * Verde cumpriu, vermelho não cumpriu ou passou do prazo, amarelo ainda dá
+ * tempo — as três cores pedidas. A quarta situação, "entregue e esperando
+ * avaliação", não ganhou cor nova: ela é um verde VAZADO. Encodá-la pelo
+ * preenchimento e não pelo tom mantém a leitura em três cores (quem entregou
+ * está no verde; o anel diz que ainda falta o aval de alguém) em vez de pedir
+ * que a pessoa decore um quarto significado.
+ */
+export function situacaoNoCalendario(item) {
+  if (item.avaliacao === 'cumprido') return 'cumprido'
+  if (item.avaliacao === 'nao_cumprido') return 'nao_cumprido'
+  if (item.checkinEm) return 'aguardando'
+  const dias = diasAteOPrazo(item.prazo)
+  return dias !== null && dias < 0 ? 'atrasado' : 'no_prazo'
+}
+
+export const PONTOS_CALENDARIO = {
+  cumprido:     { ponto: 'bg-green-500',  rotulo: 'Cumprida' },
+  aguardando:   { ponto: 'bg-white border-2 border-green-500', rotulo: 'Entregue, aguardando avaliação' },
+  no_prazo:     { ponto: 'bg-amber-400',  rotulo: 'Ainda no prazo' },
+  atrasado:     { ponto: 'bg-red-500',    rotulo: 'Passou do prazo' },
+  nao_cumprido: { ponto: 'bg-red-500',    rotulo: 'Não cumprida' },
+}
+
+/** "Carla Mendes · Coordenador" — o cargo diz a quem recorrer, o nome sozinho não. */
+export function comCargo(pessoa) {
+  if (!pessoa?.name) return ''
+  const cargo = ROTULOS_PERFIL[pessoa.role]
+  return cargo ? `${pessoa.name} · ${cargo}` : pessoa.name
 }

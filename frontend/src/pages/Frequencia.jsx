@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Plus, Download, Search, Users, CheckCircle, Clock, TrendingUp, Trash2, Pencil, Eye, X,
+  Plus, Download, Search, Users, CheckCircle, XCircle, Clock, TrendingUp, Trash2, Pencil, Eye, X,
 } from 'lucide-react'
 import Badge from '../components/ui/Badge'
 import StatCard from '../components/ui/StatCard'
 import Modal from '../components/ui/Modal'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
+import { ParDeResponsaveis, LinhaDoTempo } from '../components/atribuicoes/FluxoAtribuicao'
 import api, { getApiErrorMessage } from '../lib/api'
+import { useAuth } from '../context/AuthContext'
 import {
-  ROTULOS_PERFIL, mesAtual, rotuloMes, ultimoDiaDoMes, dataBr, iniciais, corDaFrequencia,
+  ROTULOS_PERFIL, mesAtual, rotuloMes, ultimoDiaDoMes, iniciais, corDaFrequencia,
 } from '../lib/atribuicoes'
 
 /* ─── Atribuir atividade ─── */
@@ -256,9 +258,13 @@ function ModalAtribuir({ open, onClose, onSalvo, showToast }) {
 /* ─── Detalhe de uma pessoa no mes ─── */
 
 function ModalPessoa({ pessoa, mes, onClose, onMudou, showToast, podeEditar }) {
+  const { user } = useAuth()
   const [editando, setEditando] = useState(null)
   const [excluindo, setExcluindo] = useState(null)
   const [formEdicao, setFormEdicao] = useState({ titulo: '', descricao: '', prazo: '' })
+  const [recusando, setRecusando] = useState(null)
+  const [justificativa, setJustificativa] = useState('')
+  const [avaliando, setAvaliando] = useState(false)
 
   if (!pessoa) return null
 
@@ -293,6 +299,43 @@ function ModalPessoa({ pessoa, mes, onClose, onMudou, showToast, podeEditar }) {
       setExcluindo(null)
     }
   }
+
+  /**
+   * Avaliar sem sair da Frequencia.
+   *
+   * Quem atribui a partir daqui costuma se colocar como avaliador -- e o caso
+   * do administrador que atribui ao coordenador: nao ha instancia acima dele
+   * para avaliar. Como administrador e gerencia nao tem a tela "Minhas
+   * avaliacoes", esta e a unica porta que eles tem, e sem ela a atividade
+   * ficaria marcada como feita para sempre, sem veredito.
+   *
+   * Aparece so para quem foi designado avaliador daquela atividade; o servidor
+   * recusa qualquer outro, entao a condicao aqui e para nao oferecer um botao
+   * que vai falhar.
+   */
+  const avaliar = async (item, resultado) => {
+    if (resultado === 'nao_cumprido' && !justificativa.trim()) {
+      showToast('Explique o que faltou antes de marcar como não cumprida.', 'error')
+      return
+    }
+    setAvaliando(true)
+    try {
+      await api.put(`/atribuicoes/${item.id}/avaliacao`, {
+        avaliacao: resultado,
+        observacao: justificativa.trim(),
+      })
+      showToast(resultado === 'cumprido' ? 'Marcada como cumprida.' : 'Marcada como não cumprida.')
+      setRecusando(null)
+      setJustificativa('')
+      onMudou()
+    } catch (e) {
+      showToast(getApiErrorMessage(e, 'Não foi possível registrar a avaliação.'), 'error')
+    } finally {
+      setAvaliando(false)
+    }
+  }
+
+  const souOAvaliador = (item) => item.avaliador?.id === user?.id && item.checkinEm && !item.avaliacao
 
   const cor = corDaFrequencia(pessoa.frequencia)
 
@@ -352,11 +395,7 @@ function ModalPessoa({ pessoa, mes, onClose, onMudou, showToast, podeEditar }) {
                       <Badge status={item.situacao} showDot />
                     </div>
 
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400">
-                      {item.prazo && <span>Prazo {dataBr(item.prazo)}</span>}
-                      <span>{item.checkinEm ? `Marcou em ${dataBr(item.checkinEm)}` : 'Não marcou como feito'}</span>
-                      <span>Avalia: {item.avaliador.name}</span>
-                    </div>
+                    <ParDeResponsaveis responsavel={item.responsavel} avaliador={item.avaliador} compacto />
 
                     {item.avaliacaoObs && (
                       <p className={`text-xs border-l-2 pl-2.5 ${
@@ -364,6 +403,52 @@ function ModalPessoa({ pessoa, mes, onClose, onMudou, showToast, podeEditar }) {
                       }`}>
                         {item.avaliacaoObs}
                       </p>
+                    )}
+
+                    {/* O fluxo completo tambem aqui: e nesta tela que a
+                        coordenacao vai querer entender por que um percentual
+                        ficou baixo, e a resposta costuma estar nas datas. */}
+                    <LinhaDoTempo item={item} titulo="Do início ao fim" />
+
+                    {souOAvaliador(item) && (
+                      <div className="space-y-2 pt-1 border-t border-gray-100">
+                        <p className="text-[11px] font-semibold text-gray-500 pt-1">
+                          Você é quem avalia esta atividade.
+                        </p>
+                        {recusando === item.id && (
+                          <textarea
+                            value={justificativa}
+                            onChange={(e) => setJustificativa(e.target.value)}
+                            rows={2}
+                            autoFocus
+                            className="input-field resize-none text-xs"
+                            placeholder="O que faltou para esta atividade ser considerada cumprida?"
+                          />
+                        )}
+                        <div className="flex flex-wrap gap-2">
+                          {recusando !== item.id && (
+                            <button onClick={() => avaliar(item, 'cumprido')} disabled={avaliando} className="btn-primary text-xs py-1.5">
+                              <CheckCircle size={13} /> Cumpriu
+                            </button>
+                          )}
+                          <button
+                            onClick={() => (recusando === item.id ? avaliar(item, 'nao_cumprido') : setRecusando(item.id))}
+                            disabled={avaliando}
+                            className={recusando === item.id
+                              ? 'btn-primary text-xs py-1.5 !bg-red-600 hover:!bg-red-700'
+                              : 'btn-secondary text-xs py-1.5'}
+                          >
+                            <XCircle size={13} /> {recusando === item.id
+                              ? (avaliando ? 'Salvando...' : 'Confirmar não cumpriu')
+                              : 'Não cumpriu'}
+                          </button>
+                          {recusando === item.id && (
+                            <button onClick={() => { setRecusando(null); setJustificativa('') }} className="btn-secondary text-xs py-1.5">
+                              Cancelar
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     )}
 
                     {podeEditar && (
@@ -408,6 +493,7 @@ export default function Frequencia() {
   const [atribuindo, setAtribuindo] = useState(false)
   const [pessoaAberta, setPessoaAberta] = useState(null)
   const [baixando, setBaixando] = useState(false)
+  const [menuPlanilha, setMenuPlanilha] = useState(false)
   const [toast, setToast] = useState(null)
 
   const showToast = (message, type = 'success') => {
@@ -444,24 +530,22 @@ export default function Frequencia() {
     return lista.filter((p) => p.name.toLowerCase().includes(termo) || (p.email || '').toLowerCase().includes(termo))
   }, [dados, busca])
 
-  const perfisComGente = useMemo(() => {
-    const presentes = new Set((dados?.pessoas || []).map((p) => p.role))
-    // Sem filtro de perfil a lista ja traz todo mundo; com filtro, ela so traz
-    // um perfil -- entao as opcoes vem do proprio filtro para nao encolher.
-    return perfil ? [perfil] : [...presentes]
-  }, [dados, perfil])
+  // As opcoes do filtro vem do servidor, e nao dos dados carregados: elas sao os
+  // perfis que ESTE usuario alcanca na hierarquia, entao a lista nao encolhe
+  // quando um perfil fica sem ninguem no mes, nem cresce alem do que ele pode ver.
+  const perfisDisponiveis = dados?.perfis || []
 
-  const baixarPlanilha = async () => {
+  const baixarPlanilha = async (formato = 'matriz') => {
     setBaixando(true)
     try {
       const resposta = await api.get('/atribuicoes/relatorio', {
-        params: { mes, role: perfil || undefined },
+        params: { mes, role: perfil || undefined, formato },
         responseType: 'blob',
       })
       const url = URL.createObjectURL(new Blob([resposta.data], { type: 'text/csv;charset=utf-8' }))
       const link = document.createElement('a')
       link.href = url
-      link.download = `frequencia-${mes}${perfil ? `-${perfil}` : ''}.csv`
+      link.download = `frequencia-${mes}${perfil ? `-${perfil}` : ''}${formato === 'detalhado' ? '-detalhado' : ''}.csv`
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -471,6 +555,7 @@ export default function Frequencia() {
       showToast(getApiErrorMessage(e, 'Erro ao baixar a planilha.'), 'error')
     } finally {
       setBaixando(false)
+      setMenuPlanilha(false)
     }
   }
 
@@ -483,14 +568,45 @@ export default function Frequencia() {
         </div>
         <div className="flex items-center gap-2">
           {resumo?.podeExportar && (
-            <button
-              onClick={baixarPlanilha}
-              disabled={baixando || !dados?.total}
-              title={!dados?.total ? 'Nada atribuído neste mês' : 'Baixar a planilha do mês'}
-              className="btn-secondary text-sm disabled:opacity-50"
-            >
-              <Download size={14} /> {baixando ? 'Gerando...' : 'Baixar planilha'}
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setMenuPlanilha((aberto) => !aberto)}
+                disabled={baixando || !dados?.total}
+                title={!dados?.total ? 'Nada atribuído neste mês' : 'Baixar a planilha do mês'}
+                className="btn-secondary text-sm disabled:opacity-50"
+              >
+                <Download size={14} /> {baixando ? 'Gerando...' : 'Baixar planilha'}
+              </button>
+
+              {/* Dois formatos porque sao duas leituras diferentes, e nao duas
+                  versoes da mesma: a matriz responde "como foi o mes", a
+                  detalhada responde "o que o avaliador escreveu". */}
+              {menuPlanilha && !baixando && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setMenuPlanilha(false)} />
+                  <div className="absolute right-0 mt-2 w-72 rounded-xl border border-gray-200 bg-white shadow-lg z-20 overflow-hidden">
+                    <button
+                      onClick={() => baixarPlanilha('matriz')}
+                      className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-100"
+                    >
+                      <span className="block text-sm font-medium text-gray-800">Frequência do mês</span>
+                      <span className="block text-xs text-gray-500 mt-0.5">
+                        Uma linha por pessoa, atividades nas colunas.
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => baixarPlanilha('detalhado')}
+                      className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors"
+                    >
+                      <span className="block text-sm font-medium text-gray-800">Detalhada</span>
+                      <span className="block text-xs text-gray-500 mt-0.5">
+                        Uma linha por atividade, com datas e justificativas.
+                      </span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           )}
           <button onClick={() => setAtribuindo(true)} className="btn-primary text-sm">
             <Plus size={14} /> Atribuir atividade
@@ -538,8 +654,8 @@ export default function Frequencia() {
             <label className="block text-xs font-medium text-gray-500 mb-1.5">Perfil</label>
             <select value={perfil} onChange={(e) => setPerfil(e.target.value)} className="select-field">
               <option value="">Todos os perfis</option>
-              {perfisComGente.map((papel) => (
-                <option key={papel} value={papel}>{ROTULOS_PERFIL[papel] || papel}</option>
+              {perfisDisponiveis.map(({ role, label }) => (
+                <option key={role} value={role}>{label}</option>
               ))}
             </select>
           </div>

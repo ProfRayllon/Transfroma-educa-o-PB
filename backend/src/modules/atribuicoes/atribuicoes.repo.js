@@ -55,7 +55,14 @@ function mapAtribuicao(row) {
       name: row.avaliador_nome,
       role: row.avaliador_role,
     },
-    criadoPor: row.criado_por ? { id: row.criado_por, name: row.criador_nome } : null,
+    // O cargo vem junto do nome em toda pessoa que a tela mostra: "por Carla
+    // Mendes" nao diz se quem atribuiu foi a coordenacao ou a supervisao, e e
+    // isso que decide a quem recorrer quando a atividade nao esta clara.
+    criadoPor: row.criado_por
+      ? { id: row.criado_por, name: row.criador_nome, role: row.criador_role }
+      : null,
+    // Primeira etapa da linha do tempo da tela: quando a atividade nasceu.
+    criadoEm: dataHora(row.created_at),
 
     checkinEm: dataHora(row.checkin_em),
     checkinObs: row.checkin_obs || null,
@@ -79,7 +86,7 @@ const SELECT_BASE = `
   SELECT a.*,
          r.name AS responsavel_nome, r.email AS responsavel_email, r.role AS responsavel_role,
          v.name AS avaliador_nome, v.role AS avaliador_role,
-         c.name AS criador_nome
+         c.name AS criador_nome, c.role AS criador_role
     FROM atribuicoes a
     JOIN users r ON r.id = a.responsavel_id
     JOIN users v ON v.id = a.avaliador_id
@@ -94,7 +101,7 @@ const SELECT_BASE = `
  * precisa fazer. Dentro disso, prazo mais proximo primeiro; sem prazo por
  * ultimo, porque "ate o fim do mes" e sempre menos urgente que uma data.
  */
-async function listar({ mes, responsavelId, avaliadorId, roles, apenasPendentes } = {}) {
+async function listar({ mes, responsavelId, avaliadorId, roles } = {}) {
   requireMysql()
 
   const filtros = []
@@ -103,7 +110,6 @@ async function listar({ mes, responsavelId, avaliadorId, roles, apenasPendentes 
   if (mes) { filtros.push('a.mes_referencia = ?'); params.push(mes) }
   if (responsavelId) { filtros.push('a.responsavel_id = ?'); params.push(responsavelId) }
   if (avaliadorId) { filtros.push('a.avaliador_id = ?'); params.push(avaliadorId) }
-  if (apenasPendentes) filtros.push('a.avaliacao IS NULL')
   if (roles?.length) {
     filtros.push(`r.role IN (${roles.map(() => '?').join(', ')})`)
     params.push(...roles)

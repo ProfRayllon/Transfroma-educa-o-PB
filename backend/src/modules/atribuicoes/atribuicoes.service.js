@@ -3,23 +3,53 @@
 const repo = require('./atribuicoes.repo')
 
 /**
- * Quem pode RECEBER atividade: todo perfil, menos administrador.
+ * Quem NAO recebe atividade.
  *
- * O modulo antigo trabalhava com uma lista fechada de seis perfis avaliados, e
- * quem nao estivesse nela simplesmente nao existia para a frequencia. Aqui a
- * regra e por exclusao -- perfil novo no sistema ja nasce podendo receber, sem
- * precisar lembrar de vir editar esta lista.
+ * Administrador e gerencia coordenam o programa: eles poem atividade na
+ * estrutura, nao recebem dela. Qualquer outro perfil recebe -- inclusive um que
+ * seja criado depois, sem precisar lembrar de vir editar esta lista.
  */
-const PERFIL_QUE_NAO_RECEBE = 'administrador'
+const PERFIS_QUE_NAO_RECEBEM = ['administrador', 'gerencia']
+
+const TODOS_OS_PERFIS = ['administrador', 'gerencia', 'coordenador', 'supervisor',
+  'supervisor_tutoria', 'professor', 'tutor', 'revisor', 'tecnico', 'gestao', 'ti']
+
+const PERFIS_QUE_RECEBEM = TODOS_OS_PERFIS.filter((perfil) => !PERFIS_QUE_NAO_RECEBEM.includes(perfil))
 
 /**
- * Quem pode ATRIBUIR e acompanhar.
+ * Quem atribui PARA QUEM -- a hierarquia do programa.
  *
- * Gerencia entra aqui a pedido da coordenacao. Nos outros dominios ela continua
- * restrita a Cursos -- e por isso a regra vive neste modulo, e nao no
- * `mandaEmCursos` do app, que significa outra coisa.
+ * Antes, quem podia atribuir podia atribuir a qualquer um. Agora cada nivel
+ * alcanca apenas o nivel abaixo dele, e a atividade desce a estrutura em vez de
+ * pular etapas: a coordenacao cobra a supervisao, a supervisao cobra quem
+ * produz e quem tutora. Um perfil ausente daqui (professor, revisor, apoio
+ * tecnico, tutor) e ponta de linha -- so executa.
+ *
+ * Duas trilhas paralelas, que e como o sistema ja separa os papeis:
+ *
+ *   coordenador -> supervisor          -> professor, revisor
+ *   coordenador -> supervisor_tutoria  -> tutor
+ *
+ * 'tecnico' e 'ti' sao o mesmo apoio tecnico com dois nomes: a coordenacao
+ * alcanca os dois, e os dois sao ponta de linha. Continuam como perfis
+ * separados no sistema porque 'ti' carrega um poder proprio fora daqui -- e
+ * quem mexe no status do AVA, em Cursos. Juntar os dois resolveria a duplicidade
+ * de nome e tiraria esse poder de quem o tem hoje.
+ *
+ * Administrador e gerencia alcancam todo mundo. A intencao da coordenacao e que
+ * eles atribuam ao coordenador e deixem a hierarquia seguir, mas isso e pratica
+ * de trabalho e nao trava de sistema -- eles precisam poder alcancar qualquer
+ * perfil quando algo escapa do fluxo normal.
  */
-const PERFIS_QUE_ATRIBUEM = ['administrador', 'gerencia', 'coordenador', 'supervisor']
+const HIERARQUIA = {
+  administrador: PERFIS_QUE_RECEBEM,
+  gerencia: PERFIS_QUE_RECEBEM,
+  coordenador: ['supervisor', 'supervisor_tutoria', 'revisor', 'professor', 'tecnico', 'ti'],
+  supervisor: ['revisor', 'professor'],
+  supervisor_tutoria: ['tutor'],
+}
+
+const PERFIS_QUE_ATRIBUEM = Object.keys(HIERARQUIA)
 
 /** Somente o administrador baixa a planilha do mes inteiro. */
 const PERFIL_QUE_EXPORTA = 'administrador'
@@ -56,8 +86,17 @@ function podeAtribuir(usuario) {
   return PERFIS_QUE_ATRIBUEM.includes(usuario?.role)
 }
 
+/** Os perfis que este usuario alcanca. Lista vazia para quem so executa. */
+function perfisAlcancados(usuario) {
+  return HIERARQUIA[usuario?.role] || []
+}
+
+function podeAtribuirPara(usuario, perfilAlvo) {
+  return perfisAlcancados(usuario).includes(perfilAlvo)
+}
+
 function podeReceber(usuario) {
-  return Boolean(usuario) && usuario.role !== PERFIL_QUE_NAO_RECEBE
+  return Boolean(usuario) && !PERFIS_QUE_NAO_RECEBEM.includes(usuario.role)
 }
 
 function podeExportar(usuario) {
@@ -132,15 +171,19 @@ async function criar({ dados, actor, buscarUsuario }) {
   const avaliador = await buscarUsuario(avaliadorId)
   if (!avaliador || avaliador.status !== 'ativo') throw erro('O avaliador escolhido nao esta ativo no sistema.')
 
-  // Conferir um por um, e nao confiar na lista que veio da tela: sem isso da
-  // para atribuir ao administrador editando a requisicao.
+  // Conferir um por um, e nao confiar na lista que veio da tela: a tela ja
+  // mostra apenas os perfis alcancados, mas quem editar a requisicao conseguiria
+  // atribuir para cima da hierarquia se a checagem morasse so no navegador.
   const responsaveis = await Promise.all(responsavelIds.map((id) => buscarUsuario(id)))
   responsaveis.forEach((pessoa, indice) => {
     if (!pessoa || pessoa.status !== 'ativo') {
       throw erro(`A pessoa selecionada (id ${responsavelIds[indice]}) nao esta ativa no sistema.`)
     }
     if (!podeReceber(pessoa)) {
-      throw erro(`${pessoa.name} e administrador e nao recebe atribuicao.`)
+      throw erro(`${pessoa.name} e ${ROTULOS_PERFIL[pessoa.role]} e nao recebe atribuicao.`)
+    }
+    if (!podeAtribuirPara(actor, pessoa.role)) {
+      throw erro(`Voce nao atribui atividade para ${ROTULOS_PERFIL[pessoa.role]}. Seu perfil alcanca: ${perfisAlcancados(actor).map((r) => ROTULOS_PERFIL[r]).join(', ')}.`, 403)
     }
   })
 
@@ -164,25 +207,39 @@ async function listarMinhas({ actor, mes }) {
   return { mes: mesReferencia, rotuloMes: rotuloMes(mesReferencia), ...resumir(itens), itens }
 }
 
-/** A fila de quem avalia: so o que foi designado a ele. */
-async function listarParaAvaliar({ actor, mes, apenasPendentes = true }) {
+/**
+ * A fila de quem avalia, em tres baldes.
+ *
+ * Antes so vinha o que estava pendente, e quem avaliava perdia de vista o que
+ * ja tinha julgado no mes -- nao havia como responder "o que eu decidi sobre
+ * essa pessoa semana passada?" sem procurar na tela de outra pessoa.
+ *
+ *   aguardando    a pessoa marcou como feita e espera o veredito -- o trabalho
+ *   avaliadas     o historico do mes, com o que ele mesmo decidiu
+ *   naoIniciadas  ninguem marcou ainda; nao ha o que julgar, mas ele precisa
+ *                 conseguir ver quem esta parado
+ */
+async function listarParaAvaliar({ actor, mes }) {
   const mesReferencia = normalizarMes(mes)
-  const itens = await repo.listar({
-    mes: mesReferencia,
-    avaliadorId: actor.id,
-    apenasPendentes: Boolean(apenasPendentes),
-  })
+  const itens = await repo.listar({ mes: mesReferencia, avaliadorId: actor.id })
 
-  // Quem ainda nao deu check-in nao e trabalho do avaliador: ele nao tem o que
-  // julgar antes de a pessoa afirmar que fez.
-  const aguardando = itens.filter((item) => item.checkinEm)
-  const naoIniciadas = itens.filter((item) => !item.checkinEm)
+  const avaliadas = itens.filter((item) => item.avaliacao)
+  const aguardando = itens.filter((item) => !item.avaliacao && item.checkinEm)
+  const naoIniciadas = itens.filter((item) => !item.avaliacao && !item.checkinEm)
 
   return {
     mes: mesReferencia,
     rotuloMes: rotuloMes(mesReferencia),
     aguardando,
+    avaliadas,
     naoIniciadas,
+    resumo: {
+      aguardando: aguardando.length,
+      avaliadas: avaliadas.length,
+      cumpridas: avaliadas.filter((item) => item.avaliacao === 'cumprido').length,
+      naoCumpridas: avaliadas.filter((item) => item.avaliacao === 'nao_cumprido').length,
+      naoIniciadas: naoIniciadas.length,
+    },
   }
 }
 
@@ -216,7 +273,16 @@ async function acompanhamento({ actor, mes, role }) {
   if (!podeAtribuir(actor)) throw erro('Sem acesso ao acompanhamento de frequencia.', 403)
 
   const mesReferencia = normalizarMes(mes)
-  const roles = role ? [String(role)] : null
+
+  // O acompanhamento enxerga exatamente o que o perfil alcanca -- a supervisao
+  // ve professores e revisores, nao o mes da coordenacao. Um filtro de perfil
+  // fora desse alcance nao amplia nada: ele e cruzado com a lista permitida.
+  const alcance = perfisAlcancados(actor)
+  const roles = role ? alcance.filter((perfil) => perfil === String(role)) : alcance
+  if (roles.length === 0) {
+    return { mes: mesReferencia, rotuloMes: rotuloMes(mesReferencia), ...resumir([]), pessoas: [], perfis: alcance }
+  }
+
   const itens = await repo.listar({ mes: mesReferencia, roles })
 
   const porPessoa = new Map()
@@ -236,6 +302,9 @@ async function acompanhamento({ actor, mes, role }) {
     mes: mesReferencia,
     rotuloMes: rotuloMes(mesReferencia),
     ...resumir(itens),
+    // Os perfis que a tela pode oferecer no filtro, vindos do servidor: assim o
+    // que aparece no seletor e o que a pessoa realmente alcanca.
+    perfis: alcance.map((perfil) => ({ role: perfil, label: ROTULOS_PERFIL[perfil] })),
     pessoas,
   }
 }
@@ -271,6 +340,7 @@ async function registrarAvaliacao({ id, actor, avaliacao, observacao }) {
   if (atribuicao.avaliador.id !== actor.id) {
     throw erro('Somente quem foi designado para avaliar esta atividade pode registrar o resultado.', 403)
   }
+
   if (!atribuicao.checkinEm) {
     throw erro('A pessoa ainda nao marcou esta atividade como feita.', 409)
   }
@@ -319,11 +389,14 @@ async function excluir({ id, actor }) {
 }
 
 module.exports = {
+  HIERARQUIA,
   PERFIS_QUE_ATRIBUEM,
-  PERFIL_QUE_NAO_RECEBE,
+  PERFIS_QUE_NAO_RECEBEM,
   ROTULOS_PERFIL,
   ROTULOS_SITUACAO,
   podeAtribuir,
+  podeAtribuirPara,
+  perfisAlcancados,
   podeReceber,
   podeExportar,
   mesAtual,

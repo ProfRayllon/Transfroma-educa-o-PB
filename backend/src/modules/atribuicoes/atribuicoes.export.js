@@ -22,33 +22,134 @@ function dataBr(valor) {
   return new Date(valor).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
 }
 
+const perfilDe = (item) => ROTULOS_PERFIL[item.responsavel.role] || item.responsavel.role
+const situacaoDe = (item) => ROTULOS_SITUACAO[item.situacao] || item.situacao
+
+/** Agrupa os itens do mes por pessoa, ja com o resumo de cada uma. */
+function agruparPorPessoa(itens) {
+  const mapa = new Map()
+  for (const item of itens) {
+    const chave = item.responsavel.id
+    if (!mapa.has(chave)) mapa.set(chave, { pessoa: item.responsavel, itens: [] })
+    mapa.get(chave).itens.push(item)
+  }
+
+  return [...mapa.values()]
+    .map((linha) => ({ ...linha, ...resumir(linha.itens) }))
+    .sort((a, b) => perfilDe(a.itens[0]).localeCompare(perfilDe(b.itens[0]), 'pt-BR')
+      || a.frequencia - b.frequencia
+      || a.pessoa.name.localeCompare(b.pessoa.name, 'pt-BR'))
+}
+
 /**
- * Uma linha por atividade, com o perfil e o percentual da pessoa repetidos.
+ * Colunas fixas das duas planilhas: quem e a pessoa e como foi o mes dela.
  *
- * Repetir parece redundante lendo de cima a baixo, mas e o que torna o arquivo
- * util: assim ele responde tanto "o que essa pessoa fez" quanto "como foi o
- * perfil inteiro" numa tabela dinamica, sem ninguem precisar cruzar duas abas.
+ * Repetidas em cada linha na versao detalhada de proposito -- e o que deixa a
+ * tabela dinamica somar por perfil sem ninguem precisar cruzar duas abas.
  */
-const COLUNAS = [
-  { titulo: 'mes', valor: (l) => l.item.mesReferencia },
-  { titulo: 'perfil', valor: (l) => ROTULOS_PERFIL[l.item.responsavel.role] || l.item.responsavel.role },
-  { titulo: 'pessoa', valor: (l) => l.item.responsavel.name },
-  { titulo: 'email', valor: (l) => l.item.responsavel.email || '' },
-  { titulo: 'frequencia_da_pessoa_pct', valor: (l) => l.frequenciaPessoa },
-  { titulo: 'atividades_atribuidas', valor: (l) => l.totalPessoa },
-  { titulo: 'atividades_cumpridas', valor: (l) => l.cumpridasPessoa },
-  { titulo: 'atividade', valor: (l) => l.item.titulo },
-  { titulo: 'descricao', valor: (l) => l.item.descricao || '' },
-  { titulo: 'prazo', valor: (l) => dataBr(l.item.prazo) },
-  { titulo: 'marcou_como_feito', valor: (l) => (l.item.checkinEm ? 'Sim' : 'Nao') },
-  { titulo: 'data_do_checkin', valor: (l) => dataBr(l.item.checkinEm) },
-  { titulo: 'observacao_da_pessoa', valor: (l) => l.item.checkinObs || '' },
-  { titulo: 'avaliador', valor: (l) => l.item.avaliador.name },
-  { titulo: 'resultado', valor: (l) => ROTULOS_SITUACAO[l.item.situacao] || l.item.situacao },
-  { titulo: 'data_da_avaliacao', valor: (l) => dataBr(l.item.avaliadoEm) },
-  { titulo: 'justificativa_do_avaliador', valor: (l) => l.item.avaliacaoObs || '' },
-  { titulo: 'atribuido_por', valor: (l) => l.item.criadoPor?.name || '' },
+const COLUNAS_PESSOA = [
+  { titulo: 'mes', valor: (l) => l.mes },
+  { titulo: 'perfil', valor: (l) => l.perfil },
+  { titulo: 'pessoa', valor: (l) => l.pessoa.name },
+  { titulo: 'email', valor: (l) => l.pessoa.email || '' },
+  { titulo: 'frequencia_pct', valor: (l) => l.frequencia },
+  { titulo: 'atividades_atribuidas', valor: (l) => l.total },
+  { titulo: 'cumpridas', valor: (l) => l.cumpridas },
+  { titulo: 'nao_cumpridas', valor: (l) => l.naoCumpridas },
+  { titulo: 'aguardando_avaliacao', valor: (l) => l.aguardando },
+  { titulo: 'a_fazer', valor: (l) => l.aFazer },
 ]
+
+/**
+ * Planilha de frequencia: UMA linha por pessoa, atividades nas colunas.
+ *
+ * E a leitura que a coordenacao faz de verdade -- a mesma forma de um diario de
+ * classe, com as pessoas nas linhas e o que foi cobrado nas colunas. Como a
+ * atribuicao normalmente vai para o perfil inteiro, os titulos se repetem entre
+ * as pessoas e as colunas se alinham sozinhas; celula vazia quer dizer que
+ * aquela atividade nao foi atribuida aquela pessoa.
+ *
+ * As colunas saem das mais compartilhadas para as menos: assim o que vale para
+ * o grupo todo fica a esquerda, perto dos totais, e o que e de uma pessoa so
+ * cai para a direita em vez de furar a leitura no meio.
+ */
+function montarMatriz(itens, mes) {
+  const quantasPessoas = new Map()
+  for (const item of itens) {
+    if (!quantasPessoas.has(item.titulo)) quantasPessoas.set(item.titulo, new Set())
+    quantasPessoas.get(item.titulo).add(item.responsavel.id)
+  }
+
+  const titulos = [...quantasPessoas.entries()]
+    .sort((a, b) => b[1].size - a[1].size || a[0].localeCompare(b[0], 'pt-BR'))
+    .map(([titulo]) => titulo)
+
+  const colunasAtividades = titulos.map((titulo) => ({
+    titulo,
+    valor: (linha) => {
+      // A mesma pessoa pode ter recebido duas atividades de mesmo titulo no mes
+      // (uma correcao, uma repeticao). Juntar em vez de deixar uma sobrescrever
+      // a outra -- silenciosamente perder uma linha do relatorio seria pior que
+      // uma celula com dois valores.
+      const dela = linha.itens.filter((item) => item.titulo === titulo)
+      return dela.map(situacaoDe).join(' | ')
+    },
+  }))
+
+  const colunas = [
+    ...COLUNAS_PESSOA,
+    { titulo: 'avaliadores', valor: (l) => [...new Set(l.itens.map((i) => i.avaliador.name))].join(' | ') },
+    ...colunasAtividades,
+  ]
+
+  const linhas = agruparPorPessoa(itens).map((linha) => ({
+    ...linha,
+    mes,
+    perfil: perfilDe(linha.itens[0]),
+  }))
+
+  return { colunas, linhas }
+}
+
+/**
+ * Planilha detalhada: uma linha por atividade.
+ *
+ * Continua existindo porque a matriz nao tem onde caber o que o avaliador
+ * escreveu -- e a justificativa de um "nao cumprido" e exatamente o que a
+ * coordenacao vai querer ler quando o percentual chamar atencao.
+ */
+function montarDetalhada(itens, mes) {
+  const colunas = [
+    ...COLUNAS_PESSOA,
+    { titulo: 'atividade', valor: (l) => l.item.titulo },
+    { titulo: 'descricao', valor: (l) => l.item.descricao || '' },
+    { titulo: 'prazo', valor: (l) => dataBr(l.item.prazo) },
+    { titulo: 'atribuida_em', valor: (l) => dataBr(l.item.criadoEm) },
+    { titulo: 'atribuida_por', valor: (l) => l.item.criadoPor?.name || '' },
+    { titulo: 'marcou_como_feito', valor: (l) => (l.item.checkinEm ? 'Sim' : 'Nao') },
+    { titulo: 'data_do_checkin', valor: (l) => dataBr(l.item.checkinEm) },
+    { titulo: 'observacao_da_pessoa', valor: (l) => l.item.checkinObs || '' },
+    { titulo: 'avaliador', valor: (l) => l.item.avaliador.name },
+    { titulo: 'resultado', valor: (l) => situacaoDe(l.item) },
+    { titulo: 'data_da_avaliacao', valor: (l) => dataBr(l.item.avaliadoEm) },
+    { titulo: 'justificativa_do_avaliador', valor: (l) => l.item.avaliacaoObs || '' },
+  ]
+
+  const linhas = []
+  for (const grupo of agruparPorPessoa(itens)) {
+    const perfil = perfilDe(grupo.itens[0])
+    for (const item of grupo.itens) {
+      linhas.push({ ...grupo, mes, perfil, item })
+    }
+  }
+
+  return { colunas, linhas }
+}
+
+const FORMATOS = {
+  matriz: montarMatriz,
+  detalhado: montarDetalhada,
+}
 
 /**
  * Planilha do mes para o administrador.
@@ -57,49 +158,23 @@ const COLUNAS = [
  * precisa de atencao aparece no topo de cada bloco, que e a leitura que a
  * coordenacao faz do relatorio.
  */
-async function exportarMes({ mes, role = null }) {
+async function exportarMes({ mes, role = null, formato = 'matriz' }) {
   const mesReferencia = normalizarMes(mes)
+  const montar = FORMATOS[formato] || FORMATOS.matriz
   const itens = await repo.listar({
     mes: mesReferencia,
     roles: role ? [String(role)] : null,
   })
 
-  // O percentual e da PESSOA, nao da linha -- por isso resume antes de montar.
-  const porPessoa = new Map()
-  for (const item of itens) {
-    const chave = item.responsavel.id
-    if (!porPessoa.has(chave)) porPessoa.set(chave, [])
-    porPessoa.get(chave).push(item)
-  }
-
-  const linhas = []
-  for (const [, itensDaPessoa] of porPessoa) {
-    const resumo = resumir(itensDaPessoa)
-    for (const item of itensDaPessoa) {
-      linhas.push({
-        item,
-        frequenciaPessoa: resumo.frequencia,
-        totalPessoa: resumo.total,
-        cumpridasPessoa: resumo.cumpridas,
-      })
-    }
-  }
-
-  linhas.sort((a, b) => {
-    const perfilA = ROTULOS_PERFIL[a.item.responsavel.role] || a.item.responsavel.role
-    const perfilB = ROTULOS_PERFIL[b.item.responsavel.role] || b.item.responsavel.role
-    return perfilA.localeCompare(perfilB, 'pt-BR')
-      || a.frequenciaPessoa - b.frequenciaPessoa
-      || a.item.responsavel.name.localeCompare(b.item.responsavel.name, 'pt-BR')
-      || a.item.titulo.localeCompare(b.item.titulo, 'pt-BR')
-  })
+  const { colunas, linhas } = montar(itens, mesReferencia)
+  const sufixoFormato = formato === 'detalhado' ? '-detalhado' : ''
 
   return {
-    csv: montarCsv(COLUNAS, linhas),
-    nomeArquivo: `frequencia-${mesReferencia}${role ? `-${role}` : ''}.csv`,
+    csv: montarCsv(colunas, linhas),
+    nomeArquivo: `frequencia-${mesReferencia}${role ? `-${role}` : ''}${sufixoFormato}.csv`,
     rotulo: rotuloMes(mesReferencia),
     total: linhas.length,
   }
 }
 
-module.exports = { exportarMes, COLUNAS }
+module.exports = { exportarMes, FORMATOS }

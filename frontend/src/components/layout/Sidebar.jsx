@@ -6,15 +6,15 @@ import { useTheme } from '../../context/ThemeContext'
 import { useAvatar } from '../../context/AvatarContext'
 import {
   LayoutDashboard, BookOpen, ShieldCheck, CalendarCheck, ClipboardList,
-  LogOut, ChevronLeft, ChevronRight, Camera, Sun, Moon, Globe, Users,
+  ClipboardCheck, LogOut, ChevronLeft, ChevronRight, Camera, Sun, Moon, Globe, Users,
 } from 'lucide-react'
-
-const isCoordinatorRole = (user) => user?.role === 'coordenador' || (user?.function || '').toLowerCase().includes('coordenador')
 
 // Menu reduzido ao que cada perfil realmente usa no dia a dia. Cursos e a porta
 // de tudo que diz respeito a curso -- producao e ementa sao subrotas dele, e nao
 // itens proprios. Frequencia, Cursistas e Acessos ficam restritos a quem
 // administra o sistema.
+const isCoordinatorRole = (user) => user?.role === 'coordenador' || (user?.function || '').toLowerCase().includes('coordenador')
+
 const navItems = [
   { to: '/painel', icon: LayoutDashboard, label: 'Painel', visible: (user) => user?.role === 'administrador' },
   { to: '/cursos', icon: BookOpen, label: 'Cursos' },
@@ -25,22 +25,42 @@ const navItems = [
   // A tabela consolidada de todos os cursos continua existindo em /producao,
   // fora da navegacao, ate o painel de acompanhamento assumir esse papel.
   {
-    // A visao de gestao do mes: quem atribui e acompanha. Mesma lista de perfis
-    // de PERFIS_QUE_ATRIBUEM no backend -- aqui so decide o que desenhar, e o
-    // servidor e quem garante a permissao em cada rota.
+    // A visao de gestao do mes: quem atribui e acompanha. Mesmas chaves da
+    // HIERARQUIA no backend -- aqui so decide o que desenhar, e o servidor e
+    // quem garante a permissao em cada rota.
     to: '/frequencia',
     icon: CalendarCheck,
     label: 'Frequência',
-    visible: (user) => ['administrador', 'gerencia', 'supervisor'].includes(user?.role) || isCoordinatorRole(user),
+    visible: (user) => ['administrador', 'gerencia', 'supervisor', 'supervisor_tutoria'].includes(user?.role)
+      || isCoordinatorRole(user),
   },
   {
-    // A lista da propria pessoa. Todo perfil recebe atividade menos o
-    // administrador -- ele so chega aqui quando avalia alguem, e por isso a
-    // segunda condicao depende do que o servidor respondeu.
+    // A lista da propria pessoa: identica para todo mundo que recebe atividade,
+    // do professor ao supervisor de tutoria. Administrador e gerencia nao
+    // recebem, e por isso nao veem o item.
+    //
+    // Quem decide e o servidor (`recebeAtividade`); o perfil so responde
+    // enquanto a resposta nao chega, para o menu nao piscar.
     to: '/minhas-atividades',
     icon: ClipboardList,
     label: 'Minhas atividades',
-    visible: (user, resumo) => user?.role !== 'administrador' || Boolean(resumo?.souAvaliador),
+    visible: (user, resumo) => (resumo
+      ? Boolean(resumo.recebeAtividade)
+      : !['administrador', 'gerencia'].includes(user?.role)),
+  },
+  {
+    // O outro papel de quem acumula os dois. Quem e avaliador so o servidor
+    // sabe -- e escolhido atividade a atividade, e nao decorre do perfil.
+    //
+    // Administrador e gerencia ficam de fora mesmo quando avaliam: a tela
+    // deles e Frequencia, que ja mostra o mes inteiro, e o que eles tem para
+    // avaliar aparece la dentro, no detalhe de cada pessoa. Duas entradas de
+    // menu para quem ja ve tudo numa so era repeticao.
+    to: '/minhas-avaliacoes',
+    icon: ClipboardCheck,
+    label: 'Minhas avaliações',
+    visible: (user, resumo) => Boolean(resumo?.souAvaliador)
+      && !['administrador', 'gerencia'].includes(user?.role),
     contador: (resumo) => resumo?.pendentesParaAvaliar || 0,
   },
   { to: '/cursistas', icon: Users, label: 'Cursistas', visible: (user) => user?.role === 'administrador' },

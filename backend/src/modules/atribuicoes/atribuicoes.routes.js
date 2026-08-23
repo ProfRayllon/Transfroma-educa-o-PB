@@ -67,18 +67,21 @@ module.exports = function criarRotasAtribuicoes({ authInterna, getUsuarioInterno
   // ---------------------------------------------------------------------------
 
   /**
-   * As pessoas que podem receber atividade, agrupadas por perfil.
+   * As pessoas que este usuario alcanca, agrupadas por perfil.
    *
    * O agrupamento e o que permite os dois modos que a coordenacao pediu: marcar
    * o perfil inteiro de uma vez ou escolher uma pessoa so. Para o servidor os
    * dois casos chegam iguais -- uma lista de ids.
+   *
+   * A lista ja vem recortada pela hierarquia: a supervisao nem chega a ver os
+   * outros perfis na tela de atribuir, em vez de ve-los e levar 403 ao salvar.
    */
   router.get('/pessoas', tratar(async (req, res) => {
     if (!service.podeAtribuir(req.ator)) {
       return res.status(403).json({ message: 'Voce nao tem permissao para atribuir atividades.' })
     }
 
-    const perfis = Object.keys(service.ROTULOS_PERFIL).filter((perfil) => perfil !== service.PERFIL_QUE_NAO_RECEBE)
+    const perfis = service.perfisAlcancados(req.ator)
     const pessoas = await listarUsuariosPorPerfis(perfis)
 
     const grupos = perfis
@@ -162,11 +165,7 @@ module.exports = function criarRotasAtribuicoes({ authInterna, getUsuarioInterno
   // ---------------------------------------------------------------------------
 
   router.get('/avaliar', tratar(async (req, res) => {
-    res.json(await service.listarParaAvaliar({
-      actor: req.ator,
-      mes: req.query.mes,
-      apenasPendentes: req.query.todas !== '1',
-    }))
+    res.json(await service.listarParaAvaliar({ actor: req.ator, mes: req.query.mes }))
   }))
 
   router.put('/:id/avaliacao', tratar(async (req, res) => {
@@ -211,6 +210,12 @@ module.exports = function criarRotasAtribuicoes({ authInterna, getUsuarioInterno
       podeAtribuir: service.podeAtribuir(req.ator),
       podeExportar: service.podeExportar(req.ator),
       recebeAtividade: service.podeReceber(req.ator),
+      // O que este perfil alcanca -- o menu e a tela de atribuir se desenham a
+      // partir daqui, em vez de repetir a hierarquia no navegador.
+      perfisAlcancados: service.perfisAlcancados(req.ator).map((perfil) => ({
+        role: perfil,
+        label: service.ROTULOS_PERFIL[perfil],
+      })),
       souAvaliador,
       minhas: service.resumir(minhas),
       pendentesParaAvaliar,
@@ -233,7 +238,13 @@ module.exports = function criarRotasAtribuicoes({ authInterna, getUsuarioInterno
       return res.status(403).json({ message: 'Somente o administrador pode baixar o relatorio do mes.' })
     }
 
-    const { csv, nomeArquivo } = await exportarMes({ mes: req.query.mes, role: req.query.role || null })
+    const { csv, nomeArquivo } = await exportarMes({
+      mes: req.query.mes,
+      role: req.query.role || null,
+      // "matriz" e o padrao: uma linha por pessoa, atividades nas colunas.
+      // "detalhado" abre uma linha por atividade, para ler as justificativas.
+      formato: req.query.formato === 'detalhado' ? 'detalhado' : 'matriz',
+    })
     res.setHeader('Content-Type', 'text/csv; charset=utf-8')
     res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`)
     res.send(csv)
