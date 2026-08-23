@@ -11,6 +11,9 @@ const admin = require('./cursistas.admin')
 const { importar } = require('./cursistas.import')
 const { exportarInscritos, marcarComoExportadas } = require('./cursistas.export')
 const { normalizeCpf } = require('../../shared/cpf')
+// Limites declarados como TOTAL pretendido; `porProcesso` divide pelo numero de
+// processos do cluster, senao cada um contaria os seus e o freio valeria o dobro.
+const { porProcesso } = require('../../shared/concorrencia')
 const { registrar, ACOES } = require('../../shared/audit')
 
 /**
@@ -32,7 +35,7 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
   // Por IP + CPF: forca bruta de senha contra uma conta especifica.
   const limiteLoginPorConta = rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 10,
+    limit: porProcesso(10),
     standardHeaders: true,
     legacyHeaders: false,
     message: { message: 'Muitas tentativas de acesso. Tente novamente em alguns minutos.' },
@@ -45,7 +48,7 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
   // cada acerto e uma tomada de conta, entao este e o freio que realmente segura.
   const limiteLoginPorOrigem = rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 40,
+    limit: porProcesso(40),
     standardHeaders: false,
     legacyHeaders: false,
     message: { message: 'Muitas tentativas de acesso. Tente novamente em alguns minutos.' },
@@ -66,7 +69,7 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
    */
   const limiteImportacao = rateLimit({
     windowMs: 60 * 60 * 1000,
-    limit: 15,
+    limit: porProcesso(15),
     standardHeaders: true,
     legacyHeaders: false,
     message: { message: 'Limite de importacoes por hora atingido.' },

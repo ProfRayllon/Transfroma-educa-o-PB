@@ -16,6 +16,15 @@ services:
       # Alinhar o container ao banco faz qualquer data lida do MySQL significar
       # o mesmo instante nos dois lados.
       TZ: America/Sao_Paulo
+      # Processos da API. O gargalo do sistema e CPU -- bcrypt custa ~147ms para
+      # gravar uma senha, medido nesta VPS, e JavaScript roda numa thread so.
+      # Com um processo o teto era ~8 logins por segundo e o segundo nucleo
+      # ficava parado. Custa ~69 MB por processo.
+      #
+      # Os limitadores de tentativa leem esta variavel para dividir o limite
+      # entre os processos (ver src/shared/concorrencia.js): sem isso, cada
+      # processo contaria os seus e o freio valeria o dobro do pretendido.
+      WEB_CONCURRENCY: 2
     extra_hosts:
       - "host.docker.internal:host-gateway"
     expose:

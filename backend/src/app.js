@@ -56,9 +56,13 @@ app.use(helmet())
 app.use(cors({ origin: corsOrigins }))
 app.use(express.json({ limit: '5mb' }))
 
+// O limite declarado e o TOTAL pretendido; `porProcesso` o converte no limite de
+// cada processo do cluster. Ver src/shared/concorrencia.js.
+const { porProcesso } = require('./shared/concorrencia')
+
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 10,
+  limit: porProcesso(10),
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: 'Muitas tentativas de login. Tente novamente mais tarde.' },
