@@ -11,6 +11,7 @@ import Login from './pages/Login'
 import Painel from './pages/Painel'
 import Cursos from './pages/Cursos'
 import Producao from './pages/Producao'
+import CursoProducao from './pages/CursoProducao'
 import Ementa from './pages/Ementa'
 import Frequencia from './pages/Frequencia'
 import Acessos from './pages/Acessos'
@@ -81,6 +82,14 @@ export default function App() {
             <Route path="painel" element={<Painel />} />
             <Route path="cursos" element={<Cursos />} />
             <Route path="cursos/:courseId/ementa" element={<Ementa />} />
+            <Route path="cursos/:courseId/producao" element={<CursoProducao />} />
+            {/*
+              A visao consolidada saiu do menu, mas a rota continua registrada.
+              Ela nao faz parte da navegacao do sistema -- o trabalho de producao
+              acontece dentro do curso -- e fica disponivel para quem tiver o
+              endereco, ate o painel de acompanhamento assumir esse papel. As
+              regras de permissao da propria tela seguem valendo.
+            */}
             <Route path="producao" element={<Producao />} />
             <Route path="frequencia" element={<Frequencia />} />
             <Route path="acessos" element={<Acessos />} />

@@ -357,7 +357,7 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
 
         <div className="flex items-center gap-2 pt-1 border-t border-gray-100 mt-auto">
           <button
-            onClick={() => navigate('/producao', { state: { course: course.name } })}
+            onClick={() => navigate(`/cursos/${course.id}/producao`)}
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold text-white transition-opacity hover:opacity-90"
             style={{ backgroundColor: color.bar }}
           >

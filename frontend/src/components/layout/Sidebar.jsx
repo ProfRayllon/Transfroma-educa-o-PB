@@ -3,24 +3,25 @@ import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import { useAvatar } from '../../context/AvatarContext'
 import {
-  LayoutDashboard, BookOpen, FileText, ShieldCheck, CalendarCheck,
+  LayoutDashboard, BookOpen, ShieldCheck, CalendarCheck,
   LogOut, ChevronLeft, ChevronRight, Camera, Sun, Moon, Globe, Users,
 } from 'lucide-react'
 
 const isCoordinatorRole = (user) => user?.role === 'coordenador' || (user?.function || '').toLowerCase().includes('coordenador')
 
-// Menu reduzido ao que cada perfil realmente usa no dia a dia: professor só
-// acompanha os proprios cursos; supervisor/coordenador tambem cuidam da producao;
-// Acessos fica restrito a quem administra o sistema.
+// Menu reduzido ao que cada perfil realmente usa no dia a dia. Cursos e a porta
+// de tudo que diz respeito a curso -- producao e ementa sao subrotas dele, e nao
+// itens proprios. Frequencia, Cursistas e Acessos ficam restritos a quem
+// administra o sistema.
 const navItems = [
   { to: '/painel', icon: LayoutDashboard, label: 'Painel', visible: (user) => user?.role === 'administrador' },
   { to: '/cursos', icon: BookOpen, label: 'Cursos' },
-  {
-    to: '/producao',
-    icon: FileText,
-    label: 'Produção',
-    visible: (user) => user?.role === 'administrador' || user?.role === 'supervisor' || user?.role === 'revisor' || user?.role === 'ti' || isCoordinatorRole(user),
-  },
+  // Producao saiu do menu: o trabalho acontece dentro do curso, pelo botao
+  // "Producao" do card, e ter as duas entradas era o mesmo conteudo em dois
+  // caminhos. O item tambem era um beco para o revisor, que o via no menu mas
+  // nao tinha a visao consolidada e caia no aviso de acesso restrito.
+  // A tabela consolidada de todos os cursos continua existindo em /producao,
+  // fora da navegacao, ate o painel de acompanhamento assumir esse papel.
   {
     to: '/frequencia',
     icon: CalendarCheck,

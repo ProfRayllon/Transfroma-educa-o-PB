@@ -1,12 +1,11 @@
 import { useState, useMemo } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { CheckCircle, FileText, Clock, Eye, Search, Filter, X, Link2, Pencil, Trash2, ShieldAlert } from 'lucide-react'
 import Badge from '../components/ui/Badge'
 import StatCard from '../components/ui/StatCard'
 import Modal from '../components/ui/Modal'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
-import ModulosWorkspace from '../components/producao/ModulosWorkspace'
 import {
   PROFESSOR_STATUS_OPTIONS,
   SUPERVISOR_STATUS_OPTIONS,
@@ -488,13 +487,8 @@ function EditModal({ material, open, onClose, onSave, defaultCourse, canApprove,
 export default function Producao() {
   const { user, can } = useAuth()
   const { materials, courses, materialAssignees, saveMaterial, updateMaterialStatus, deleteMaterial } = useData()
-  const location = useLocation()
   const navigate = useNavigate()
-  // Capturado uma unica vez ao entrar na pagina (vindo do botao "Producao" em Cursos).
-  // So esse valor abre o workspace por modulo — mudar o filtro "Curso" abaixo nunca navega,
-  // apenas restringe a visao geral.
-  const [workspaceCourseName] = useState(() => location.state?.course || null)
-  const [filters, setFilters] = useState({ course: workspaceCourseName || 'Todos', session: '', responsible: 'Todos', status: '', supervisor: 'Todos', coordinator: 'Todos' })
+  const [filters, setFilters] = useState({ course: 'Todos', session: '', responsible: 'Todos', status: '', supervisor: 'Todos', coordinator: 'Todos' })
   const [search, setSearch] = useState('')
   const [viewMaterial, setViewMaterial] = useState(null)
   const [editMaterial, setEditMaterial] = useState(null)
@@ -513,7 +507,6 @@ export default function Producao() {
   const courseOptions = ['Todos', ...courses.map(c => c.name)]
   const supervisorOptions = ['Todos', ...new Set(courses.map(c => c.supervisorName).filter(Boolean))]
   const coordinatorOptions = ['Todos', ...new Set(courses.map(c => c.coordinatorName).filter(Boolean))]
-  const activeCourse = workspaceCourseName ? courses.find(c => c.name === workspaceCourseName) : null
 
   const getMaterialFlags = (material) => {
     const course = findCourseForMaterial(material, courses)
@@ -649,17 +642,12 @@ export default function Producao() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* Header (a view por modulos renderiza seu proprio cabecalho) */}
-      {!activeCourse && (
-        <div>
-          <h1 className="page-title">Produção</h1>
-          <p className="page-subtitle">Visão geral dos materiais produzidos em todos os cursos.</p>
-        </div>
-      )}
+      <div>
+        <h1 className="page-title">Produção</h1>
+        <p className="page-subtitle">Visão geral dos materiais produzidos em todos os cursos.</p>
+      </div>
 
-      {activeCourse ? (
-        <ModulosWorkspace course={activeCourse} />
-      ) : !canViewOverview ? (
+      {!canViewOverview ? (
         <div className="card flex flex-col items-center justify-center text-center py-14 gap-3">
           <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
             <ShieldAlert size={22} />
