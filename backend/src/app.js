@@ -86,6 +86,23 @@ function isCoordinator(user) {
   return user?.role === 'coordenador' || String(user?.function || '').toLowerCase().includes('coordenador')
 }
 
+/**
+ * Quem pode ser escolhido como coordenador de um curso.
+ *
+ * Alem do coordenador propriamente dito, os perfis que ja respondem pelo
+ * dominio de Cursos: administrador e gerencia. Diferente de `isCoordinator`,
+ * que responde "esta pessoa E coordenadora" e decide o que ela enxerga -- aqui
+ * a pergunta e "pode assumir a coordenacao de um curso".
+ *
+ * Espelhado em `podeSerCoordenadorDeCurso` de src/data/store.js, que monta a
+ * lista oferecida na tela. As duas precisam andar juntas: uma lista mais larga
+ * que a validacao faria o nome aparecer no formulario e o salvamento falhar
+ * com "Coordenador(a) invalido".
+ */
+function podeCoordenarCurso(user) {
+  return user?.role === 'administrador' || user?.role === 'gerencia' || isCoordinator(user)
+}
+
 function isRevisor(user) {
   return user?.role === 'revisor'
 }
@@ -271,7 +288,7 @@ async function coursePayload(body) {
   }
 
   const coordinator = await store.getUserById(payload.coordinatorId)
-  if (!coordinator || !(coordinator.role === 'administrador' || isCoordinator(coordinator))) {
+  if (!coordinator || !podeCoordenarCurso(coordinator)) {
     return { error: 'Coordenador invalido.' }
   }
 
@@ -556,7 +573,7 @@ async function modulePayload(body, course, currentModule) {
 
   if (payload.coordinatorId) {
     const coordinator = await findUserById(payload.coordinatorId)
-    if (!coordinator || !(coordinator.role === 'administrador' || isCoordinator(coordinator))) return { error: 'Coordenador(a) invalido.' }
+    if (!coordinator || !podeCoordenarCurso(coordinator)) return { error: 'Coordenador(a) invalido.' }
     payload.coordinatorName = coordinator.name
   } else {
     payload.coordinatorName = null

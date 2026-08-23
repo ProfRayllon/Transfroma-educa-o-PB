@@ -194,6 +194,23 @@ function isCoordinatorUser(user) {
   return user?.role === 'coordenador' || String(user?.function || '').toLowerCase().includes('coordenador')
 }
 
+/**
+ * Quem pode ser escolhido como coordenador de um curso.
+ *
+ * Alem do coordenador propriamente dito, os perfis que ja respondem pelo
+ * dominio de Cursos: administrador e gerencia. Nao e o mesmo que
+ * `isCoordinatorUser`, que responde "esta pessoa E coordenadora" -- usado para
+ * decidir o que ela enxerga. Aqui a pergunta e outra: "esta pessoa pode assumir
+ * a coordenacao de um curso".
+ *
+ * Espelhado em `podeCoordenarCurso` de src/app.js, que valida a escolha. As duas
+ * precisam andar juntas: se a lista oferecer alguem que a validacao recusa, o
+ * nome aparece no formulario e o salvamento falha com "Coordenador invalido".
+ */
+function podeSerCoordenadorDeCurso(user) {
+  return user?.role === 'administrador' || user?.role === 'gerencia' || isCoordinatorUser(user)
+}
+
 function materialMatchesCourse(material, course) {
   if (!material || !course) return false
   return Number(material.courseId) === Number(course.id) || material.course === course.name
@@ -1354,7 +1371,7 @@ async function listCourseParticipants() {
     const activeUsers = users.filter((user) => user.status === 'ativo')
     return {
       supervisors: activeUsers.filter((user) => ['supervisor', 'administrador'].includes(user.role)).map(safeUser),
-      coordinators: activeUsers.filter((user) => user.role === 'administrador' || isCoordinatorUser(user)).map(safeUser),
+      coordinators: activeUsers.filter(podeSerCoordenadorDeCurso).map(safeUser),
       producers: activeUsers.filter((user) => user.role === 'professor').map(safeUser),
       revisors: activeUsers.filter((user) => user.role === 'revisor').map(safeUser),
     }
@@ -1365,7 +1382,7 @@ async function listCourseParticipants() {
      FROM users
      WHERE status = 'ativo'
        AND (
-        role IN ('administrador', 'coordenador', 'supervisor', 'professor', 'revisor')
+        role IN ('administrador', 'gerencia', 'coordenador', 'supervisor', 'professor', 'revisor')
         OR LOWER(COALESCE(\`function\`, '')) LIKE '%coordenador%'
        )
      ORDER BY name`
@@ -1374,7 +1391,7 @@ async function listCourseParticipants() {
 
   return {
     supervisors: mapped.filter((user) => ['supervisor', 'administrador'].includes(user.role)),
-    coordinators: mapped.filter((user) => user.role === 'administrador' || isCoordinatorUser(user)),
+    coordinators: mapped.filter(podeSerCoordenadorDeCurso),
     producers: mapped.filter((user) => user.role === 'professor'),
     revisors: mapped.filter((user) => user.role === 'revisor'),
   }
