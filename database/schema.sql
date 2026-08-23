@@ -266,57 +266,48 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
--- Modulo "Frequencia": criterios mensais por perfil avaliado + lancamentos por usuario.
--- Um criterio vale para (perfil, mes) e passa a valer automaticamente para todo usuario
--- ativo daquele perfil no mes -- nao ha vinculo criterio-usuario manual.
-CREATE TABLE IF NOT EXISTS frequencia_criterios (
+-- Modulo de Atribuicoes -- o que a equipe chama de "Frequencia".
+--
+-- UMA tabela: a unidade e a atribuicao, uma linha por pessoa, por atividade,
+-- por mes. Substitui frequencia_criterios + frequencia_lancamentos, que
+-- separavam a regra (ligada a um perfil e um mes) da linha de cada pessoa e
+-- precisavam ser mantidas em sincronia.
+CREATE TABLE IF NOT EXISTS atribuicoes (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  role VARCHAR(30) NOT NULL,
-  title VARCHAR(150) NOT NULL,
-  details TEXT DEFAULT NULL,
-  type ENUM('quantitativo','qualitativo') NOT NULL DEFAULT 'quantitativo',
-  unit VARCHAR(40) DEFAULT NULL,
-  activities TEXT DEFAULT NULL,
-  target DECIMAL(10,2) DEFAULT NULL,
-  reference_month VARCHAR(7) NOT NULL,
-  created_by INT DEFAULT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_frequencia_criterios_created_by
-    FOREIGN KEY (created_by) REFERENCES users(id)
-    ON DELETE SET NULL
-) ENGINE=InnoDB;
+  titulo VARCHAR(150) NOT NULL,
+  descricao TEXT DEFAULT NULL,
 
-CREATE TABLE IF NOT EXISTS frequencia_lancamentos (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  criterio_id INT NOT NULL,
-  user_id INT NOT NULL,
-  target DECIMAL(10,2) DEFAULT NULL,
-  realized DECIMAL(10,2) DEFAULT NULL,
-  frequency_pct DECIMAL(5,2) DEFAULT NULL,
-  status ENUM('pendente','em_andamento','concluido','em_revisao') NOT NULL DEFAULT 'pendente',
-  notes TEXT DEFAULT NULL,
-  attachment_note VARCHAR(255) DEFAULT NULL,
-  registered_by INT DEFAULT NULL,
-  registered_at DATE DEFAULT NULL,
+  -- Quem executa. Qualquer perfil menos administrador.
+  responsavel_id INT NOT NULL,
+  -- Quem julga se cumpriu. Escolhido no ato da atribuicao.
+  avaliador_id INT NOT NULL,
+  criado_por INT DEFAULT NULL,
+
+  mes_referencia CHAR(7) NOT NULL,
+  -- Vazio significa "ate o fim do mes de referencia".
+  prazo DATE DEFAULT NULL,
+
+  -- Eixo 1: a pessoa responde "fiz?".
+  checkin_em DATETIME DEFAULT NULL,
+  checkin_obs TEXT DEFAULT NULL,
+
+  -- Eixo 2: o avaliador responde "conta como cumprido?".
+  -- Nulo com check-in preenchido = aguardando avaliacao.
+  avaliacao ENUM('cumprido','nao_cumprido') DEFAULT NULL,
+  avaliacao_obs TEXT DEFAULT NULL,
+  avaliado_em DATETIME DEFAULT NULL,
+
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_frequencia_lancamentos_criterio_user (criterio_id, user_id),
-  CONSTRAINT fk_frequencia_lancamentos_criterio
-    FOREIGN KEY (criterio_id) REFERENCES frequencia_criterios(id)
-    ON DELETE CASCADE,
-  CONSTRAINT fk_frequencia_lancamentos_user
-    FOREIGN KEY (user_id) REFERENCES users(id)
-    ON DELETE CASCADE,
-  CONSTRAINT fk_frequencia_lancamentos_registered_by
-    FOREIGN KEY (registered_by) REFERENCES users(id)
-    ON DELETE SET NULL
-) ENGINE=InnoDB;
 
-CREATE INDEX idx_materials_responsible ON materials(responsible_id);
-CREATE INDEX idx_materials_status ON materials(status);
-CREATE INDEX idx_attendance_user_date ON attendance(user_id, `date`);
-CREATE INDEX idx_occurrences_user ON occurrences(user_id);
-CREATE INDEX idx_notifications_user ON notifications(user_id, read_at);
-CREATE INDEX idx_frequencia_criterios_role_month ON frequencia_criterios(role, reference_month);
-CREATE INDEX idx_frequencia_lancamentos_user ON frequencia_lancamentos(user_id);
-CREATE INDEX idx_audit_user ON audit_logs(user_id, created_at);
+  CONSTRAINT fk_atribuicoes_responsavel
+    FOREIGN KEY (responsavel_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_atribuicoes_avaliador
+    FOREIGN KEY (avaliador_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_atribuicoes_criado_por
+    FOREIGN KEY (criado_por) REFERENCES users(id) ON DELETE SET NULL,
+
+  INDEX idx_atribuicoes_responsavel (responsavel_id, mes_referencia),
+  INDEX idx_atribuicoes_avaliador (avaliador_id, mes_referencia),
+  INDEX idx_atribuicoes_mes (mes_referencia)
+) ENGINE=InnoDB;

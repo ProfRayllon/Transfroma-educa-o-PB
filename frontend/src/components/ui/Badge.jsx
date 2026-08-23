@@ -52,6 +52,13 @@ const variants = {
   ti: 'bg-sky-100 text-sky-800 border border-sky-200',
 
   nao_publicado: 'bg-gray-100 text-gray-600 border border-gray-200',
+
+  // Modulo de Atribuicoes ("Frequencia"). Sao quatro e nao mais: dois vem do
+  // veredito do avaliador e dois da ausencia dele.
+  cumprido: 'bg-green-50 text-green-700 border border-green-200',
+  nao_cumprido: 'bg-red-50 text-red-700 border border-red-200',
+  aguardando_avaliacao: 'bg-amber-50 text-amber-700 border border-amber-200',
+  a_fazer: 'bg-gray-100 text-gray-600 border border-gray-200',
 }
 
 const labels = {
@@ -102,6 +109,11 @@ const labels = {
   ti: 'TI',
 
   nao_publicado: 'Não publicado',
+
+  cumprido: 'Cumprido',
+  nao_cumprido: 'Não cumprido',
+  aguardando_avaliacao: 'Aguardando avaliação',
+  a_fazer: 'A fazer',
 }
 
 const dots = {
@@ -133,6 +145,11 @@ const dots = {
   ajustes: 'bg-orange-500',
   publicado: 'bg-teal-500',
   nao_publicado: 'bg-gray-400',
+
+  cumprido: 'bg-green-500',
+  nao_cumprido: 'bg-red-500',
+  aguardando_avaliacao: 'bg-amber-500',
+  a_fazer: 'bg-gray-400',
 }
 
 export default function Badge({ status, showDot = false, className = '' }) {

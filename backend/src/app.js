@@ -40,17 +40,6 @@ const USER_ROLES = ['administrador', 'coordenador', 'supervisor', 'professor', '
 const COURSE_STATUS_AVA_VALUES = ['nao_publicado', 'publicado']
 const USER_STATUSES = ['ativo', 'inativo', 'pendente', 'desligado', 'substituido']
 
-// Perfis avaliados pelo modulo de Frequencia (metas/criterios mensais).
-const FREQUENCIA_ROLES = ['supervisor', 'revisor', 'tecnico', 'supervisor_tutoria', 'professor', 'tutor']
-const FREQUENCIA_ROLE_LABELS = {
-  supervisor: 'Supervisor',
-  revisor: 'Revisor(a)',
-  tecnico: 'Apoio tecnico',
-  supervisor_tutoria: 'Supervisor de tutoria',
-  professor: 'Professor(a)',
-  tutor: 'Tutor(a)',
-}
-
 app.set('trust proxy', 1)
 app.use(helmet())
 app.use(cors({ origin: corsOrigins }))
@@ -135,9 +124,15 @@ function canManageModule(user, course) {
  *
  * 'gerencia' e um administrador restrito a Cursos: dentro desta tela faz tudo o
  * que o administrador faz -- criar, editar e excluir qualquer curso, mexer na
- * ementa e no status do AVA -- e fora dela nao enxerga nada. Por isso ele entra
- * junto do administrador SO nas checagens deste dominio, e em nenhuma outra:
- * usuarios, frequencia, producao e cursistas continuam fechados para ele.
+ * ementa e no status do AVA. Por isso ele entra junto do administrador SO nas
+ * checagens deste dominio, e em nenhuma outra: usuarios, producao e cursistas
+ * continuam fechados para ele.
+ *
+ * A excecao e Atribuicoes (a "Frequencia"), onde a gerencia atribui e acompanha
+ * como o administrador. Aquela regra vive no proprio modulo, em
+ * modules/atribuicoes/atribuicoes.service.js, e nao aqui -- justamente para nao
+ * confundir "manda em cursos" com "manda em frequencia", que sao poderes
+ * diferentes que so por coincidencia hoje cabem no mesmo perfil.
  *
  * Esta funcao existe para essa distincao ficar em um lugar so. Espalhar
  * `role === 'administrador' || role === 'gerencia'` pelo arquivo faria a proxima
@@ -170,28 +165,6 @@ function canManageProduction(user) {
 
 function canAssignMaterial(user) {
   return ['administrador', 'supervisor'].includes(user?.role) || isCoordinator(user)
-}
-
-function isAttendanceManager(role) {
-  return ['administrador', 'supervisor', 'gestao'].includes(role)
-}
-
-// Modulo de Frequencia: quem acessa (ve as telas) e quem pode criar/lancar dado para
-// qual perfil avaliado. Coordenador/administrador tem acesso total; supervisor so pode
-// criar criterio e lancar dado para o perfil Professor(a).
-function canAccessFrequencia(user) {
-  return user?.role === 'administrador' || isCoordinator(user) || user?.role === 'supervisor'
-}
-
-function frequenciaRolesForActor(user) {
-  if (user?.role === 'administrador' || isCoordinator(user)) return FREQUENCIA_ROLES
-  if (user?.role === 'supervisor') return ['professor']
-  return []
-}
-
-function canCreateFrequenciaCriterio(user, targetRole) {
-  if (!FREQUENCIA_ROLES.includes(targetRole)) return false
-  return frequenciaRolesForActor(user).includes(targetRole)
 }
 
 async function canEditMaterial(user, material) {
@@ -1489,334 +1462,6 @@ app.patch('/api/ementas/:courseId/status', auth, async (req, res) => {
   }
 })
 
-/* ─── Frequencia: criterios mensais por perfil + lancamentos ─── */
-
-function normalizeActivities(rawActivities) {
-  return (Array.isArray(rawActivities) ? rawActivities : [])
-    .map((a) => ({ title: String(a?.title || '').trim(), weight: Number(a?.weight) || 0 }))
-    .filter((a) => a.title)
-}
-
-function frequenciaCriterioPayload(body) {
-  const role = String(body.role || '').trim()
-  const title = String(body.title || '').trim()
-  const details = String(body.details || '').trim()
-  const type = body.type === 'qualitativo' ? 'qualitativo' : 'quantitativo'
-  const referenceMonth = String(body.referenceMonth || '').trim()
-
-  const missing = []
-  if (!FREQUENCIA_ROLES.includes(role)) missing.push('perfil avaliado')
-  if (!title) missing.push('titulo')
-  if (!referenceMonth) missing.push('mes de referencia (vigencia)')
-  if (type === 'quantitativo' && !(Number(body.target) > 0)) missing.push('meta do mes')
-
-  const activities = type === 'qualitativo' ? normalizeActivities(body.activities) : null
-  if (type === 'qualitativo' && activities.length === 0) missing.push('atividades')
-
-  // userIds e opcional: quando informado, restringe o criterio a um subconjunto do perfil
-  // (em vez de todos os usuarios daquele perfil, comportamento anterior e ainda o padrao
-  // quando null/vazio).
-  const userIds = Array.isArray(body.userIds) ? [...new Set(body.userIds.map(Number).filter(Boolean))] : null
-  if (userIds && userIds.length === 0) missing.push('profissionais selecionados')
-
-  if (missing.length > 0) {
-    return { error: `Preencha os campos obrigatorios: ${missing.join(', ')}.` }
-  }
-
-  if (!/^\d{4}-\d{2}$/.test(referenceMonth)) {
-    return { error: 'Mes de referencia (vigencia) invalido.' }
-  }
-
-  if (type === 'qualitativo') {
-    const totalWeight = activities.reduce((sum, a) => sum + a.weight, 0)
-    if (Math.abs(totalWeight - 100) > 0.5) {
-      return { error: `A soma dos pesos das atividades deve ser 100% (atual: ${totalWeight}%).` }
-    }
-  }
-
-  return {
-    payload: {
-      role,
-      title,
-      details: details || null,
-      type,
-      unit: type === 'quantitativo' ? String(body.unit || '').trim() || null : null,
-      target: type === 'quantitativo' ? Number(body.target) : null,
-      activities,
-      referenceMonth,
-      userIds,
-    },
-  }
-}
-
-app.get('/api/frequencia/usuarios', auth, async (req, res) => {
-  try {
-    const actor = await findUserById(req.user.id)
-    if (!canAccessFrequencia(actor)) return res.status(403).json({ message: 'Sem acesso ao modulo de Frequencia.' })
-
-    const allowedRoles = frequenciaRolesForActor(actor)
-    const requestedRole = req.query.role ? String(req.query.role) : null
-    if (requestedRole && !allowedRoles.includes(requestedRole)) {
-      return res.status(403).json({ message: 'Voce nao tem acesso a esse perfil.' })
-    }
-
-    const roles = requestedRole ? [requestedRole] : allowedRoles
-    const usersList = await store.listUsersByRoles(roles)
-
-    // Com "month" informado, anota cada usuario com o criterio que ja tem nesse mes (se algum) --
-    // a trava e por PESSOA, nao por perfil: varias pessoas podem compartilhar o mesmo criterio,
-    // mas ninguem pode ter 2 criterios diferentes no mesmo mes.
-    const month = /^\d{4}-\d{2}$/.test(req.query.month) ? String(req.query.month) : null
-    if (!month) return res.json(usersList.map((u) => ({ ...u, existingCriterioTitle: null })))
-
-    const monthLancamentos = await store.listFrequenciaLancamentos({ roles, month })
-    const titleByUserId = new Map(monthLancamentos.map((l) => [Number(l.userId), l.criterioTitle]))
-    res.json(usersList.map((u) => ({ ...u, existingCriterioTitle: titleByUserId.get(Number(u.id)) || null })))
-  } catch (err) {
-    console.error('[GET /api/frequencia/usuarios]', err)
-    res.status(500).json({ message: 'Erro ao carregar usuarios.' })
-  }
-})
-
-app.get('/api/frequencia/overview', auth, async (req, res) => {
-  try {
-    const actor = await findUserById(req.user.id)
-    if (!canAccessFrequencia(actor)) return res.status(403).json({ message: 'Sem acesso ao modulo de Frequencia.' })
-
-    const month = /^\d{4}-\d{2}$/.test(req.query.month) ? req.query.month : new Date().toISOString().slice(0, 7)
-    const allowedRoles = frequenciaRolesForActor(actor)
-    const requestedRole = req.query.role ? String(req.query.role) : null
-    const roles = requestedRole ? allowedRoles.filter((r) => r === requestedRole) : allowedRoles
-
-    const [criterios, lancamentos, usersList] = await Promise.all([
-      store.listFrequenciaCriterios({ roles, month }),
-      store.listFrequenciaLancamentos({ roles, month }),
-      store.listUsersByRoles(roles),
-    ])
-
-    // "Criado por" mostra o papel de quem criou (Coordenador/Supervisor/Administrador),
-    // nao o nome -- reflete a regra "Criado por: Coordenador" do modulo.
-    const creatorIds = [...new Set(criterios.map((c) => c.createdBy).filter(Boolean))]
-    const creators = await Promise.all(creatorIds.map((id) => store.getUserById(id)))
-    const creatorLabelById = new Map(creatorIds.map((id, index) => {
-      const creator = creators[index]
-      let label = '—'
-      if (creator?.role === 'administrador') label = 'Administrador'
-      else if (isCoordinator(creator)) label = 'Coordenador'
-      else if (creator?.role === 'supervisor') label = 'Supervisor'
-      return [id, label]
-    }))
-    const [refYear, refMonthNum] = month.split('-').map(Number)
-    const lastDay = new Date(refYear, refMonthNum, 0).getDate()
-    const vigencia = `01/${String(refMonthNum).padStart(2, '0')} a ${lastDay}/${String(refMonthNum).padStart(2, '0')}`
-
-    const groups = roles.map((role) => {
-      const roleCriterios = criterios.filter((c) => c.role === role)
-      const users = usersList.filter((u) => u.role === role).map((user) => {
-        const userLancamentos = lancamentos.filter((l) => l.userId === user.id)
-        const avgFill = userLancamentos.length
-          ? Math.round(userLancamentos.reduce((sum, l) => sum + (l.status === 'concluido' ? 100 : l.frequencyPct || 0), 0) / userLancamentos.length)
-          : 0
-        const metaTotal = userLancamentos.reduce((sum, l) => {
-          const criterio = roleCriterios.find((c) => c.id === l.criterioId)
-          return sum + (criterio?.type === 'quantitativo' ? Number(criterio.target) || 0 : 0)
-        }, 0)
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          avatar: user.avatar,
-          avgFill,
-          metaTotal,
-          criteria: userLancamentos.map((l) => {
-            const criterio = roleCriterios.find((c) => c.id === l.criterioId)
-            return {
-              lancamentoId: l.id,
-              criterioId: l.criterioId,
-              title: l.criterioTitle,
-              details: criterio?.details || null,
-              type: criterio?.type || l.criterioType,
-              unit: criterio?.unit ?? l.criterioUnit,
-              target: criterio?.target ?? null,
-              activities: criterio?.activities || null,
-              createdBy: creatorLabelById.get(criterio?.createdBy) || '—',
-              vigencia,
-              realized: l.realized,
-              frequencyPct: l.frequencyPct,
-              status: l.status,
-              notes: l.notes || null,
-              attachmentNote: l.attachmentNote || null,
-              registeredAt: l.registeredAt || null,
-            }
-          }),
-        }
-      })
-      const groupAvg = users.length ? Math.round(users.reduce((sum, u) => sum + u.avgFill, 0) / users.length) : 0
-
-      return {
-        role,
-        label: FREQUENCIA_ROLE_LABELS[role],
-        userCount: users.length,
-        // criteriaCount = vinculados (usuarios x criterios); criteriosCriados = quantidade
-        // de criterios distintos definidos para esse perfil no mes, sem multiplicar por usuario.
-        criteriaCount: roleCriterios.length * users.length,
-        criteriosCriados: roleCriterios.length,
-        avgFill: groupAvg,
-        canCreate: canCreateFrequenciaCriterio(actor, role),
-        users,
-      }
-    })
-
-    // "Criterios ativos" = quantidade de criterios distintos definidos no mes (nao multiplicado
-    // por usuario, diferente do "criteriaCount" de cada grupo que ja e usuarios x criterios).
-    const criteriosAtivos = criterios.length
-    const withFrequency = lancamentos.filter((l) => l.frequencyPct !== null)
-    const frequenciaMedia = withFrequency.length
-      ? Math.round(withFrequency.reduce((sum, l) => sum + l.frequencyPct, 0) / withFrequency.length)
-      : 0
-
-    res.json({ month, stats: { criteriosAtivos, frequenciaMedia }, groups })
-  } catch (err) {
-    console.error('[GET /api/frequencia/overview]', err)
-    res.status(500).json({ message: 'Erro ao carregar visao geral de frequencia.' })
-  }
-})
-
-app.get('/api/frequencia/lancamentos', auth, async (req, res) => {
-  try {
-    const actor = await findUserById(req.user.id)
-    if (!canAccessFrequencia(actor)) return res.status(403).json({ message: 'Sem acesso ao modulo de Frequencia.' })
-
-    const month = /^\d{4}-\d{2}$/.test(req.query.month) ? req.query.month : new Date().toISOString().slice(0, 7)
-    const allowedRoles = frequenciaRolesForActor(actor)
-    const requestedRole = req.query.role ? String(req.query.role) : null
-    const roles = requestedRole ? allowedRoles.filter((r) => r === requestedRole) : allowedRoles
-    const status = req.query.status ? String(req.query.status) : null
-    const search = req.query.search ? String(req.query.search) : null
-
-    const lancamentos = await store.listFrequenciaLancamentos({ month, roles, status, search })
-    res.json(lancamentos.map((l) => ({ ...l, canEdit: canCreateFrequenciaCriterio(actor, l.role) })))
-  } catch (err) {
-    console.error('[GET /api/frequencia/lancamentos]', err)
-    res.status(500).json({ message: 'Erro ao carregar lancamentos.' })
-  }
-})
-
-app.post('/api/frequencia/criterios', auth, async (req, res) => {
-  try {
-    const actor = await findUserById(req.user.id)
-    const { payload, error } = frequenciaCriterioPayload(req.body)
-    if (error) return res.status(400).json({ message: error })
-
-    if (!canCreateFrequenciaCriterio(actor, payload.role)) {
-      return res.status(403).json({ message: 'Voce nao tem permissao para criar criterio para esse perfil.' })
-    }
-
-    const eligibleIds = new Set((await store.listUsersByRoles([payload.role])).map((u) => Number(u.id)))
-
-    if (payload.userIds) {
-      payload.userIds = payload.userIds.filter((id) => eligibleIds.has(id))
-      if (payload.userIds.length === 0) {
-        return res.status(400).json({ message: 'Nenhum dos profissionais selecionados pertence a esse perfil.' })
-      }
-    }
-
-    // 1 criterio por PESSOA por mes -- varias pessoas podem compartilhar o mesmo criterio
-    // (o perfil pode ter mais de um criterio no mes), mas ninguem pode ter 2 criterios
-    // diferentes no mesmo mes.
-    const targetIds = payload.userIds?.length ? payload.userIds : Array.from(eligibleIds)
-    const monthLancamentos = await store.listFrequenciaLancamentos({ roles: [payload.role], month: payload.referenceMonth })
-    const conflicts = monthLancamentos.filter((l) => targetIds.includes(Number(l.userId)))
-    if (conflicts.length > 0) {
-      const names = [...new Set(conflicts.map((l) => l.userName).filter(Boolean))]
-      return res.status(409).json({ message: `Os seguintes profissionais ja tem um criterio neste mes: ${names.join(', ')}. Remova-os da selecao ou edite o criterio existente deles.` })
-    }
-
-    const criterio = await store.createFrequenciaCriterio({ ...payload, createdBy: actor.id })
-    res.status(201).json(criterio)
-  } catch (err) {
-    console.error('[POST /api/frequencia/criterios]', err)
-    res.status(500).json({ message: 'Erro ao criar criterio.' })
-  }
-})
-
-app.put('/api/frequencia/criterios/:id', auth, async (req, res) => {
-  try {
-    const actor = await findUserById(req.user.id)
-    const current = await store.getFrequenciaCriterioById(req.params.id)
-    if (!current) return res.status(404).json({ message: 'Criterio nao encontrado.' })
-    if (!canCreateFrequenciaCriterio(actor, current.role)) {
-      return res.status(403).json({ message: 'Voce nao tem permissao para editar esse criterio.' })
-    }
-
-    const updates = {}
-    if (req.body.title !== undefined) updates.title = String(req.body.title).trim()
-    if (req.body.details !== undefined) updates.details = String(req.body.details || '').trim() || null
-    if (req.body.unit !== undefined) updates.unit = String(req.body.unit || '').trim() || null
-    if (req.body.target !== undefined) updates.target = Number(req.body.target) || null
-    if (req.body.activities !== undefined) {
-      const activities = normalizeActivities(req.body.activities)
-      if (current.type === 'qualitativo' && activities.length > 0) {
-        const totalWeight = activities.reduce((sum, a) => sum + a.weight, 0)
-        if (Math.abs(totalWeight - 100) > 0.5) {
-          return res.status(400).json({ message: `A soma dos pesos das atividades deve ser 100% (atual: ${totalWeight}%).` })
-        }
-      }
-      updates.activities = activities
-    }
-
-    const updated = await store.updateFrequenciaCriterio(req.params.id, updates)
-    res.json(updated)
-  } catch (err) {
-    console.error('[PUT /api/frequencia/criterios/:id]', err)
-    res.status(500).json({ message: 'Erro ao atualizar criterio.' })
-  }
-})
-
-app.delete('/api/frequencia/criterios/:id', auth, async (req, res) => {
-  try {
-    const actor = await findUserById(req.user.id)
-    const current = await store.getFrequenciaCriterioById(req.params.id)
-    if (!current) return res.status(404).json({ message: 'Criterio nao encontrado.' })
-    if (!canCreateFrequenciaCriterio(actor, current.role)) {
-      return res.status(403).json({ message: 'Voce nao tem permissao para excluir esse criterio.' })
-    }
-
-    await store.deleteFrequenciaCriterio(req.params.id)
-    res.status(204).end()
-  } catch (err) {
-    console.error('[DELETE /api/frequencia/criterios/:id]', err)
-    res.status(500).json({ message: 'Erro ao excluir criterio.' })
-  }
-})
-
-app.put('/api/frequencia/lancamentos/:id', auth, async (req, res) => {
-  try {
-    const actor = await findUserById(req.user.id)
-    const current = await store.getFrequenciaLancamentoById(req.params.id)
-    if (!current) return res.status(404).json({ message: 'Lancamento nao encontrado.' })
-
-    const criterio = await store.getFrequenciaCriterioById(current.criterioId)
-    if (!criterio || !canCreateFrequenciaCriterio(actor, criterio.role)) {
-      return res.status(403).json({ message: 'Voce nao tem permissao para registrar esse lancamento.' })
-    }
-
-    const updates = { registeredBy: actor.id }
-    if (req.body.target !== undefined) updates.target = req.body.target === '' ? null : Number(req.body.target)
-    if (req.body.realized !== undefined) updates.realized = req.body.realized === '' ? null : Number(req.body.realized)
-    if (req.body.status !== undefined) updates.status = req.body.status
-    if (req.body.notes !== undefined) updates.notes = req.body.notes || null
-    if (req.body.attachmentNote !== undefined) updates.attachmentNote = req.body.attachmentNote || null
-    if (req.body.registeredAt !== undefined) updates.registeredAt = req.body.registeredAt || null
-
-    const updated = await store.updateFrequenciaLancamento(req.params.id, updates)
-    res.json(updated)
-  } catch (err) {
-    console.error('[PUT /api/frequencia/lancamentos/:id]', err)
-    res.status(500).json({ message: 'Erro ao salvar lancamento.' })
-  }
-})
-
 // ---------------------------------------------------------------------------
 // Modulos
 //
@@ -1825,12 +1470,23 @@ app.put('/api/frequencia/lancamentos/:id', auth, async (req, res) => {
 // existir um unico lugar definindo o que e acesso de equipe.
 // ---------------------------------------------------------------------------
 const criarRotasCursistas = require('./modules/cursistas/cursistas.routes')
+const criarRotasAtribuicoes = require('./modules/atribuicoes/atribuicoes.routes')
 const criarRotasPublicas = require('./modules/publico/publico.routes')
 
 app.use('/api/cursistas', criarRotasCursistas({
   authInterna: auth,
   requireRole,
   getUsuarioInterno: (id) => store.getUserById(id),
+}))
+
+// O que a equipe chama de "Frequencia". O modulo define sozinho quem atribui,
+// quem recebe e quem avalia -- nenhuma dessas regras e a mesma de Cursos ou de
+// Producao, e mante-las aqui era o que fazia cada nova regra nascer no lugar
+// errado.
+app.use('/api/atribuicoes', criarRotasAtribuicoes({
+  authInterna: auth,
+  getUsuarioInterno: (id) => store.getUserById(id),
+  listarUsuariosPorPerfis: (roles) => store.listUsersByRoles(roles),
 }))
 
 // Unico modulo sem autenticacao, e por isso montado separado dos demais: fica

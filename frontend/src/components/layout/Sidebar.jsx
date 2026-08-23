@@ -1,9 +1,11 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import api from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import { useAvatar } from '../../context/AvatarContext'
 import {
-  LayoutDashboard, BookOpen, ShieldCheck, CalendarCheck,
+  LayoutDashboard, BookOpen, ShieldCheck, CalendarCheck, ClipboardList,
   LogOut, ChevronLeft, ChevronRight, Camera, Sun, Moon, Globe, Users,
 } from 'lucide-react'
 
@@ -23,10 +25,23 @@ const navItems = [
   // A tabela consolidada de todos os cursos continua existindo em /producao,
   // fora da navegacao, ate o painel de acompanhamento assumir esse papel.
   {
+    // A visao de gestao do mes: quem atribui e acompanha. Mesma lista de perfis
+    // de PERFIS_QUE_ATRIBUEM no backend -- aqui so decide o que desenhar, e o
+    // servidor e quem garante a permissao em cada rota.
     to: '/frequencia',
     icon: CalendarCheck,
     label: 'Frequência',
-    visible: (user) => user?.role === 'administrador' || user?.role === 'supervisor' || isCoordinatorRole(user),
+    visible: (user) => ['administrador', 'gerencia', 'supervisor'].includes(user?.role) || isCoordinatorRole(user),
+  },
+  {
+    // A lista da propria pessoa. Todo perfil recebe atividade menos o
+    // administrador -- ele so chega aqui quando avalia alguem, e por isso a
+    // segunda condicao depende do que o servidor respondeu.
+    to: '/minhas-atividades',
+    icon: ClipboardList,
+    label: 'Minhas atividades',
+    visible: (user, resumo) => user?.role !== 'administrador' || Boolean(resumo?.souAvaliador),
+    contador: (resumo) => resumo?.pendentesParaAvaliar || 0,
   },
   { to: '/cursistas', icon: Users, label: 'Cursistas', visible: (user) => user?.role === 'administrador' },
   { to: '/acessos', icon: ShieldCheck, label: 'Acessos', visible: (user) => user?.role === 'administrador' },
@@ -60,10 +75,27 @@ export default function Sidebar({ collapsed, onToggle }) {
   const { dark, toggle: toggleTheme } = useTheme()
   const { photo } = useAvatar()
   const navigate = useNavigate()
+  const location = useLocation()
+  const [resumoAtribuicoes, setResumoAtribuicoes] = useState(null)
+
+  /**
+   * Quantas avaliacoes esperam por esta pessoa.
+   *
+   * Recarrega a cada troca de tela em vez de ficar consultando por tempo: o
+   * contador so muda depois de uma acao, e toda acao termina numa navegacao ou
+   * num recarregamento da propria pagina que ja o atualiza.
+   */
+  useEffect(() => {
+    let ativo = true
+    api.get('/atribuicoes/resumo')
+      .then(({ data }) => { if (ativo) setResumoAtribuicoes(data) })
+      .catch(() => { if (ativo) setResumoAtribuicoes(null) })
+    return () => { ativo = false }
+  }, [location.pathname])
 
   const visibleNavItems = navItems.filter(item => {
     if (item.adminOnly && user?.role !== 'administrador') return false
-    if (item.visible && !item.visible(user)) return false
+    if (item.visible && !item.visible(user, resumoAtribuicoes)) return false
     return true
   })
 
@@ -115,23 +147,32 @@ export default function Sidebar({ collapsed, onToggle }) {
 
       {/* Main nav */}
       <nav className={`flex-1 px-2 py-4 space-y-1 ${collapsed ? 'overflow-visible' : 'overflow-y-auto'}`}>
-        {visibleNavItems.map(({ to, icon: Icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            className={({ isActive }) => navClass(isActive)}
-          >
-            {({ isActive }) => (
-              <>
-                <Icon size={18} className={`flex-shrink-0 ${isActive ? 'text-white' : 'text-white/70 group-hover:text-white'}`} />
-                {!collapsed && <span className="flex-1">{label}</span>}
-                {!collapsed && isActive && <ChevronRight size={14} className="text-white/50" />}
-                {collapsed && <Tooltip label={label} />}
-              </>
-            )}
-          </NavLink>
-        ))}
+        {visibleNavItems.map(({ to, icon: Icon, label, contador }) => {
+          const pendencias = contador ? contador(resumoAtribuicoes) : 0
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === '/'}
+              className={({ isActive }) => navClass(isActive)}
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon size={18} className={`flex-shrink-0 ${isActive ? 'text-white' : 'text-white/70 group-hover:text-white'}`} />
+                  {!collapsed && <span className="flex-1">{label}</span>}
+                  {/* Recolhida, a lateral nao tem onde escrever o numero -- o
+                      ponto avisa que ha pendencia e o tooltip diz quanta. */}
+                  {pendencias > 0 && (collapsed
+                    ? <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-400" />
+                    : <span className="bg-amber-400 text-[10px] font-bold text-purple-900 rounded-full px-1.5 py-0.5 min-w-[18px] text-center">{pendencias}</span>
+                  )}
+                  {!collapsed && isActive && pendencias === 0 && <ChevronRight size={14} className="text-white/50" />}
+                  {collapsed && <Tooltip label={pendencias > 0 ? `${label} (${pendencias})` : label} />}
+                </>
+              )}
+            </NavLink>
+          )
+        })}
       </nav>
 
       {/* Divider */}

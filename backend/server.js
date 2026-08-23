@@ -24,10 +24,12 @@ async function iniciarTrabalhador() {
   const app = require('./src/app')
   const { initStore } = require('./src/data/store')
   const { garantirEsquema: garantirEsquemaCursistas } = require('./src/modules/cursistas/cursistas.schema')
+  const { garantirEsquema: garantirEsquemaAtribuicoes } = require('./src/modules/atribuicoes/atribuicoes.schema')
 
   await initStore()
-  // Depois do initStore: e ele quem cria a pool que o modulo usa.
+  // Depois do initStore: e ele quem cria a pool que os modulos usam.
   await garantirEsquemaCursistas()
+  await garantirEsquemaAtribuicoes()
 
   app.listen(PORT, () => {
     const quem = cluster.isPrimary ? 'processo unico' : `processo ${process.pid}`

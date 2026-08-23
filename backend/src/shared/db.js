@@ -22,13 +22,15 @@ function isMysqlMode() {
 }
 
 /**
- * O modulo de cursistas trabalha com importacao em massa, exportacao e trilha de
- * auditoria -- coisas que nao fazem sentido no modo mock e que, duplicadas em
- * memoria, so criariam divergencia com o comportamento real.
+ * Modulos novos exigem banco de verdade.
+ *
+ * Eles trabalham com importacao em massa, exportacao, trilha de auditoria e
+ * transacao -- coisas que nao fazem sentido no modo mock e que, reimplementadas
+ * em memoria, so criariam divergencia com o comportamento real.
  */
 function requireMysql() {
   if (!isMysqlMode()) {
-    const error = new Error('O modulo de cursistas exige DATA_MODE=mysql.')
+    const error = new Error('Este modulo exige DATA_MODE=mysql. O sistema esta rodando com dados em memoria.')
     error.statusCode = 503
     throw error
   }

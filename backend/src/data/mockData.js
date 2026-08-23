@@ -39,10 +39,6 @@ const occurrences = []
 
 const notifications = []
 
-const frequenciaCriterios = []
-
-const frequenciaLancamentos = []
-
 module.exports = {
   users,
   courses,
@@ -52,6 +48,4 @@ module.exports = {
   people,
   occurrences,
   notifications,
-  frequenciaCriterios,
-  frequenciaLancamentos,
 }
