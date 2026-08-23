@@ -31,7 +31,10 @@ export const mandaEmCursos = (user) => PERFIS_COM_PODER_EM_CURSOS.includes(user?
  * pessoa via uma tela quebrada em vez de um "nao e para voce".
  */
 const TELAS_POR_PERFIL = {
-  gerencia: ['/cursos', '/perfil', '/notificacoes'],
+  // '/frequencia' entrou quando a gerencia passou a atribuir e acompanhar
+  // atividades. Sem ela aqui o item aparecia no menu e o clique caia de volta
+  // em Cursos -- o backend liberava, o menu mostrava, e so esta lista recusava.
+  gerencia: ['/cursos', '/frequencia', '/perfil', '/notificacoes'],
 }
 
 export function telasPermitidas(user) {

@@ -14,6 +14,8 @@ import Producao from './pages/Producao'
 import CursoProducao from './pages/CursoProducao'
 import Ementa from './pages/Ementa'
 import Frequencia from './pages/Frequencia'
+import MinhasAtividades from './pages/MinhasAtividades'
+import MinhasAvaliacoes from './pages/MinhasAvaliacoes'
 import Acessos from './pages/Acessos'
 import CursistasAdmin from './pages/Cursistas'
 import Notificacoes from './pages/Notificacoes'
@@ -92,6 +94,14 @@ export default function App() {
             */}
             <Route path="producao" element={<Producao />} />
             <Route path="frequencia" element={<Frequencia />} />
+            {/* A tela de quem executa e de quem avalia. Separada de /frequencia
+                de proposito: aquela e a visao de gestao do mes inteiro, esta e
+                a lista curta da propria pessoa. */}
+            <Route path="minhas-atividades" element={<MinhasAtividades />} />
+            {/* Avaliar virou tela propria, e nao mais uma aba de
+                minhas-atividades: executar e avaliar sao dois papeis, e quem
+                acumula os dois precisa de dois caminhos. */}
+            <Route path="minhas-avaliacoes" element={<MinhasAvaliacoes />} />
             <Route path="acessos" element={<Acessos />} />
             <Route path="cursistas" element={<CursistasAdmin />} />
             <Route path="notificacoes" element={<Notificacoes />} />
