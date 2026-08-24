@@ -105,11 +105,22 @@ export const useAuth = () => {
 
 const PERMISSIONS = {
   administrador: ['all'],
-  // Administrador restrito a Cursos: dentro da tela faz tudo, e fora dela nao
-  // enxerga nada. Nao recebe 'all' de proposito -- 'all' e o que abre Acessos,
-  // Cursistas e Frequencia, que nao sao dele.
+  /**
+   * Gerencia: mesmo alcance do administrador em Cursos (Producao inclusa),
+   * Frequencia e Acessos. Cursistas e Painel seguem so do administrador, e e
+   * por isso que ela nao recebe 'all'.
+   *
+   * Esta lista estava desatualizada: dizia que Acessos e Frequencia "nao sao
+   * dele" depois de os dois terem sido liberados. Quem decide de verdade e o
+   * backend -- este mapa so evita oferecer botao que a API vai recusar --, mas
+   * um mapa de permissao que mente e pior do que nenhum, porque a proxima
+   * pessoa vai confiar nele.
+   */
   gerencia: [
     'view_cursos', 'edit_cursos', 'edit_status_ava',
+    'view_producao', 'edit_producao', 'approve_material', 'view_review_status',
+    'create_material', 'edit_own_material',
+    'view_acessos', 'view_frequencia', 'edit_frequencia',
   ],
   supervisor: [
     'view_producao', 'edit_producao', 'approve_material',
