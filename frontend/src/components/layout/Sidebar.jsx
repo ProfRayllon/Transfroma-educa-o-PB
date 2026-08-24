@@ -16,7 +16,15 @@ import {
 const isCoordinatorRole = (user) => user?.role === 'coordenador' || (user?.function || '').toLowerCase().includes('coordenador')
 
 const navItems = [
-  { to: '/painel', icon: LayoutDashboard, label: 'Painel', visible: (user) => user?.role === 'administrador' },
+  {
+    // O painel institucional. A gerencia entra junto porque a plateia dele e
+    // exatamente a dela: alcance, territorio e prestacao de contas. Quem decide
+    // de verdade e o backend, que libera os mesmos dois perfis.
+    to: '/painel',
+    icon: LayoutDashboard,
+    label: 'Dashboard',
+    visible: (user) => ['administrador', 'gerencia'].includes(user?.role),
+  },
   { to: '/cursos', icon: BookOpen, label: 'Cursos' },
   // Producao saiu do menu: o trabalho acontece dentro do curso, pelo botao
   // "Producao" do card, e ter as duas entradas era o mesmo conteudo em dois

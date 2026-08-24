@@ -1472,6 +1472,7 @@ app.patch('/api/ementas/:courseId/status', auth, async (req, res) => {
 const criarRotasCursistas = require('./modules/cursistas/cursistas.routes')
 const criarRotasAtribuicoes = require('./modules/atribuicoes/atribuicoes.routes')
 const criarRotasPublicas = require('./modules/publico/publico.routes')
+const criarRotasPainel = require('./modules/painel/painel.routes')
 
 app.use('/api/cursistas', criarRotasCursistas({
   authInterna: auth,
@@ -1488,6 +1489,12 @@ app.use('/api/atribuicoes', criarRotasAtribuicoes({
   getUsuarioInterno: (id) => store.getUserById(id),
   listarUsuariosPorPerfis: (roles) => store.listUsersByRoles(roles),
 }))
+
+// O painel institucional: so agregado, de varias fontes ao mesmo tempo. Fica
+// num modulo proprio porque cruza cursistas, cursos, equipe e atribuicoes --
+// nao pertence a nenhum deles, e enfia-lo em qualquer um faria esse modulo
+// depender de todos os outros.
+app.use('/api/painel', criarRotasPainel({ authInterna: auth, requireRole }))
 
 // Unico modulo sem autenticacao, e por isso montado separado dos demais: fica
 // obvio na leitura que tudo abaixo deste prefixo e publico por definicao.

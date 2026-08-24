@@ -34,18 +34,25 @@ const TELAS_POR_PERFIL = {
   // '/frequencia' entrou quando a gerencia passou a atribuir e acompanhar
   // atividades. Sem ela aqui o item aparecia no menu e o clique caia de volta
   // em Cursos -- o backend liberava, o menu mostrava, e so esta lista recusava.
-  gerencia: ['/cursos', '/frequencia', '/perfil', '/notificacoes'],
+  gerencia: ['/cursos', '/painel', '/frequencia', '/perfil', '/notificacoes'],
 }
 
 export function telasPermitidas(user) {
   return TELAS_POR_PERFIL[user?.role] || null
 }
 
-/** Primeira tela do perfil, para redirecionar quem entra em caminho proibido. */
+/**
+ * Primeira tela do perfil, para redirecionar quem entra em caminho proibido.
+ *
+ * Ninguem cai em '/painel'. Ele deixou de ser uma pagina comum e virou uma
+ * apresentacao que ocupa a tela inteira e esconde o menu -- entrar nele por
+ * redirecionamento deixaria a pessoa dentro de um deck que ela nao pediu, sem
+ * navegacao visivel. O painel se abre por escolha, pelo item do menu.
+ */
 export function telaInicial(user) {
   const permitidas = telasPermitidas(user)
   if (permitidas) return permitidas[0]
-  return user?.role === 'administrador' ? '/painel' : '/cursos'
+  return '/cursos'
 }
 
 export function podeAcessar(user, caminho) {

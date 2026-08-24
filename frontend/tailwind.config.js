@@ -25,6 +25,32 @@ module.exports = {
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
+      keyframes: {
+        // Entrada das cenas e dos graficos do painel institucional. Vivem aqui
+        // e nao em CSS solto para o Tailwind purgar junto com o resto.
+        barra: {
+          '0%': { transform: 'scaleX(0)', opacity: '0.4' },
+          '100%': { transform: 'scaleX(1)', opacity: '1' },
+        },
+        coluna: {
+          '0%': { transform: 'scaleY(0)' },
+          '100%': { transform: 'scaleY(1)' },
+        },
+        traco: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        cena: {
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
+          '100%': { opacity: '1', transform: 'none' },
+        },
+      },
+      animation: {
+        barra: 'barra 0.75s cubic-bezier(0.22,1,0.36,1) both',
+        coluna: 'coluna 0.6s cubic-bezier(0.22,1,0.36,1) both',
+        traco: 'traco 0.9s ease-out both',
+        cena: 'cena 0.45s cubic-bezier(0.22,1,0.36,1) both',
+      },
       boxShadow: {
         card: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
         'card-hover': '0 4px 12px rgba(0,0,0,0.1)',
