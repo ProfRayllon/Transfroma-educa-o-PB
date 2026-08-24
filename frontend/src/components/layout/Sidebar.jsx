@@ -64,7 +64,7 @@ const navItems = [
     contador: (resumo) => resumo?.pendentesParaAvaliar || 0,
   },
   { to: '/cursistas', icon: Users, label: 'Cursistas', visible: (user) => user?.role === 'administrador' },
-  { to: '/acessos', icon: ShieldCheck, label: 'Acessos', visible: (user) => user?.role === 'administrador' },
+  { to: '/acessos', icon: ShieldCheck, label: 'Acessos', visible: (user) => ['administrador', 'gerencia'].includes(user?.role) },
   { to: '/', icon: Globe, label: 'Site', adminOnly: true },
 ]
 

@@ -51,8 +51,14 @@ const HIERARQUIA = {
 
 const PERFIS_QUE_ATRIBUEM = Object.keys(HIERARQUIA)
 
-/** Somente o administrador baixa a planilha do mes inteiro. */
-const PERFIL_QUE_EXPORTA = 'administrador'
+/**
+ * Quem baixa a planilha do mes inteiro.
+ *
+ * Administrador e gerencia. A planilha atravessa a hierarquia -- traz todo
+ * mundo, de qualquer perfil, sem o recorte que as telas aplicam --, entao ela
+ * fica com os dois perfis que ja enxergam o programa inteiro.
+ */
+const PERFIS_QUE_EXPORTAM = ['administrador', 'gerencia']
 
 const MESES = ['Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -100,7 +106,7 @@ function podeReceber(usuario) {
 }
 
 function podeExportar(usuario) {
-  return usuario?.role === PERFIL_QUE_EXPORTA
+  return PERFIS_QUE_EXPORTAM.includes(usuario?.role)
 }
 
 function mesAtual() {

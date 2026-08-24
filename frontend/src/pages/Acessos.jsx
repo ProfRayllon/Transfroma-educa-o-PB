@@ -6,6 +6,7 @@ import Modal from '../components/ui/Modal'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { useAuth } from '../context/AuthContext'
 import api, { getApiErrorMessage } from '../lib/api'
+import { administraOSistema } from '../lib/perfil'
 
 const MANAGED_ROLES = [
   { value: 'gerencia', label: 'Gerência' },
@@ -181,8 +182,9 @@ function UserFormModal({ user: editUser, open, onClose, onSave, saving, error })
 
   const functionOptions = ROLE_FUNCTIONS[form.role] || []
   const areaOptions = getAreaOptions(form.role)
-  // Criar/editar usuario ja e restrito a administradores no backend (POST/PUT /api/users),
-  // entao nao ha risco em sempre oferecer a opcao de definir alguem como administrador aqui.
+  // Criar/editar usuario ja e restrito no backend (POST/PUT /api/users), entao
+  // nao ha risco em sempre oferecer a opcao de definir alguem como
+  // administrador aqui.
   const roleOptions = [{ value: 'administrador', label: 'Administrador' }, ...MANAGED_ROLES]
 
   const handleChange = (e) => {
@@ -445,8 +447,10 @@ export default function Acessos() {
   const [error, setError] = useState('')
   const [formError, setFormError] = useState('')
 
-  const isAdmin = user?.role === 'administrador'
-  const canViewUsers = ['administrador', 'supervisor'].includes(user?.role)
+  // Quem edita a equipe, e quem so consulta. O backend e quem decide as duas
+  // coisas; isto aqui evita oferecer botao que a API vai recusar.
+  const isAdmin = administraOSistema(user)
+  const canViewUsers = isAdmin || user?.role === 'supervisor'
 
   useEffect(() => {
     let active = true

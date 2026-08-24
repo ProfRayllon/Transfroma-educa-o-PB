@@ -210,11 +210,11 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
     }
   }
 
-  // Mesma regra do backend (DELETE /api/courses/:id): excluir e so do
-  // administrador. E a unica operacao de Cursos fora do `mandaEmCursos` --
-  // gerencia e coordenacao criam e editam, mas nao apagam, porque excluir leva
-  // junto modulos, materiais, ementa e inscricoes, e isso nao volta.
-  const canDeleteThis = user?.role === 'administrador'
+  // Mesma regra do backend (DELETE /api/courses/:id), que e quem decide: isto
+  // aqui so evita oferecer um botao que a API vai recusar. Coordenacao e
+  // supervisao continuam de fora -- excluir leva junto modulos, materiais,
+  // ementa e inscricoes, e isso nao volta.
+  const canDeleteThis = mandaEmCursos(user)
 
   const courseMaterials = materials.filter((material) => materialMatchesCourse(material, course))
   const totalContents = courseMaterials.length

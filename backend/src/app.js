@@ -665,12 +665,21 @@ app.patch('/api/auth/me/avatar', auth, async (req, res) => {
   }
 })
 
-app.get('/api/users', auth, requireRole('administrador', 'supervisor'), async (req, res) => {
+/**
+ * Acessos: administrador e gerencia gerenciam a equipe; supervisor so consulta.
+ *
+ * Estas rotas criam usuario, trocam senha e mudam PERFIL -- quem chega aqui
+ * pode promover alguem a administrador, inclusive a si mesmo. Nao ha nivel
+ * acima para impedir isso, entao os dois perfis com esta permissao sao, na
+ * pratica, o mesmo poder com dois nomes. Foi uma decisao de negocio: a
+ * gerencia passou a ter o mesmo alcance do administrador.
+ */
+app.get('/api/users', auth, requireRole('administrador', 'gerencia', 'supervisor'), async (req, res) => {
   const users = await store.listUsers()
   res.json(users.map(sanitizeUser))
 })
 
-app.post('/api/users', auth, requireRole('administrador'), async (req, res) => {
+app.post('/api/users', auth, requireRole('administrador', 'gerencia'), async (req, res) => {
   const { payload, error } = userPayload(req.body, { requirePassword: true })
   if (error) return res.status(400).json({ message: error })
 
@@ -687,7 +696,7 @@ app.post('/api/users', auth, requireRole('administrador'), async (req, res) => {
   }
 })
 
-app.put('/api/users/:id', auth, requireRole('administrador'), async (req, res) => {
+app.put('/api/users/:id', auth, requireRole('administrador', 'gerencia'), async (req, res) => {
   try {
     const current = await store.getUserById(req.params.id)
     if (!current) return res.status(404).json({ message: 'Usuario nao encontrado.' })
@@ -709,7 +718,7 @@ app.put('/api/users/:id', auth, requireRole('administrador'), async (req, res) =
   }
 })
 
-app.patch('/api/users/:id/password', auth, requireRole('administrador'), async (req, res) => {
+app.patch('/api/users/:id/password', auth, requireRole('administrador', 'gerencia'), async (req, res) => {
   const password = String(req.body.password || '')
 
   if (password.length < 8) {
@@ -723,7 +732,7 @@ app.patch('/api/users/:id/password', auth, requireRole('administrador'), async (
   res.json(sanitizeUser(user))
 })
 
-app.delete('/api/users/:id', auth, requireRole('administrador'), async (req, res) => {
+app.delete('/api/users/:id', auth, requireRole('administrador', 'gerencia'), async (req, res) => {
   const deleted = await store.deleteUser(req.params.id)
   if (!deleted) return res.status(404).json({ message: 'Usuario nao encontrado.' })
   res.status(204).end()
@@ -829,22 +838,24 @@ app.patch('/api/courses/:id/status-ava', auth, async (req, res) => {
 })
 
 /**
- * Excluir curso e so do administrador.
+ * Excluir curso: administrador e gerencia.
  *
- * E a unica operacao de Cursos que NAO segue `mandaEmCursos`: gerencia,
- * coordenacao e supervisao criam e editam, mas nao apagam. A assimetria e
- * deliberada -- excluir um curso derruba junto modulos, materiais, ementa e as
- * inscricoes de quem ja se inscreveu, e nada disso volta. Editar errado se
- * corrige; excluir, nao.
+ * Segue `mandaEmCursos` como o resto do modulo. Ate aqui era a unica operacao
+ * de Cursos que abria excecao e ficava so com o administrador -- a gerencia
+ * criava e editava, mas nao apagava.
  *
- * Por ser a excecao, a checagem e escrita aqui em vez de sair de uma funcao
- * compartilhada: quem ler esta rota precisa ver a regra, e nao segui-la ate
- * outro arquivo para descobrir que ela e diferente das vizinhas.
+ * A excecao caiu porque a regra do sistema passou a ser "gerencia tem o mesmo
+ * poder do administrador em Cursos", e uma assimetria dentro de um modulo que
+ * se diz simetrico e o tipo de detalhe que ninguem lembra na hora que precisa.
+ *
+ * O peso da operacao continua o mesmo: excluir um curso derruba junto modulos,
+ * materiais, ementa e as inscricoes de quem ja se inscreveu, e nada disso
+ * volta. O que mudou foi quem pode fazer, nao o que acontece.
  */
 app.delete('/api/courses/:id', auth, async (req, res) => {
   const actor = await store.getUserById(req.user.id)
-  if (actor?.role !== 'administrador') {
-    return res.status(403).json({ message: 'Apenas administradores podem excluir cursos.' })
+  if (!mandaEmCursos(actor)) {
+    return res.status(403).json({ message: 'Voce nao tem permissao para excluir cursos.' })
   }
 
   try {
