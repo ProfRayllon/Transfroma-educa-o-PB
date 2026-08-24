@@ -5,6 +5,7 @@ import {
   Link2, AlertTriangle, ArrowLeft, ChevronDown, ChevronRight, MoreVertical, Filter, Info,
   Layers, FileText, X, MessageSquare, ChevronUp, Columns, ClipboardCopy,
 } from 'lucide-react'
+import { mandaEmCursos } from '../../lib/perfil'
 import Badge from '../ui/Badge'
 import Modal from '../ui/Modal'
 import ConfirmDialog from '../ui/ConfirmDialog'
@@ -672,7 +673,10 @@ export default function ModulosWorkspace({ course }) {
     return () => { active = false }
   }, [course.id])
 
-  const isAdmin = user?.role === 'administrador'
+  // `isAdmin` aqui quer dizer "manda em Cursos", que e o dominio desta tela --
+  // Producao vive dentro do curso. Sao os mesmos dois perfis que o backend
+  // aceita em canManageModule, canManageProduction e canEditMaterial.
+  const isAdmin = mandaEmCursos(user)
   const isCoordinatorUser = user?.role === 'coordenador' || String(user?.function || '').toLowerCase().includes('coordenador')
   const isProducer = user?.role === 'professor' && course.producers?.some(p => Number(p.id) === Number(user.id))
   const isCourseSupervisor = user?.role === 'supervisor' && (course.supervisorId === user.id || course.supervisorName === user.name)
