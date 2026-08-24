@@ -6,6 +6,7 @@ import StatCard from '../components/ui/StatCard'
 import Modal from '../components/ui/Modal'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
+import { mandaEmCursos } from '../lib/perfil'
 import {
   PROFESSOR_STATUS_OPTIONS,
   SUPERVISOR_STATUS_OPTIONS,
@@ -500,8 +501,8 @@ export default function Producao() {
   const perPage = 50
 
   const isCoordinator = user?.role === 'coordenador' || (user?.function || '').toLowerCase().includes('coordenador')
-  const canApprove = can('approve_material') || user?.role === 'administrador' || isCoordinator
-  const isAdmin = user?.role === 'administrador'
+  const canApprove = can('approve_material') || mandaEmCursos(user) || isCoordinator
+  const isAdmin = mandaEmCursos(user)
   // TI precisa varrer todos os cursos para publicar os conteudos no AVA.
   const canViewOverview = isAdmin || isCoordinator || user?.role === 'supervisor' || user?.role === 'ti'
   const courseOptions = ['Todos', ...courses.map(c => c.name)]

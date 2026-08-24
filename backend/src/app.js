@@ -113,7 +113,7 @@ function isModuleCoordinator(user, module, course) {
 }
 
 function canManageModule(user, course) {
-  return user?.role === 'administrador'
+  return mandaEmCursos(user)
     || isModuleSupervisor(user, null, course)
     || isModuleCoordinator(user, null, course)
     || isModuleProducer(user, course)
@@ -160,16 +160,16 @@ function canSetStatusAva(user) {
 }
 
 function canManageProduction(user) {
-  return ['administrador', 'supervisor', 'professor'].includes(user?.role) || isCoordinator(user)
+  return mandaEmCursos(user) || ['supervisor', 'professor'].includes(user?.role) || isCoordinator(user)
 }
 
 function canAssignMaterial(user) {
-  return ['administrador', 'supervisor'].includes(user?.role) || isCoordinator(user)
+  return mandaEmCursos(user) || user?.role === 'supervisor' || isCoordinator(user)
 }
 
 async function canEditMaterial(user, material) {
   if (!material) return false
-  if (user.role === 'administrador') return true
+  if (mandaEmCursos(user)) return true
   const course = material.courseId
     ? await store.getCourseById(material.courseId) || await store.getCourseByName(material.course)
     : await store.getCourseByName(material.course)
@@ -665,12 +665,21 @@ app.patch('/api/auth/me/avatar', auth, async (req, res) => {
   }
 })
 
-app.get('/api/users', auth, requireRole('administrador', 'supervisor'), async (req, res) => {
+/**
+ * Acessos: administrador e gerencia gerenciam a equipe; supervisor so consulta.
+ *
+ * Estas rotas criam usuario, trocam senha e mudam PERFIL -- quem chega aqui
+ * pode promover alguem a administrador, inclusive a si mesmo. Nao ha nivel
+ * acima para impedir isso, entao os dois perfis com esta permissao sao, na
+ * pratica, o mesmo poder com dois nomes. Foi uma decisao de negocio: a
+ * gerencia passou a ter o mesmo alcance do administrador.
+ */
+app.get('/api/users', auth, requireRole('administrador', 'gerencia', 'supervisor'), async (req, res) => {
   const users = await store.listUsers()
   res.json(users.map(sanitizeUser))
 })
 
-app.post('/api/users', auth, requireRole('administrador'), async (req, res) => {
+app.post('/api/users', auth, requireRole('administrador', 'gerencia'), async (req, res) => {
   const { payload, error } = userPayload(req.body, { requirePassword: true })
   if (error) return res.status(400).json({ message: error })
 
@@ -687,7 +696,7 @@ app.post('/api/users', auth, requireRole('administrador'), async (req, res) => {
   }
 })
 
-app.put('/api/users/:id', auth, requireRole('administrador'), async (req, res) => {
+app.put('/api/users/:id', auth, requireRole('administrador', 'gerencia'), async (req, res) => {
   try {
     const current = await store.getUserById(req.params.id)
     if (!current) return res.status(404).json({ message: 'Usuario nao encontrado.' })
@@ -709,7 +718,7 @@ app.put('/api/users/:id', auth, requireRole('administrador'), async (req, res) =
   }
 })
 
-app.patch('/api/users/:id/password', auth, requireRole('administrador'), async (req, res) => {
+app.patch('/api/users/:id/password', auth, requireRole('administrador', 'gerencia'), async (req, res) => {
   const password = String(req.body.password || '')
 
   if (password.length < 8) {
@@ -723,7 +732,7 @@ app.patch('/api/users/:id/password', auth, requireRole('administrador'), async (
   res.json(sanitizeUser(user))
 })
 
-app.delete('/api/users/:id', auth, requireRole('administrador'), async (req, res) => {
+app.delete('/api/users/:id', auth, requireRole('administrador', 'gerencia'), async (req, res) => {
   const deleted = await store.deleteUser(req.params.id)
   if (!deleted) return res.status(404).json({ message: 'Usuario nao encontrado.' })
   res.status(204).end()
@@ -829,22 +838,24 @@ app.patch('/api/courses/:id/status-ava', auth, async (req, res) => {
 })
 
 /**
- * Excluir curso e so do administrador.
+ * Excluir curso: administrador e gerencia.
  *
- * E a unica operacao de Cursos que NAO segue `mandaEmCursos`: gerencia,
- * coordenacao e supervisao criam e editam, mas nao apagam. A assimetria e
- * deliberada -- excluir um curso derruba junto modulos, materiais, ementa e as
- * inscricoes de quem ja se inscreveu, e nada disso volta. Editar errado se
- * corrige; excluir, nao.
+ * Segue `mandaEmCursos` como o resto do modulo. Ate aqui era a unica operacao
+ * de Cursos que abria excecao e ficava so com o administrador -- a gerencia
+ * criava e editava, mas nao apagava.
  *
- * Por ser a excecao, a checagem e escrita aqui em vez de sair de uma funcao
- * compartilhada: quem ler esta rota precisa ver a regra, e nao segui-la ate
- * outro arquivo para descobrir que ela e diferente das vizinhas.
+ * A excecao caiu porque a regra do sistema passou a ser "gerencia tem o mesmo
+ * poder do administrador em Cursos", e uma assimetria dentro de um modulo que
+ * se diz simetrico e o tipo de detalhe que ninguem lembra na hora que precisa.
+ *
+ * O peso da operacao continua o mesmo: excluir um curso derruba junto modulos,
+ * materiais, ementa e as inscricoes de quem ja se inscreveu, e nada disso
+ * volta. O que mudou foi quem pode fazer, nao o que acontece.
  */
 app.delete('/api/courses/:id', auth, async (req, res) => {
   const actor = await store.getUserById(req.user.id)
-  if (actor?.role !== 'administrador') {
-    return res.status(403).json({ message: 'Apenas administradores podem excluir cursos.' })
+  if (!mandaEmCursos(actor)) {
+    return res.status(403).json({ message: 'Voce nao tem permissao para excluir cursos.' })
   }
 
   try {
@@ -925,9 +936,10 @@ app.patch('/api/materials/:id/status', auth, async (req, res) => {
   }
 
   const update = { ...current }
-  const isAdmin = actor.role === 'administrador'
-  // Admin e coordenacao podem sempre alterar qualquer status de qualquer perfil,
-  // sem passar pelo gate sequencial (que continua valendo para supervisor comum).
+  const isAdmin = mandaEmCursos(actor)
+  // Quem manda em Cursos e a coordenacao podem sempre alterar qualquer status de
+  // qualquer perfil, sem passar pelo gate sequencial (que continua valendo para
+  // supervisor comum).
   const isPrivileged = isAdmin || isCoordinator(actor)
   const isSupervisor = isPrivileged || actor.role === 'supervisor'
   const isCoord = isPrivileged
@@ -1221,7 +1233,7 @@ app.patch('/api/modules/:id/status', auth, async (req, res) => {
     const action = String(req.body.action || '')
     const note = String(req.body.note || '').trim()
 
-    const isAdmin = actor.role === 'administrador'
+    const isAdmin = mandaEmCursos(actor)
     const isProducer = isModuleProducer(actor, course)
     const isCoord = isAdmin || isModuleCoordinator(actor, current, course)
 
@@ -1284,7 +1296,11 @@ app.post('/api/modules/:id/comments', auth, async (req, res) => {
     if (!current) return res.status(404).json({ message: 'Modulo nao encontrado.' })
     const course = await store.getCourseById(current.courseId)
 
-    if (actor.role !== 'administrador' && !canManageModule(actor, course)) {
+    // `canManageModule` ja abre para quem manda em Cursos; a checagem de
+    // 'administrador' que existia aqui virou redundante quando a gerencia
+    // entrou nesse grupo, e redundancia em regra de permissao e o que faz uma
+    // das duas ficar para tras na proxima mudanca.
+    if (!canManageModule(actor, course)) {
       return res.status(403).json({ message: 'Voce nao tem permissao para comentar neste modulo.' })
     }
 
@@ -1313,11 +1329,12 @@ app.delete('/api/modules/:id', auth, async (req, res) => {
     const current = await store.getModuleById(req.params.id)
     if (!current) return res.status(404).json({ message: 'Modulo nao encontrado.' })
     const course = await store.getCourseById(current.courseId)
-    // Exclusao de modulo: supervisor do curso (so em producao), ou admin/coordenacao do
-    // curso, que podem excluir sempre -- mesmo bypass ja aplicado aos status de conteudo.
-    const isPrivileged = actor.role === 'administrador' || isModuleCoordinator(actor, current, course)
+    // Exclusao de modulo: supervisor do curso (so em producao), ou quem manda em
+    // Cursos / a coordenacao do curso, que podem excluir sempre -- mesmo bypass
+    // ja aplicado aos status de conteudo.
+    const isPrivileged = mandaEmCursos(actor) || isModuleCoordinator(actor, current, course)
     const canDelete = isPrivileged || isModuleSupervisor(actor, current, course)
-    if (!canDelete) return res.status(403).json({ message: 'Apenas supervisor, coordenacao ou administrador podem excluir modulos.' })
+    if (!canDelete) return res.status(403).json({ message: 'Voce nao tem permissao para excluir modulos.' })
     if (!isPrivileged && current.stage !== 'producao') {
       return res.status(400).json({ message: 'So e possivel excluir modulos que ainda estao em producao.' })
     }

@@ -227,7 +227,7 @@ module.exports = function criarRotasAtribuicoes({ authInterna, getUsuarioInterno
   // ---------------------------------------------------------------------------
 
   /**
-   * Planilha do mes, so para o administrador.
+   * Planilha do mes, para administrador e gerencia.
    *
    * `Content-Disposition` com o nome ja montado: o navegador salva
    * "frequencia-2026-08.csv" em vez de "relatorio", que e o que faz diferenca
@@ -235,7 +235,7 @@ module.exports = function criarRotasAtribuicoes({ authInterna, getUsuarioInterno
    */
   router.get('/relatorio', tratar(async (req, res) => {
     if (!service.podeExportar(req.ator)) {
-      return res.status(403).json({ message: 'Somente o administrador pode baixar o relatorio do mes.' })
+      return res.status(403).json({ message: 'Voce nao tem permissao para baixar o relatorio do mes.' })
     }
 
     const { csv, nomeArquivo } = await exportarMes({

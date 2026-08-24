@@ -19,6 +19,17 @@ const PERFIS_COM_PODER_EM_CURSOS = ['administrador', 'gerencia']
 export const mandaEmCursos = (user) => PERFIS_COM_PODER_EM_CURSOS.includes(user?.role)
 
 /**
+ * Quem administra o sistema: cria usuario, troca senha, muda perfil.
+ *
+ * Espelha `requireRole('administrador', 'gerencia')` nas rotas de /api/users.
+ * Existe como funcao, e nao como comparacao solta espalhada pelas telas, porque
+ * a lista ja mudou uma vez -- e da proxima o lugar a mudar precisa ser um so.
+ */
+const PERFIS_DE_ADMINISTRACAO = ['administrador', 'gerencia']
+
+export const administraOSistema = (user) => PERFIS_DE_ADMINISTRACAO.includes(user?.role)
+
+/**
  * Telas que cada perfil alcanca.
  *
  * `null` significa "sem restricao de tela" -- o perfil segue as regras de cada
@@ -34,7 +45,11 @@ const TELAS_POR_PERFIL = {
   // '/frequencia' entrou quando a gerencia passou a atribuir e acompanhar
   // atividades. Sem ela aqui o item aparecia no menu e o clique caia de volta
   // em Cursos -- o backend liberava, o menu mostrava, e so esta lista recusava.
-  gerencia: ['/cursos', '/painel', '/frequencia', '/perfil', '/notificacoes'],
+  // A uniao dos dois lados: '/acessos' veio da liberacao que ja esta em
+  // producao, '/painel' veio do dashboard. Perder qualquer um aqui tira um
+  // acesso que o backend concede -- o item apareceria no menu e o clique
+  // cairia de volta em Cursos.
+  gerencia: ['/cursos', '/painel', '/frequencia', '/acessos', '/perfil', '/notificacoes'],
 }
 
 export function telasPermitidas(user) {
@@ -44,10 +59,13 @@ export function telasPermitidas(user) {
 /**
  * Primeira tela do perfil, para redirecionar quem entra em caminho proibido.
  *
- * Ninguem cai em '/painel'. Ele deixou de ser uma pagina comum e virou uma
- * apresentacao que ocupa a tela inteira e esconde o menu -- entrar nele por
- * redirecionamento deixaria a pessoa dentro de um deck que ela nao pediu, sem
- * navegacao visivel. O painel se abre por escolha, pelo item do menu.
+ * Cursos para todo mundo, inclusive o administrador -- que antes caia em
+ * '/painel' quando aquilo era um esboco vazio. Hoje o Dashboard e uma tela de
+ * verdade e servir de porta de entrada seria defensavel; enquanto ninguem
+ * decidir isso, a entrada continua sendo o lugar onde o trabalho acontece.
+ *
+ * Para a gerencia o valor sai da lista de telas permitidas, e '/cursos' e o
+ * primeiro item dela justamente por isso.
  */
 export function telaInicial(user) {
   const permitidas = telasPermitidas(user)
