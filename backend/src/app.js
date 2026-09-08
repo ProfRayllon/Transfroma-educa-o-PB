@@ -1479,7 +1479,10 @@ app.patch('/api/ementas/:courseId/status', auth, async (req, res) => {
 
     if (req.body.professorStatus) {
       const isProducer = course.producers?.some((p) => Number(p.id) === Number(actor.id))
-      if (!isPrivileged && !isProducer) return res.status(403).json({ message: 'Apenas produtores do curso podem submeter a ementa.' })
+      const isCourseSupervisor = ehSupervisorDoCurso(course, actor)
+      if (!isPrivileged && !isProducer && !isCourseSupervisor) {
+        return res.status(403).json({ message: 'Apenas produtores ou supervisores do curso podem submeter a ementa.' })
+      }
       update.professorStatus = req.body.professorStatus
     }
     if (req.body.supervisorStatus) {

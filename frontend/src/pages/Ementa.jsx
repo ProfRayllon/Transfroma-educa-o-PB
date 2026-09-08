@@ -523,6 +523,11 @@ export default function Ementa() {
     || course?.producers?.some((p) => Number(p.id) === Number(user?.id))
   )
 
+  const canSubmit = !!(
+    isProfessor
+    || ehSupervisorDoCurso(course, user)
+  )
+
   const canEditSupStatus = !!(
     isPrivileged
     || ehSupervisorDoCurso(course, user)
@@ -855,7 +860,7 @@ export default function Ementa() {
                 Próximo <ChevronRight size={14} />
               </button>
             ) : (
-              canEdit && !isFinalizado && (
+              canEdit && canSubmit && !isFinalizado && (
                 <button onClick={handleSubmit} disabled={saving}
                   className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded-xl text-sm transition-colors">
                   <Send size={14} />
