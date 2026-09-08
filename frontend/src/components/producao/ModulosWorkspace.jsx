@@ -1373,7 +1373,7 @@ export default function ModulosWorkspace({ course }) {
                   const isDragOverModule = dragOverModuleId === m.id
                   const moduleMenuKey = `module-${m.id}`
                   const summary = getContentApprovalSummary(allContents)
-                  const canSend = m.stage === 'producao' && (isAdmin || isProducer)
+                  const canSend = m.stage === 'producao' && (isAdmin || isProducer || isCourseSupervisor)
                   const canPublishModule = canPublishThisModule(m, summary)
                   const hasMenuActions = canSend || canPublishModule || canDeleteThisModule(m)
 

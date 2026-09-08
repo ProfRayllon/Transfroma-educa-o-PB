@@ -1256,13 +1256,14 @@ app.patch('/api/modules/:id/status', auth, async (req, res) => {
 
     const isAdmin = mandaEmCursos(actor)
     const isProducer = isModuleProducer(actor, course)
+    const isSupervisor = isModuleSupervisor(actor, current, course)
     const isCoord = isAdmin || isModuleCoordinator(actor, current, course)
 
     let update = null
 
     switch (action) {
       case 'enviar_supervisao': {
-        if (!(isAdmin || isProducer)) return res.status(403).json({ message: 'Apenas o professor responsavel pode enviar o modulo para supervisao.' })
+        if (!(isAdmin || isProducer || isSupervisor)) return res.status(403).json({ message: 'Apenas o professor responsavel ou supervisor do modulo pode enviar para supervisao.' })
         if (current.stage !== 'producao') return res.status(400).json({ message: 'O modulo nao esta em producao.' })
         const summary = await store.getModuleApprovalSummary(current.id)
         if (summary.total === 0 || summary.professorConcluded < summary.total) {
