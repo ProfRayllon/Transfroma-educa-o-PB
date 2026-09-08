@@ -19,6 +19,29 @@ const PERFIS_COM_PODER_EM_CURSOS = ['administrador', 'gerencia']
 export const mandaEmCursos = (user) => PERFIS_COM_PODER_EM_CURSOS.includes(user?.role)
 
 /**
+ * A pessoa designada como supervisor DESTE curso.
+ *
+ * Espelha `ehSupervisorDoCurso` em backend/src/app.js, e as duas precisam
+ * concordar: se a tela liberar o botão e a rota recusar, o usuário clica e leva
+ * 403 -- que é pior do que não ver o botão.
+ *
+ * O perfil global não entra na conta. Antes entrava, e o sistema dava o encargo
+ * negando a ferramenta: quem supervisiona um curso mas tem perfil
+ * `supervisor_tutoria` aparecia como Supervisor na ementa, respondia pela
+ * validação dela, e não conseguia salvar. Quem supervisiona o curso é quem está
+ * no campo `supervisorId` do curso.
+ *
+ * O id tem precedência sobre o nome, em vez de valerem os dois em OU: com OU,
+ * um curso que aponta o supervisor 5 também liberaria qualquer homônimo do nome
+ * gravado. O nome só entra quando não há id.
+ */
+export function ehSupervisorDoCurso(course, user) {
+  if (!course || !user) return false
+  if (course.supervisorId != null) return Number(course.supervisorId) === Number(user.id)
+  return !!course.supervisorName && course.supervisorName === user.name
+}
+
+/**
  * Quem administra o sistema: cria usuario, troca senha, muda perfil.
  *
  * Espelha `requireRole('administrador', 'gerencia')` nas rotas de /api/users.

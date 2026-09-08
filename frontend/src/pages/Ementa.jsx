@@ -7,7 +7,7 @@ import {
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 import api, { getApiErrorMessage } from '../lib/api'
-import { mandaEmCursos } from '../lib/perfil'
+import { mandaEmCursos, ehSupervisorDoCurso } from '../lib/perfil'
 
 const STEPS = [
   { id: 1, title: 'Identificação', desc: 'Dados do curso (automático)' },
@@ -515,7 +515,7 @@ export default function Ementa() {
   const canEdit = !!(
     isPrivileged
     || course?.producers?.some((p) => Number(p.id) === Number(user?.id))
-    || (user?.role === 'supervisor' && (course?.supervisorId === user?.id || course?.supervisorName === user?.name))
+    || ehSupervisorDoCurso(course, user)
   )
 
   const isProfessor = !!(
@@ -525,7 +525,7 @@ export default function Ementa() {
 
   const canEditSupStatus = !!(
     isPrivileged
-    || (user?.role === 'supervisor' && (course?.supervisorId === user?.id || course?.supervisorName === user?.name))
+    || ehSupervisorDoCurso(course, user)
   )
 
   const canEditCoordStatus = isPrivileged

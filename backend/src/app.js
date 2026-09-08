@@ -149,6 +149,27 @@ function canManageCourses(user) {
   return mandaEmCursos(user) || user?.role === 'supervisor' || isCoordinator(user)
 }
 
+/**
+ * A pessoa designada como supervisor DESTE curso.
+ *
+ * Repara que o perfil global nao entra na conta. Antes entrava, e o resultado
+ * era o sistema dar o encargo e negar a ferramenta: quem supervisiona um curso
+ * mas tem perfil `supervisor_tutoria` (ou coordenador, ou qualquer outro)
+ * aparecia como Supervisor na tela da ementa, respondia pela validacao dela, e
+ * levava 403 ao tentar salvar. Quem supervisiona o curso e quem esta no campo
+ * `supervisor_id` do curso -- e so isso.
+ *
+ * O id tem precedencia sobre o nome, em vez de valerem os dois em OU. Com OU,
+ * um curso que aponta o supervisor 5 tambem liberaria qualquer homonimo do
+ * nome gravado; o nome so entra quando nao ha id, que e o caso dos cursos
+ * cadastrados antes da coluna existir.
+ */
+function ehSupervisorDoCurso(course, user) {
+  if (!course || !user) return false
+  if (course.supervisorId != null) return Number(course.supervisorId) === Number(user.id)
+  return !!course.supervisorName && course.supervisorName === user.name
+}
+
 function isTI(user) {
   return user?.role === 'ti'
 }
@@ -1424,7 +1445,7 @@ app.put('/api/ementas/:courseId', auth, async (req, res) => {
 
     const isCoord = isCoordinator(actor)
     const isProducer = course.producers?.some((p) => Number(p.id) === Number(actor.id))
-    const isSup = actor.role === 'supervisor' && (course.supervisorId === actor.id || course.supervisorName === actor.name)
+    const isSup = ehSupervisorDoCurso(course, actor)
     const isCoord2 = isCoord && (course.coordinatorId === actor.id || course.coordinatorName === actor.name)
 
     if (!mandaEmCursos(actor) && !isProducer && !isSup && !isCoord2) {
@@ -1461,7 +1482,7 @@ app.patch('/api/ementas/:courseId/status', auth, async (req, res) => {
       update.professorStatus = req.body.professorStatus
     }
     if (req.body.supervisorStatus) {
-      const isCourseSupervisor = actor.role === 'supervisor' && (course.supervisorId === actor.id || course.supervisorName === actor.name)
+      const isCourseSupervisor = ehSupervisorDoCurso(course, actor)
       if (!isPrivileged && !isCourseSupervisor) return res.status(403).json({ message: 'Apenas o supervisor do curso pode validar.' })
       update.supervisorStatus = req.body.supervisorStatus
     }
