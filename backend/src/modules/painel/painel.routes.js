@@ -2,6 +2,7 @@
 
 const express = require('express')
 const repo = require('./painel.repo')
+const resultados = require('../resultados/resultados.repo')
 
 /**
  * O painel institucional, numa chamada so.
@@ -65,6 +66,19 @@ function normalizarCurso(valor) {
   return Number.isInteger(n) && n > 0 ? n : null
 }
 
+/**
+ * A GRE aceita so o formato que existe no banco.
+ *
+ * Nao e defesa contra injecao -- o valor vai como parametro ligado de qualquer
+ * jeito. E para o texto virar chave de cache: sem o recorte, uma consulta com
+ * "1a GRE  " e outra com "1ª GRE" ocupariam duas entradas para o mesmo
+ * resultado, e vinte variacoes esvaziariam o cache inteiro.
+ */
+function normalizarGre(valor) {
+  const texto = String(valor || '').trim()
+  return /^\d{1,2}ª GRE$/.test(texto) ? texto : null
+}
+
 module.exports = function criarRotasPainel({ authInterna, requireRole }) {
   const router = express.Router()
   router.use(authInterna)
@@ -74,26 +88,40 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
       const mes = normalizarMes(req.query.mes)
       const dias = normalizarDias(req.query.dias)
       const cursoId = normalizarCurso(req.query.curso)
-      const chave = `${mes}|${dias}|${cursoId || 0}`
+      const gre = normalizarGre(req.query.gre)
+      const chave = `${mes}|${dias}|${cursoId || 0}|${gre || '-'}`
 
       const guardado = doCache(chave)
       if (guardado) return res.json({ ...guardado, doCache: true })
 
+      /* Tres listas sairam daqui e continuam no repo, testadas: `acessosPorHora`,
+         `escolasComMaisCursistas` e o bloco operacional (`equipe`, `producao`,
+         `frequenciaDaEquipe`). A coordenacao pediu foco no painel institucional,
+         e agregar 40 mil linhas de auditoria por hora para ninguem ler e
+         trabalho jogado fora. Devolver qualquer uma e uma linha nesta lista mais
+         uma no payload. */
       const [
-        totais, porGre, escolas, funil, perfil,
-        inscricoes, serie, porHora, equipe, producao, frequencia,
+        totais, porGre, funil, perfil, inscricoes, serie,
+        conclusao, conclusaoPorGre, avaliacao, nota, evolucao, opcoes,
       ] = await Promise.all([
-        repo.totais({ cursoId, dias }),
+        repo.totais({ cursoId, dias, gre }),
         repo.porGre({ cursoId }),
-        repo.escolasComMaisCursistas({ cursoId }),
         repo.funil(),
-        repo.perfilDaRede({ cursoId }),
-        repo.inscricoesPorCurso(),
-        repo.serie({ cursoId, dias }),
-        repo.acessosPorHora({ dias }),
-        repo.equipe(),
-        repo.producao(),
-        repo.frequenciaDaEquipe(mes),
+        repo.perfilDaRede({ cursoId, gre }),
+        repo.inscricoesPorCurso({ gre }),
+        repo.serie({ cursoId, dias, gre }),
+
+        /* A avaliacao nao recebe `gre`: ela e anonima e nao carrega regional.
+           Nao e esquecimento -- e o motivo de a tela precisar dizer, quando ha
+           filtro de regional ativo, que este bloco continua sendo da rede
+           inteira. Filtro que a metade dos numeros ignora em silencio e pior
+           que filtro nenhum. */
+        resultados.conclusao({ cursoId, gre }),
+        resultados.conclusaoPorGre({ cursoId }),
+        resultados.avaliacaoPorPergunta({ cursoId }),
+        resultados.avaliacaoNota({ cursoId }),
+        resultados.evolucaoDaConclusao({ cursoId }),
+        resultados.opcoesDeFiltro(),
       ])
 
       const dados = {
@@ -103,10 +131,16 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
         // Devolvido de volta para a tela nao precisar confiar no proprio estado:
         // se o servidor recusou o filtro, o rotulo mostra o que ele realmente usou.
         cursoId,
+        gre,
+        // O que existe para filtrar sai do banco, e nao de uma lista fixa na
+        // tela: oferecer um curso sem planilha importada faria a pessoa
+        // selecionar, ver tudo zerar, e concluir que o curso fracassou em vez de
+        // que a planilha ainda nao chegou.
+        opcoes,
         institucional: {
-          totais, porGre, escolas, funil, perfil, inscricoes, serie, porHora,
+          totais, porGre, funil, perfil, inscricoes, serie,
+          resultados: { conclusao, porGre: conclusaoPorGre, avaliacao, nota, evolucao },
         },
-        operacional: { equipe, producao, frequencia },
       }
 
       guardar(chave, dados)

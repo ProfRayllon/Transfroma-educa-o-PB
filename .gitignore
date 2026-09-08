@@ -26,3 +26,6 @@ database/import/*.xls
 base-cursistas/
 *_cursistas_real*
 *base_real*
+resultados-cursos/
+*consolidado*.xlsx
+*avaliacao*.xlsx

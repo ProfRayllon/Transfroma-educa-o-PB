@@ -47,10 +47,32 @@ function filtroDeCurso(cursoId, aliasCursista = 'c') {
 
 /* ─── Indicadores do topo ─── */
 
-async function totais({ cursoId = null, dias = 30 } = {}) {
+/**
+ * O recorte por regional.
+ *
+ * EXISTS pelo mesmo motivo do filtro de curso: a GRE vive em cursista_vinculos,
+ * e quem leciona em duas escolas da mesma regional apareceria duas vezes num
+ * JOIN, inflando toda contagem de pessoas.
+ *
+ * A avaliacao do curso nao aparece em nenhuma consulta que use este filtro. Ela
+ * e anonima e nao carrega regional -- e um filtro que a tela parece aplicar mas
+ * que a metade dos numeros ignora em silencio e pior que filtro nenhum.
+ */
+function filtroDeGre(gre, aliasCursista = 'c') {
+  if (!gre) return { sql: '', params: [] }
+  return {
+    sql: ` AND EXISTS (SELECT 1 FROM cursista_vinculos v
+                        WHERE v.cursista_id = ${aliasCursista}.id
+                          AND v.gre = ?)`,
+    params: [gre],
+  }
+}
+
+async function totais({ cursoId = null, dias = 30, gre = null } = {}) {
   requireMysql()
   const pool = getPool()
   const curso = filtroDeCurso(cursoId)
+  const regional = filtroDeGre(gre)
 
   const [[pessoas]] = await pool.query(
     `SELECT
@@ -60,8 +82,8 @@ async function totais({ cursoId = null, dias = 30 } = {}) {
        SUM(c.password_hash IS NOT NULL AND c.cadastro_confirmado = 1) AS confirmados,
        SUM(c.last_access_at >= DATE_SUB(NOW(), INTERVAL ? DAY)) AS acessaramNaJanela
      FROM cursistas c
-     WHERE 1 = 1${curso.sql}`,
-    [dias, ...curso.params]
+     WHERE 1 = 1${curso.sql}${regional.sql}`,
+    [dias, ...curso.params, ...regional.params]
   )
 
   /**
@@ -207,18 +229,19 @@ async function funil() {
   ]
 }
 
-async function perfilDaRede({ cursoId = null } = {}) {
+async function perfilDaRede({ cursoId = null, gre = null } = {}) {
   requireMysql()
   const pool = getPool()
   const curso = filtroDeCurso(cursoId)
+  const regional = filtroDeGre(gre)
 
   const consulta = async (coluna, limite) => {
     const [linhas] = await pool.query(
       `SELECT c.${coluna} AS chave, COUNT(*) AS total
          FROM cursistas c
-        WHERE c.${coluna} IS NOT NULL AND c.${coluna} <> ''${curso.sql}
+        WHERE c.${coluna} IS NOT NULL AND c.${coluna} <> ''${curso.sql}${regional.sql}
         GROUP BY c.${coluna} ORDER BY total DESC ${limite ? `LIMIT ${Number(limite)}` : ''}`,
-      curso.params
+      [...curso.params, ...regional.params]
     )
     return linhas.map((l) => ({ chave: l.chave, total: numero(l.total) }))
   }
@@ -251,17 +274,36 @@ async function perfilDaRede({ cursoId = null } = {}) {
 
 /* ─── Inscricoes ─── */
 
-async function inscricoesPorCurso() {
+async function inscricoesPorCurso({ gre = null } = {}) {
   requireMysql()
+
+  // O filtro entra no ON do LEFT JOIN, e nao no WHERE: no WHERE ele descartaria
+  // o curso inteiro que ficasse sem nenhum inscrito daquela regional, e o
+  // carrossel perderia o curso em vez de mostra-lo com zero.
+  const regional = gre
+    ? { sql: ` AND EXISTS (SELECT 1 FROM cursista_vinculos v
+                            WHERE v.cursista_id = i.cursista_id AND v.gre = ?)`, params: [gre] }
+    : { sql: '', params: [] }
+
   const [linhas] = await getPool().query(
     `SELECT
        c.id, c.name, c.primary_trail AS trilha, c.status_ava,
        c.enrollment_opens_at AS abre, c.enrollment_closes_at AS fecha,
+       -- Se HA capa, e nao a capa. A imagem e um data URI de ate alguns MB por
+       -- curso; o dashboard manda o navegador buscar cada uma pela rota
+       -- /api/publico/cursos/:id/imagem, que tem cache de 24h. Mesmo criterio
+       -- daquela rota: data URI que nao seja de imagem ela recusa, e a capa
+       -- apareceria quebrada.
+       (c.image LIKE 'data:image/%') AS tem_imagem,
+       -- Muda quando o curso e editado, e e o que fura o cache do navegador
+       -- quando a coordenacao troca a capa.
+       UNIX_TIMESTAMP(c.updated_at) AS versao_imagem,
        COUNT(i.id) AS inscritos
      FROM courses c
-     LEFT JOIN inscricoes i ON i.course_id = c.id AND i.status = 'inscrito'
+     LEFT JOIN inscricoes i ON i.course_id = c.id AND i.status = 'inscrito'${regional.sql}
      GROUP BY c.id
-     ORDER BY inscritos DESC`
+     ORDER BY inscritos DESC`,
+    regional.params
   )
   const agora = new Date()
   return linhas.map((l) => ({
@@ -270,6 +312,8 @@ async function inscricoesPorCurso() {
     trilha: l.trilha,
     publicado: l.status_ava === 'publicado',
     inscritos: numero(l.inscritos),
+    temImagem: Boolean(Number(l.tem_imagem)),
+    versaoImagem: numero(l.versao_imagem),
     // "Aberto" e resposta do servidor: o relogio do navegador de quem apresenta
     // pode estar em qualquer fuso.
     aberto: Boolean(l.abre && l.fecha && new Date(l.abre) <= agora && agora <= new Date(l.fecha)),
@@ -289,7 +333,7 @@ async function inscricoesPorCurso() {
  * saem da propria tabela de inscricoes quando ha filtro, que e a unica fonte que
  * sabe de qual curso cada uma foi.
  */
-async function serie({ cursoId = null, dias = 30 } = {}) {
+async function serie({ cursoId = null, dias = 30, gre = null } = {}) {
   requireMysql()
   const pool = getPool()
 
@@ -302,14 +346,26 @@ async function serie({ cursoId = null, dias = 30 } = {}) {
     [dias]
   )
 
+  /**
+   * As inscricoes aceitam o recorte por regional; os acessos acima, nao.
+   *
+   * A auditoria guarda cursista_id, mas quem acessa sem ter vinculo registrado
+   * -- e quem foi excluido, cujo registro sobrevive sem cadastro -- sairia da
+   * conta. A linha de acesso e sempre a rede inteira, e a tela diz isso.
+   */
+  const regional = gre
+    ? { sql: ` AND EXISTS (SELECT 1 FROM cursista_vinculos v
+                            WHERE v.cursista_id = inscricoes.cursista_id AND v.gre = ?)`, params: [gre] }
+    : { sql: '', params: [] }
+
   const [novasInscricoes] = await pool.query(
     `SELECT DATE(enrolled_at) AS dia, COUNT(*) AS total
        FROM inscricoes
       WHERE status = 'inscrito'
         AND enrolled_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
-        ${cursoId ? 'AND course_id = ?' : ''}
+        ${cursoId ? 'AND course_id = ?' : ''}${regional.sql}
       GROUP BY DATE(enrolled_at)`,
-    cursoId ? [dias, cursoId] : [dias]
+    cursoId ? [dias, cursoId, ...regional.params] : [dias, ...regional.params]
   )
 
   const mapa = new Map()

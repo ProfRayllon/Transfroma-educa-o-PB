@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import {
   Users, School, GraduationCap, Eye, AlertTriangle, CheckCircle2,
-  FileText, Award, Layers,
+  FileText, Layers, Star, Info,
 } from 'lucide-react'
 import {
   Cartao, TituloDeBloco, CartaoKpi, BarrasComLinha, BarrasRotuladas,
-  Rosca, LegendaDeRosca, ListaRanqueada, LinhasComIcone,
+  Rosca, RoscaRotulada, LegendaDeRosca, ListaRanqueada, CarrosselDeCursos,
+  RankingPirulito, ResumoDoRanking,
 } from './graficos'
 
 /**
@@ -35,6 +36,65 @@ const ROTULOS_ESTAGIO = {
 const br = (n) => Number(n || 0).toLocaleString('pt-BR')
 const pct = (parte, todo) => (todo ? String(Math.round((parte / todo) * 1000) / 10).replace('.', ',') : '0')
 const diaCurto = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
+const virgula = (n) => String(n).replace('.', ',')
+
+/**
+ * Percentual com uma casa, sempre.
+ *
+ * 93 e 95,6 na mesma coluna desalinham a leitura: o olho compara a posicao do
+ * digito, e "93%" ao lado de "95,6%" parece de outra grandeza. A casa fixa
+ * mantem a coluna reta mesmo quando o valor e redondo.
+ */
+const pctBr = (n) => Number(n || 0).toLocaleString('pt-BR', {
+  minimumFractionDigits: 1, maximumFractionDigits: 1,
+})
+const dataCurta = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '—')
+
+/**
+ * A pergunta do formulário, reduzida ao assunto dela.
+ *
+ * "O uso de recursos interativos (quizzes, mapas mentais, infográficos, etc.)
+ * facilitou sua aprendizagem?" não cabe num rótulo de gráfico, e cortar no
+ * caractere 30 produziria "O uso de recursos interativos (quiz…", que é o começo
+ * de todas elas e não distingue nada. Cada entrada aponta a palavra que
+ * identifica a pergunta; o texto inteiro fica no title, ao passar o mouse.
+ *
+ * O que não for reconhecido cai no corte simples -- pergunta nova aparece
+ * legível, ainda que sem apelido, em vez de sumir.
+ */
+/**
+ * O que cada escala oferecia, dito em uma linha.
+ *
+ * O leitor precisa saber que 80,6% de "Sim" e 75,5% de "Muito relevante" não
+ * medem a mesma exigência -- sem isso, dois números lado a lado convidam à
+ * comparação que o desenho justamente evita.
+ */
+const NOME_DA_ESCALA = {
+  sim3: 'Sim / Parcialmente / Não',
+  relevancia4: 'Muito relevante, entre 4 opções',
+  clareza4: 'Totalmente, entre 4 opções',
+  nota5: 'Nota 5, entre 1 e 5',
+}
+
+const APELIDOS = [
+  [/relevante para a prática/i, 'Relevância para a prática'],
+  [/claros e bem estruturados/i, 'Clareza dos temas'],
+  [/ampliar seus conhecimentos/i, 'Ampliou conhecimento'],
+  [/desafios reais/i, 'Alinhado à sala de aula'],
+  [/videoaulas/i, 'Videoaulas'],
+  [/materiais escritos/i, 'Materiais escritos'],
+  [/recursos interativos/i, 'Recursos interativos'],
+  [/atividades propostas/i, 'Atividades propostas'],
+  [/orientações para realização/i, 'Clareza das orientações'],
+  [/aprendizagem ativa/i, 'Aprendizagem ativa'],
+  [/escala de 1 a 5/i, 'Nota geral'],
+]
+
+function rotuloDaPergunta(texto) {
+  const achou = APELIDOS.find(([padrao]) => padrao.test(texto))
+  if (achou) return achou[1]
+  return texto.length > 30 ? `${texto.slice(0, 29)}…` : texto
+}
 
 function TituloDaFaixa({ children, descricao }) {
   return (
@@ -43,6 +103,37 @@ function TituloDaFaixa({ children, descricao }) {
       {descricao && (
         <span className="text-[13px]" style={{ color: 'var(--p-texto3)' }}>{descricao}</span>
       )}
+    </div>
+  )
+}
+
+/**
+ * O par de botões que troca a visão de um cartão.
+ *
+ * Um componente só para os três lugares que fazem isso -- ordem das GREs, a
+ * rosca e o perfil da rede. Três desenhos parecidos mas não iguais lado a lado
+ * é o que faz uma tela parecer montada por pessoas diferentes.
+ */
+function TrocaDeVisao({ opcoes, valor, aoTrocar }) {
+  return (
+    <div className="flex gap-1 p-1 rounded-lg" style={{ background: 'var(--p-trilho)' }}>
+      {opcoes.map(([chave, rotulo]) => {
+        const ativo = chave === valor
+        return (
+          <button
+            key={chave}
+            onClick={() => aoTrocar(chave)}
+            className="px-3 py-1 rounded-md text-[12px] font-medium transition-colors"
+            style={{
+              background: ativo ? 'var(--p-balao)' : 'transparent',
+              color: ativo ? 'var(--p-texto)' : 'var(--p-texto3)',
+              boxShadow: ativo ? '0 1px 3px rgba(15,23,42,0.10)' : 'none',
+            }}
+          >
+            {rotulo}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -80,16 +171,31 @@ function variacaoDaSerie(serie, chave) {
 
 /* ══════════════════ Institucional ══════════════════ */
 
-export function BlocoInstitucional({ dados, serie, dias, cursoAtivo, aoFiltrarCurso }) {
+export function BlocoInstitucional({ dados, serie, dias, cursoAtivo, greAtiva, aoFiltrarCurso }) {
   const [ordemGre, setOrdemGre] = useState('cursistas')
+  // Duas leituras no mesmo cartao: como as inscricoes se dividem entre os
+  // cursos, e quem e a rede que se inscreve. Sao perguntas vizinhas e cada uma
+  // pede a tela inteira do cartao -- alternar custa um clique e nao tira nada
+  // de nenhuma das duas.
+  const [visaoRosca, setVisaoRosca] = useState('cursos')
+  const [visaoPerfil, setVisaoPerfil] = useState('componentes')
 
   const t = dados.institucional.totais
   const funil = dados.institucional.funil
   const perfil = dados.institucional.perfil
   const gres = dados.institucional.porGre
-  const escolas = dados.institucional.escolas
   const cursos = dados.institucional.inscricoes.filter((c) => c.publicado)
-  const porHora = dados.institucional.porHora
+
+  /**
+   * O que veio de planilha.
+   *
+   * Antes da primeira importacao isto chega zerado e vazio -- e a tela precisa
+   * dizer que a planilha nao chegou, e nao mostrar 0% como se ninguem tivesse
+   * concluido. Sao afirmacoes muito diferentes sobre o mesmo curso.
+   */
+  const R = dados.institucional.resultados
+  const temConclusao = R.conclusao.base > 0
+  const temAvaliacao = R.nota.respostas > 0
 
   const inscricoesNoPeriodo = serie.reduce((s, p) => s + p.inscricao, 0)
   // O funil vem sempre da base inteira, então o primeiro degrau dele é o
@@ -99,26 +205,164 @@ export function BlocoInstitucional({ dados, serie, dias, cursoAtivo, aoFiltrarCu
   const gresOrdenadas = useMemo(() => [...gres].sort((a, b) =>
     ordemGre === 'cursistas' ? b.cursistas - a.cursistas : b.adesao - a.adesao), [gres, ordemGre])
 
-  const base = funil[0].total
-  const inscritos = funil[funil.length - 1].total
-  const fatiasJornada = [
-    { rotulo: 'Inscritos em curso', valor: inscritos, cor: 'var(--p-roscaA)' },
-    { rotulo: 'Confirmaram, sem curso', valor: Math.max(0, funil[3].total - inscritos), cor: 'var(--p-roscaB)' },
-    { rotulo: 'Ainda não confirmaram', valor: base - funil[3].total, cor: 'var(--p-trilhoForte)' },
-  ]
+  /**
+   * As barras da GRE nas três visões.
+   *
+   * Volume e adesão saem do cadastro; conclusão sai da planilha. São tabelas
+   * diferentes com contagens diferentes -- por isso a lista é montada aqui, e
+   * não no JSX, onde a diferença passaria despercebida.
+   */
+  /**
+   * Trocar de curso pode tirar o chão da visão escolhida.
+   *
+   * "Conclusão" só aparece quando há planilha. Se ela estiver selecionada e o
+   * filtro mudar para um curso sem planilha, o botão some e a visão fica ativa
+   * sem existir na lista: o cartão desenharia vazio e não haveria como voltar.
+   * Aqui ela cai para Volume, que sempre tem dado.
+   */
+  const visaoGre = (ordemGre === 'conclusao' && !temConclusao) ? 'cursistas' : ordemGre
+
+  const barrasDaGre = useMemo(() => {
+    if (visaoGre === 'conclusao') {
+      return [...R.porGre]
+        .sort((a, b) => b.taxa - a.taxa)
+        .map((g) => ({
+          rotulo: g.gre.replace(' GRE', 'ª'),
+          titulo: g.gre,
+          valor: g.taxa,
+          nota: `${br(g.concluidos)} de ${br(g.vinculos)}`,
+        }))
+    }
+    return gresOrdenadas.map((g) => ({
+      rotulo: g.gre.replace(' GRE', 'ª'),
+      titulo: g.gre,
+      valor: visaoGre === 'cursistas' ? g.cursistas : g.adesao,
+      nota: `${g.escolas} escolas`,
+    }))
+  }, [visaoGre, gresOrdenadas, R.porGre])
+
+  const porTaxa = useMemo(() => [...R.porGre].sort((a, b) => a.taxa - b.taxa), [R.porGre])
+  const piorGre = porTaxa[0] || null
+  const melhorGre = porTaxa[porTaxa.length - 1] || null
+
+  /**
+   * A avaliação, comparável só dentro da mesma escala.
+   *
+   * O formulário mistura quatro vocabulários, e a proporção de quem escolheu o
+   * TOPO não se compara entre eles: quanto mais opções a escala tem, mais
+   * difícil é acertar o topo dela. Num mesmo formulário, "Sim" (de três opções)
+   * dá 80,6%, "Muito relevante" (de quatro) dá 75,5% e a nota 5 (de cinco) dá
+   * 77,3% -- e ler isso como um ranking único apontaria a relevância como o
+   * ponto mais fraco do curso quando o número só reflete o tamanho da escala.
+   *
+   * Então o gráfico usa apenas o maior grupo de perguntas que compartilham uma
+   * escala. As outras aparecem à parte, cada uma dizendo qual é a sua -- lado a
+   * lado sem régua comum, e não empilhadas numa que não existe.
+   */
+  const { comparaveis, avulsas, escalaDoGrupo } = useMemo(() => {
+    const porEscala = new Map()
+    R.avaliacao.forEach((a) => {
+      if (!porEscala.has(a.escala)) porEscala.set(a.escala, [])
+      porEscala.get(a.escala).push(a)
+    })
+    let maior = []
+    let chave = null
+    for (const [k, lista] of porEscala) {
+      if (lista.length > maior.length) { maior = lista; chave = k }
+    }
+    return {
+      comparaveis: [...maior].sort((a, b) => b.pctTopo - a.pctTopo),
+      avulsas: R.avaliacao.filter((a) => a.escala !== chave),
+      escalaDoGrupo: chave,
+    }
+  }, [R.avaliacao])
+
+  // A última linha do grupo comparável: com tudo entre 91% e 96%, a única que
+  // destoa é a informação do gráfico inteiro. Marcada onde está, e não movida
+  // para o topo -- inverter a direção só deste ranking faria o leitor comparar
+  // posições em duas réguas opostas na mesma tela.
+  const maisFraca = comparaveis.length ? comparaveis[comparaveis.length - 1] : null
+
+  /**
+   * Como as inscrições se dividem entre os cursos.
+   *
+   * Só os cinco maiores viram fatia; o resto soma em "Outros cursos". Uma rosca
+   * com dez fatias finas não se lê -- os rótulos se atropelam e as fatias menores
+   * viram riscos. O ranking completo, com nome inteiro, está no carrossel ao
+   * lado, que é onde a pergunta "qual curso" se responde.
+   *
+   * A rampa segue a ordem de tamanho: aqui ela não inventa categoria nenhuma,
+   * só reforça a mesma leitura que o ângulo da fatia já dá.
+   */
+  const fatiasCursos = useMemo(() => {
+    const ordenados = [...cursos].sort((a, b) => b.inscritos - a.inscritos)
+    const principais = ordenados.slice(0, 5)
+    const resto = ordenados.slice(5).reduce((s, c) => s + c.inscritos, 0)
+
+    const fatias = principais.map((c, i) => ({
+      rotulo: c.curso.length > 21 ? `${c.curso.slice(0, 20)}…` : c.curso,
+      titulo: c.curso,
+      valor: c.inscritos,
+      cor: `var(--p-r${5 - i})`,
+    }))
+    if (resto > 0) {
+      fatias.push({
+        rotulo: 'Outros cursos',
+        titulo: `${ordenados.length - 5} cursos com menos inscrições`,
+        valor: resto,
+        cor: 'var(--p-trilhoForte)',
+      })
+    }
+    return fatias
+  }, [cursos])
+
+  const totalInscricoes = fatiasCursos.reduce((s, f) => s + f.valor, 0)
 
   const totalGenero = perfil.genero.reduce((s, g) => s + g.total, 0)
   const feminino = perfil.genero.find((g) => /^f/i.test(g.chave))
-  const coresGenero = ['var(--p-roscaB)', 'var(--p-roscaA)', 'var(--p-barra)']
+  const coresGenero = ['var(--p-r4)', 'var(--p-r2)', 'var(--p-r5)']
+
+  // O simbolo sai do proprio valor da coluna, e nao da posicao na lista: se um
+  // dia a base tiver mais pessoas do sexo masculino, a ordem inverte e um
+  // simbolo fixo por indice passaria a mentir.
+  const simboloDe = (chave) => (/^f/i.test(chave) ? 'feminino'
+    : /^m/i.test(chave) ? 'masculino' : null)
+
   const fatiasGenero = perfil.genero.map((g, i) => ({
-    rotulo: g.chave, valor: g.total, cor: coresGenero[i % coresGenero.length],
+    rotulo: g.chave,
+    valor: g.total,
+    cor: coresGenero[i % coresGenero.length],
+    simbolo: simboloDe(g.chave),
   }))
 
-  const pico = porHora.reduce((a, b) => (b.total > a.total ? b : a), porHora[0])
+  /**
+   * Idade é ordinal: a rampa acompanha a ordem das faixas, do mais novo ao mais
+   * velho. Cores sem relação entre si esconderiam que "30 a 39" fica ao lado de
+   * "40 a 49" e não ao lado de "60 ou mais".
+   *
+   * A ordem vem do servidor (FIELD na consulta) e não é reordenada aqui -- num
+   * gráfico de faixa etária, ordenar por tamanho destruiria a leitura.
+   */
+  const fatiasIdade = perfil.faixaEtaria.map((f, i) => ({
+    rotulo: f.chave,
+    valor: f.total,
+    cor: `var(--p-r${Math.min(5, i + 1)})`,
+  }))
+  const totalIdade = fatiasIdade.reduce((s, f) => s + f.valor, 0)
+
+  const listaPerfil = visaoPerfil === 'componentes' ? perfil.componentes : perfil.eixos
+  const totalPerfil = listaPerfil.reduce((s, x) => s + x.total, 0)
+  const lider = listaPerfil[0] || null
+  const participacaoDoLider = lider && totalPerfil
+    ? String(Math.round((lider.total / totalPerfil) * 1000) / 10).replace('.', ',')
+    : '0'
+
 
   return (
     <section className="space-y-4">
-      <TituloDaFaixa descricao="Alcance do programa na rede estadual">Institucional</TituloDaFaixa>
+      {/* Sem título de faixa: ele nomeava uma das duas faixas quando havia duas.
+          Com o operacional fora da tela, "Institucional" ficou anunciando a
+          única coisa que existe -- e repetindo o "Dashboard" logo acima. */}
 
       {/* ─── Indicadores ─── */}
       {/* Cada cartão descreve, na linha de baixo, o PRÓPRIO número de cima.
@@ -136,12 +380,18 @@ export function BlocoInstitucional({ dados, serie, dias, cursoAtivo, aoFiltrarCu
             : `${br(t.confirmados)} confirmaram o cadastro · ${pct(t.confirmados, t.cursistas)}%`}
         />
 
+        {/* A taxa e por PESSOA, nao pela linha da planilha: a planilha traz um
+            vinculo por escola, e quem leciona em duas apareceria duas vezes. */}
         <CartaoKpi
-          icone={School}
-          rotulo="Escolas alcançadas"
-          valor={t.escolas}
+          icone={CheckCircle2}
+          rotulo="Taxa de conclusão"
+          valor={temConclusao ? R.conclusao.taxa : 0}
+          sufixo="%"
+          decimais={1}
           gradiente="ciano"
-          comparativo={`${String(t.escolasPct).replace('.', ',')}% das ${br(t.escolasTotal)} escolas da base · ${t.gres} GREs`}
+          comparativo={temConclusao
+            ? `${br(R.conclusao.concluintes)} de ${br(R.conclusao.base)} concluíram · planilha de ${dataCurta(R.conclusao.referencia)}`
+            : 'aguardando a planilha de consolidado'}
         />
 
         <CartaoKpi
@@ -154,25 +404,27 @@ export function BlocoInstitucional({ dados, serie, dias, cursoAtivo, aoFiltrarCu
           comparativo={`${br(inscricoesNoPeriodo)} nos últimos ${dias} dias`}
         />
 
+        {/* A nota vem sozinha com a proporção de 4 e 5 embaixo porque média
+            esconde a forma: 4,7 pode ser todo mundo dando 5 menos um punhado
+            dando 1, e a decisão de quem lê muda conforme o caso. */}
         <CartaoKpi
-          icone={Eye}
-          rotulo={`Acessaram em ${dias} dias`}
-          valor={t.acessaramNaJanela}
+          icone={Star}
+          rotulo="Avaliação do curso"
+          valor={temAvaliacao ? R.nota.media : 0}
+          sufixo=" / 5"
+          decimais={2}
           gradiente="rosa"
-          serie={serie.map((x) => x.login + x.primeiroAcesso)}
-          /* O denominador é sempre o MESMO conjunto que o numerador -- a base
-             quando não há filtro, os inscritos quando há. Antes era "quem tem
-             senha", e o percentual passava de 100%: quem entra com o CPF no
-             primeiro acesso e nunca define senha própria conta no acesso e não
-             contava no denominador. */
-          comparativo={cursoAtivo
-            ? `${pct(t.acessaramNaJanela, t.cursistas)}% dos inscritos no curso`
-            : `${pct(t.acessaramNaJanela, t.cursistas)}% da base oficial`}
+          comparativo={temAvaliacao
+            ? `${pct(R.nota.satisfeitos, R.nota.respostas)}% deram 4 ou 5 · ${br(R.nota.respostas)} respostas`
+            : 'aguardando a planilha de avaliação'}
         />
       </div>
 
       {/* ─── Movimento, jornada e procura ─── */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1.6fr_1fr_1fr] gap-4 items-stretch">
+      {/* A Jornada recebe mais largura que os vizinhos: os rótulos dos arcos
+          ocupam as laterais, e num cartão estreito eles espremeriam o desenho
+          justamente onde ele deveria crescer. */}
+      <div className="grid grid-cols-1 xl:grid-cols-[1.45fr_1.2fr_1fr] gap-4 items-stretch">
         <Cartao className="flex flex-col">
           <TituloDeBloco
             acao={<span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>últimos {dias} dias</span>}
@@ -208,22 +460,52 @@ export function BlocoInstitucional({ dados, serie, dias, cursoAtivo, aoFiltrarCu
           </div>
         </Cartao>
 
-        <Cartao className="flex flex-col items-center justify-center gap-4">
+        <Cartao className="flex flex-col">
           <TituloDeBloco
-            acao={cursoAtivo
-              ? <span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>rede inteira</span>
-              : null}
+            acao={
+              <TrocaDeVisao
+                opcoes={[['cursos', 'Cursos'], ['composicao', 'Composição'], ['idade', 'Faixa etária']]}
+                valor={visaoRosca}
+                aoTrocar={setVisaoRosca}
+              />
+            }
           >
-            Jornada do cadastro
+            {visaoRosca === 'cursos' ? 'Inscrições por curso'
+              : visaoRosca === 'composicao' ? 'Composição'
+                : 'Faixa etária'}
           </TituloDeBloco>
-          <Rosca
-            tamanho={170} espessura={22} total={base}
-            centroValor={`${Math.round((inscritos / base) * 100)}%`}
-            centroRotulo="chegam ao curso"
-            fatias={fatiasJornada}
-          />
-          <div className="w-full">
-            <LegendaDeRosca fatias={fatiasJornada} total={base} />
+
+          <div className="flex-1 flex items-center justify-center min-h-0">
+            {visaoRosca === 'cursos' && (
+              <RoscaRotulada
+                key="cursos"
+                total={totalInscricoes}
+                altura={330}
+                centroValor={br(totalInscricoes)}
+                centroRotulo="inscrições"
+                fatias={fatiasCursos}
+              />
+            )}
+            {visaoRosca === 'composicao' && (
+              <RoscaRotulada
+                key="composicao"
+                total={totalGenero}
+                altura={330}
+                centroValor={feminino ? `${Math.round((feminino.total / totalGenero) * 100)}%` : '—'}
+                centroRotulo="são mulheres"
+                fatias={fatiasGenero}
+              />
+            )}
+            {visaoRosca === 'idade' && (
+              <RoscaRotulada
+                key="idade"
+                total={totalIdade}
+                altura={330}
+                centroValor={br(totalIdade)}
+                centroRotulo="com idade informada"
+                fatias={fatiasIdade}
+              />
+            )}
           </div>
         </Cartao>
 
@@ -237,132 +519,259 @@ export function BlocoInstitucional({ dados, serie, dias, cursoAtivo, aoFiltrarCu
           >
             Cursos mais procurados
           </TituloDeBloco>
-          <ListaRanqueada
+          {/* A capa entra por URL, não embutida na resposta: são data URIs de
+              alguns MB por curso, e o dashboard levaria os 9 KB para dezenas de
+              megabytes. A rota /api/publico/cursos/:id/imagem serve a mesma
+              imagem com cache de 24h -- é a que o site público já usa. */}
+          <CarrosselDeCursos
             selecionado={cursoAtivo?.id}
             aoClicar={(item) => aoFiltrarCurso(item.id)}
-            itens={cursos.slice(0, 5).map((c) => ({
+            itens={cursos.slice(0, 6).map((c) => ({
               id: c.id,
               rotulo: c.curso,
               valor: c.inscritos,
-              nota: c.aberto ? 'inscrições abertas' : 'inscrições encerradas',
+              aberto: c.aberto,
+              imagem: c.temImagem
+                ? `/api/publico/cursos/${c.id}/imagem?v=${c.versaoImagem}`
+                : null,
             }))}
           />
         </Cartao>
       </div>
 
       {/* ─── Território ─── */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1.7fr_1fr] gap-4 items-stretch">
+      {/* O pirulito precisa de largura: rótulo, haste e valor dividem a linha,
+          e num cartão estreito a haste some entre os dois textos. A GRE cede
+          espaço porque as barras dela encolhem sem perder a leitura. */}
+      <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_1fr] gap-4 items-stretch">
         <Cartao className="flex flex-col">
           <TituloDeBloco
             acao={
               /* Reordenar responde a pergunta que sempre aparece: "a maior
                  regional é também a que mais aderiu?" */
-              <div className="flex gap-1 p-1 rounded-lg" style={{ background: 'var(--p-trilho)' }}>
-                {[['cursistas', 'Volume'], ['adesao', 'Adesão']].map(([chave, rotulo]) => (
-                  <button
-                    key={chave}
-                    onClick={() => setOrdemGre(chave)}
-                    className="px-3 py-1 rounded-md text-[12px] font-medium transition-colors"
-                    style={{
-                      background: ordemGre === chave ? 'var(--p-balao)' : 'transparent',
-                      color: ordemGre === chave ? 'var(--p-texto)' : 'var(--p-texto3)',
-                      boxShadow: ordemGre === chave ? '0 1px 3px rgba(15,23,42,0.10)' : 'none',
-                    }}
-                  >
-                    {rotulo}
-                  </button>
-                ))}
-              </div>
+              <TrocaDeVisao
+                opcoes={temConclusao
+                  ? [['cursistas', 'Volume'], ['adesao', 'Adesão'], ['conclusao', 'Conclusão']]
+                  : [['cursistas', 'Volume'], ['adesao', 'Adesão']]}
+                valor={visaoGre}
+                aoTrocar={setOrdemGre}
+              />
             }
           >
-            Distribuição por GRE
+            {visaoGre === 'conclusao' ? 'Conclusão por GRE' : 'Distribuição por GRE'}
           </TituloDeBloco>
 
+          {/* A conclusão por GRE conta VÍNCULO, e não pessoa: a pergunta aqui é
+              "como está a regional", e quem leciona em duas responde às duas.
+              Somar as barras, por isso, não devolve o total do curso -- esse
+              está no cartão de cima. */}
           <div style={{ height: 236 }}>
             <BarrasRotuladas
-              dados={gresOrdenadas.map((g) => ({
-                rotulo: g.gre.replace(' GRE', 'ª'),
-                titulo: g.gre,
-                valor: ordemGre === 'cursistas' ? g.cursistas : g.adesao,
-                nota: `${g.escolas} escolas`,
+              dados={barrasDaGre.map((g) => ({
+                rotulo: g.rotulo,
+                titulo: g.titulo,
+                valor: g.valor,
+                nota: g.nota,
               }))}
-              formatarValor={(v) => (ordemGre === 'adesao' ? `${v}%` : br(v))}
+              formatarValor={(v) => (visaoGre === 'cursistas' ? br(v) : `${pctBr(v)}%`)}
             />
           </div>
-        </Cartao>
 
-        <Cartao className="flex flex-col">
-          <TituloDeBloco
-            acao={<span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>por profissionais</span>}
-          >
-            Escolas com maior alcance
-          </TituloDeBloco>
-          <LinhasComIcone
-            linhas={escolas.slice(0, 6).map((e, i) => ({
-              icone: i === 0 ? Award : School,
-              cor: i === 0 ? 'var(--p-linha)' : 'var(--p-roscaA)',
-              titulo: e.escola,
-              detalhe: e.gre,
-              valor: e.cursistas,
-            }))}
-          />
-        </Cartao>
-      </div>
-
-      {/* ─── Perfil da rede ─── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4 items-stretch">
-        <Cartao className="flex flex-col">
-          <TituloDeBloco>Eixos tecnológicos</TituloDeBloco>
-          <ListaRanqueada
-            mostrarPosicao={false}
-            itens={perfil.eixos.slice(0, 6).map((e) => ({ rotulo: e.chave, valor: e.total }))}
-          />
-        </Cartao>
-
-        <Cartao className="flex flex-col">
-          <TituloDeBloco>Faixa etária</TituloDeBloco>
-          <div style={{ height: 176 }}>
-            <BarrasRotuladas dados={perfil.faixaEtaria.map((f) => ({ rotulo: f.chave, valor: f.total }))} />
-          </div>
-        </Cartao>
-
-        <Cartao className="flex flex-col items-center justify-center gap-3">
-          <TituloDeBloco>Composição</TituloDeBloco>
-          <Rosca
-            tamanho={148} espessura={20} total={totalGenero}
-            centroValor={feminino ? `${Math.round((feminino.total / totalGenero) * 100)}%` : '—'}
-            centroRotulo="mulheres"
-            fatias={fatiasGenero}
-          />
-          <div className="w-full">
-            <LegendaDeRosca fatias={fatiasGenero} total={totalGenero} />
-          </div>
+          {visaoGre === 'conclusao' && piorGre && melhorGre && (
+            <p className="text-[12px] mt-3 leading-relaxed" style={{ color: 'var(--p-texto3)' }}>
+              <b style={{ color: 'var(--p-r5)' }}>{piorGre.gre}</b> conclui{' '}
+              <b style={{ color: 'var(--p-r5)' }}>{pctBr(piorGre.taxa)}%</b> e{' '}
+              <b style={{ color: 'var(--p-r4)' }}>{melhorGre.gre}</b>,{' '}
+              <b style={{ color: 'var(--p-r4)' }}>{pctBr(melhorGre.taxa)}%</b>
+              {/* A razão entre as pontas só é dita quando existe: com a pior em
+                  zero a divisão daria infinito, e "Infinity× de diferença" é o
+                  tipo de coisa que vai para uma apresentação. */}
+              {piorGre.taxa > 0 && (
+                <> — {virgula(Math.round((melhorGre.taxa / piorGre.taxa) * 10) / 10)}× de diferença entre as pontas</>
+              )}.
+            </p>
+          )}
         </Cartao>
 
         <Cartao className="flex flex-col">
           <TituloDeBloco
             acao={
-              <span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>
-                pico às <b style={{ color: 'var(--p-linha)' }}>{pico.hora}h</b>
-              </span>
+              <TrocaDeVisao
+                opcoes={[['componentes', 'Componentes'], ['eixos', 'Eixos']]}
+                valor={visaoPerfil}
+                aoTrocar={setVisaoPerfil}
+              />
             }
           >
-            Acessos por hora
+            {visaoPerfil === 'componentes' ? 'Componente curricular' : 'Eixos tecnológicos'}
           </TituloDeBloco>
-          <div style={{ height: 176 }}>
-            <BarrasRotuladas
-              mostrarValor={false}
-              dados={porHora.map((h) => ({
-                // 24 rótulos lado a lado se sobrepõem: um a cada três mantém a
-                // referência de horário sem virar borrão.
-                rotulo: h.hora % 3 === 0 ? `${h.hora}h` : '',
-                titulo: `${h.hora}h`,
-                valor: h.total,
-              }))}
+
+          {/* Os dois são a mesma pergunta em dois recortes -- o que a pessoa
+              ensina e em que eixo o curso técnico dela entra --, então dividem
+              o cartão em vez de ocupar dois.
+              O total e a participação saem da lista COMPLETA, não das sete
+              linhas desenhadas: dizer "28,9% do total" sobre um total que
+              esconde metade dos itens seria um percentual falso. */}
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <span
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[12px]"
+              style={{ background: 'var(--p-trilho)', color: 'var(--p-texto2)' }}
+            >
+              <Star size={13} style={{ color: 'var(--p-r3)' }} />
+              Destaque: <b style={{ color: 'var(--p-r4)' }}>{lider?.chave}</b>
+            </span>
+            <ResumoDoRanking
+              total={totalPerfil}
+              maior={lider?.total || 0}
+              participacao={participacaoDoLider}
             />
           </div>
+
+          <RankingPirulito
+            itens={listaPerfil.slice(0, 7).map((x) => ({ rotulo: x.chave, valor: x.total }))}
+            rodape={lider && (
+              <span>
+                <b style={{ color: 'var(--p-texto)' }}>{lider.chave}</b> lidera com{' '}
+                <b style={{ color: 'var(--p-r4)' }}>{br(lider.total)} ({participacaoDoLider}%)</b>{' '}
+                do total de <b style={{ color: 'var(--p-r4)' }}>{br(totalPerfil)}</b>.
+              </span>
+            )}
+          />
         </Cartao>
       </div>
+
+      {/* ─── Como o curso foi avaliado ─── */}
+      {temAvaliacao && (
+        <div className="grid grid-cols-1 xl:grid-cols-[1.6fr_1fr] gap-4 items-stretch">
+          <Cartao className="flex flex-col">
+            <TituloDeBloco
+              acao={
+                <span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>
+                  {br(R.nota.respostas)} respostas
+                </span>
+              }
+            >
+              Como o curso foi avaliado
+            </TituloDeBloco>
+
+            {/* A régua é a proporção de quem escolheu o TOPO da escala. Ela só
+                vale entre perguntas que compartilham a MESMA escala -- por isso
+                aqui entra um grupo só, e as demais ficam embaixo, separadas. */}
+            <p className="text-[12px] mb-3" style={{ color: 'var(--p-texto3)' }}>
+              {comparaveis.length} perguntas de{' '}
+              <b style={{ color: 'var(--p-texto2)' }}>{NOME_DA_ESCALA[escalaDoGrupo] || 'mesma escala'}</b>,
+              pela proporção que respondeu no topo.
+            </p>
+
+            <RankingPirulito
+              itens={comparaveis.map((a) => ({
+                rotulo: rotuloDaPergunta(a.pergunta),
+                titulo: a.pergunta,
+                valor: a.pctTopo,
+              }))}
+              teto={100}
+              destaque={maisFraca ? rotuloDaPergunta(maisFraca.pergunta) : null}
+              formatarValor={(v) => `${pctBr(v)}%`}
+              formatarEixo={(v) => `${v}%`}
+              rodape={maisFraca && (
+                <span>
+                  <b style={{ color: 'var(--p-texto)' }}>{rotuloDaPergunta(maisFraca.pergunta)}</b> é
+                  o único ponto abaixo dos demais:{' '}
+                  <b style={{ color: 'var(--p-r5)' }}>{pctBr(maisFraca.pctTopo)}%</b> —{' '}
+                  {br(maisFraca.respostas - maisFraca.topo)} pessoas responderam com ressalva.
+                </span>
+              )}
+            />
+
+            {/* Fora da régua acima porque têm outra escala. Cada uma diz a sua,
+                e elas não são comparadas nem entre si: são duas leituras
+                soltas, e apresentá-las como ranking seria inventar uma ordem. */}
+            {avulsas.length > 0 && (
+              <div className="mt-5 pt-4 border-t" style={{ borderColor: 'var(--p-cartaoBorda)' }}>
+                <p className="text-[12px] mb-3" style={{ color: 'var(--p-texto3)' }}>
+                  Outras escalas — não comparáveis com o gráfico acima
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {avulsas.map((a) => (
+                    <div key={a.pergunta} className="px-3.5 py-3 rounded-xl"
+                      style={{ background: 'var(--p-trilho)' }}>
+                      <p className="text-[12.5px] truncate" style={{ color: 'var(--p-texto)' }}
+                        title={a.pergunta}>
+                        {rotuloDaPergunta(a.pergunta)}
+                      </p>
+                      <div className="flex items-baseline gap-2 mt-1">
+                        <span className="text-[19px] font-bold tabular-nums" style={{ color: 'var(--p-r4)' }}>
+                          {pctBr(a.pctTopo)}%
+                        </span>
+                        <span className="text-[11px]" style={{ color: 'var(--p-texto3)' }}>
+                          {NOME_DA_ESCALA[a.escala] || a.escala}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Cartao>
+
+          <Cartao className="flex flex-col">
+            <TituloDeBloco>Nota geral</TituloDeBloco>
+
+            <div className="flex items-baseline gap-2 mb-1">
+              <span className="text-[42px] font-bold leading-none tabular-nums"
+                style={{ color: 'var(--p-texto)' }}>
+                {R.nota.media.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </span>
+              <span className="text-[15px]" style={{ color: 'var(--p-texto3)' }}>de 5</span>
+            </div>
+            <p className="text-[12px] mb-5" style={{ color: 'var(--p-texto3)' }}>
+              {pct(R.nota.satisfeitos, R.nota.respostas)}% deram 4 ou 5
+            </p>
+
+            {/* A distribuição vem junto da média porque média esconde a forma:
+                4,73 pode ser quase todo mundo dando 5, ou uma maioria em 4 com
+                uma ponta em 1. São dois cursos diferentes com o mesmo número. */}
+            <div className="flex flex-col gap-2">
+              {[...R.nota.distribuicao].reverse().map((d) => {
+                const p = R.nota.respostas ? (d.total / R.nota.respostas) * 100 : 0
+                return (
+                  <div key={d.nota} className="flex items-center gap-2.5">
+                    <span className="flex items-center gap-1 w-7 shrink-0 text-[12px] tabular-nums"
+                      style={{ color: 'var(--p-texto2)' }}>
+                      {d.nota}
+                      <Star size={10} style={{ color: 'var(--p-r3)' }} />
+                    </span>
+                    <span className="flex-1 h-2.5 rounded-full overflow-hidden"
+                      style={{ background: 'var(--p-trilho)' }}>
+                      <span className="block h-full rounded-full origin-left animate-barra"
+                        style={{ width: `${p}%`, background: `var(--p-r${Math.max(1, d.nota - 1)})` }} />
+                    </span>
+                    <span className="w-16 text-right text-[12px] tabular-nums shrink-0"
+                      style={{ color: 'var(--p-texto3)' }}>
+                      {br(d.total)}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Um filtro que a tela parece aplicar mas que estes números ignoram
+                seria pior do que filtro nenhum -- então ele é dito, e não
+                escondido. */}
+            {greAtiva && (
+              <p className="flex items-start gap-2 text-[12px] mt-5 px-3 py-2.5 rounded-xl leading-relaxed"
+                style={{ background: 'var(--p-trilho)', color: 'var(--p-texto2)' }}>
+                <Info size={14} className="shrink-0 mt-0.5" style={{ color: 'var(--p-r3)' }} />
+                <span>
+                  A avaliação é <b>anônima</b> e não registra regional. Este bloco continua
+                  sendo da rede inteira, mesmo com <b>{greAtiva}</b> selecionada.
+                </span>
+              </p>
+            )}
+          </Cartao>
+        </div>
+      )}
+
     </section>
   )
 }
@@ -379,18 +788,22 @@ export function BlocoOperacional({ dados, rotuloMes }) {
   const publicados = prod.modulosPorEstagio.find((e) => e.estagio === 'publicado')?.total || 0
 
   const ordemEstagio = ['producao', 'supervisao', 'coordenacao', 'publicado']
-  const coresEstagio = ['var(--p-roscaB)', 'var(--p-barra)', 'var(--p-barraTopo)', 'var(--p-roscaA)']
+  // Etapa é caminho: rampa do escuro (começo) ao claro (publicado).
+  const coresEstagio = ['var(--p-r5)', 'var(--p-r4)', 'var(--p-r3)', 'var(--p-r2)']
   const fatiasEstagio = ordemEstagio.map((chave, i) => ({
     rotulo: ROTULOS_ESTAGIO[chave],
     valor: prod.modulosPorEstagio.find((x) => x.estagio === chave)?.total || 0,
     cor: coresEstagio[i],
   })).filter((x) => x.valor > 0)
 
+  /* Cumprida é o fim do caminho e fica no roxo mais forte; não cumprida sai da
+     rampa e usa o vermelho de alerta, porque ali a cor precisa dizer "isto é
+     diferente das outras", e não "isto é mais um degrau". */
   const fatiasFrequencia = [
-    { rotulo: 'Cumpridas', valor: f.cumpridas, cor: 'var(--p-roscaA)' },
-    { rotulo: 'Aguardando avaliação', valor: f.aguardando, cor: 'var(--p-roscaB)' },
-    { rotulo: 'Ainda a fazer', valor: f.aFazer, cor: 'var(--p-barra)' },
-    { rotulo: 'Não cumpridas', valor: f.naoCumpridas, cor: 'var(--p-linha)' },
+    { rotulo: 'Cumpridas', valor: f.cumpridas, cor: 'var(--p-r5)' },
+    { rotulo: 'Aguardando avaliação', valor: f.aguardando, cor: 'var(--p-r3)' },
+    { rotulo: 'Ainda a fazer', valor: f.aFazer, cor: 'var(--p-r2)' },
+    { rotulo: 'Não cumpridas', valor: f.naoCumpridas, cor: 'var(--p-negativo)' },
   ].filter((x) => x.valor > 0)
 
   return (
@@ -486,10 +899,10 @@ export function BlocoOperacional({ dados, rotuloMes }) {
                         style={{
                           width: `${p.frequencia}%`,
                           background: p.frequencia >= 75
-                            ? 'linear-gradient(90deg, var(--p-barra), var(--p-roscaA))'
+                            ? 'linear-gradient(90deg, var(--p-r3), var(--p-r5))'
                             : p.frequencia >= 50
-                              ? 'linear-gradient(90deg, var(--p-roscaB), var(--p-barra))'
-                              : 'linear-gradient(90deg, var(--p-linha), var(--p-negativo))',
+                              ? 'linear-gradient(90deg, var(--p-r2), var(--p-r4))'
+                              : 'linear-gradient(90deg, var(--p-r1), var(--p-negativo))',
                           animationDelay: `${i * 60}ms`,
                         }}
                       />

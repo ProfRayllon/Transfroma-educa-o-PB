@@ -1,71 +1,64 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { RefreshCw, Calendar, X, Filter } from 'lucide-react'
+import { RefreshCw, Calendar, X, Filter, ChevronDown } from 'lucide-react'
 import api from '../lib/api'
-import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { variaveisDoTema } from '../components/painel/graficos'
-import { BlocoInstitucional, BlocoOperacional } from '../components/painel/blocos'
+import { BlocoInstitucional } from '../components/painel/blocos'
 
 /**
- * O dashboard.
+ * O dashboard institucional.
  *
- * Uma página só, dentro do sistema, com o menu do lado. As duas visões que
- * antes eram trilhas separadas -- institucional e operacional -- viraram duas
- * faixas da mesma tela: quem abre isso quer o retrato inteiro de uma vez, e
- * trocar de aba para ver a outra metade escondia justamente a comparação
- * entre elas.
+ * Uma página só, dentro do sistema, com o menu do lado.
+ *
+ * O bloco operacional -- equipe, produção, frequência -- saiu da tela e do
+ * payload a pedido da coordenação, que quis foco no institucional. O componente
+ * segue em blocos.jsx e as consultas seguem em painel.repo.js, ambos intactos:
+ * trazê-lo de volta é uma linha na lista de consultas da rota e outra aqui.
  *
  * O tema vem do sistema (`useTheme`), não de um controle próprio: o dashboard
  * é uma tela como as outras, e um segundo botão de claro/escuro só para ela
  * seriam duas verdades sobre a mesma preferência.
  */
 
-const PAINEIS = [
-  { chave: 'institucional', rotulo: 'Institucional' },
-  { chave: 'operacional', rotulo: 'Operacional' },
-]
-
-const PERIODOS = [
-  { dias: 7, rotulo: '7 dias' },
-  { dias: 15, rotulo: '15 dias' },
-  { dias: 30, rotulo: '30 dias' },
-]
-
-function rotuloDoMes(mes) {
-  const [ano, numero] = String(mes).split('-').map(Number)
-  const nome = new Date(ano, numero - 1, 1)
-    .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-  return nome.charAt(0).toUpperCase() + nome.slice(1)
-}
+/**
+ * A janela das séries diárias, fixa.
+ *
+ * Os chips de 7/15/30 dias saíram: só recortavam o gráfico de movimento, e um
+ * controle no topo da tela que muda um gráfico no meio dela parece valer para
+ * tudo. Trinta dias é a janela que mostra a forma da curva sem virar histórico.
+ */
+const DIAS = 30
 
 /**
- * O par de grupos de botões do topo.
+ * Um seletor para os dois filtros.
  *
- * Um componente só para os dois porque são o mesmo controle: escolher UM entre
- * poucos. Dois desenhos parecidos mas não iguais lado a lado é o tipo de
- * detalhe que faz uma tela parecer montada por pessoas diferentes.
+ * `select` nativo, e não a lista de botões usada antes para o período: são
+ * dezesseis regionais e dez cursos, e dezesseis botões numa linha viram uma
+ * parede. O nativo ainda traz busca por digitação e comportamento de toque
+ * correto no celular, de graça.
  */
-function Alternador({ opcoes, valor, aoTrocar }) {
+function Seletor({ rotulo, valor, opcoes, aoTrocar }) {
   return (
-    <div className="flex gap-1 p-1 rounded-xl" style={{ background: 'var(--p-trilho)' }}>
-      {opcoes.map((o) => {
-        const ativo = o.valor === valor
-        return (
-          <button
-            key={o.valor}
-            onClick={() => aoTrocar(o.valor)}
-            className="px-3.5 py-1.5 rounded-lg text-[13px] font-medium transition-colors"
-            style={{
-              background: ativo ? 'var(--p-balao)' : 'transparent',
-              color: ativo ? 'var(--p-texto)' : 'var(--p-texto3)',
-              boxShadow: ativo ? '0 1px 3px rgba(15,23,42,0.10)' : 'none',
-            }}
-          >
-            {o.rotulo}
-          </button>
-        )
-      })}
-    </div>
+    <label className="relative flex items-center">
+      <span className="sr-only">{rotulo}</span>
+      <select
+        value={valor ?? ''}
+        onChange={(e) => aoTrocar(e.target.value || null)}
+        className="appearance-none pl-3.5 pr-9 py-2 rounded-xl text-[13px] border cursor-pointer focus:outline-none focus:ring-2"
+        style={{
+          borderColor: 'var(--p-cartaoBorda)',
+          background: 'var(--p-cartao)',
+          color: valor ? 'var(--p-texto)' : 'var(--p-texto3)',
+        }}
+      >
+        <option value="">{rotulo}</option>
+        {opcoes.map((o) => (
+          <option key={o.valor} value={o.valor}>{o.rotulo}</option>
+        ))}
+      </select>
+      <ChevronDown size={14} className="absolute right-3 pointer-events-none"
+        style={{ color: 'var(--p-texto3)' }} />
+    </label>
   )
 }
 
@@ -74,25 +67,29 @@ export default function Painel() {
   const [dados, setDados] = useState(null)
   const [erro, setErro] = useState(null)
   const [carregando, setCarregando] = useState(true)
-  const [dias, setDias] = useState(30)
-  const [painel, setPainel] = useState('institucional')
   const [cursoId, setCursoId] = useState(null)
+  const [gre, setGre] = useState(null)
 
   /**
-   * Janela e curso vão para o servidor, não são recorte de tela.
+   * Os filtros vão para o servidor, não são recorte de tela.
    *
-   * "Acessaram em N dias" e as somas por GRE do curso são consultas de banco --
-   * não dá para derivá-las de uma resposta de 30 dias sem filtro. Como o
-   * servidor tem cache de um minuto por combinação, voltar a um filtro já visto
-   * responde na hora.
+   * As somas por GRE e por curso são consultas de banco -- não dá para
+   * derivá-las de uma resposta sem filtro. Como o servidor guarda um minuto de
+   * cache por combinação, voltar a um filtro já visto responde na hora.
    */
   const carregar = useCallback(() => {
     setCarregando(true)
-    api.get('/painel', { params: { dias, ...(cursoId ? { curso: cursoId } : {}) } })
+    api.get('/painel', {
+      params: {
+        dias: DIAS,
+        ...(cursoId ? { curso: cursoId } : {}),
+        ...(gre ? { gre } : {}),
+      },
+    })
       .then(({ data }) => { setDados(data); setErro(null) })
       .catch((e) => setErro(e?.response?.data?.message || 'Não foi possível carregar o dashboard.'))
       .finally(() => setCarregando(false))
-  }, [dias, cursoId])
+  }, [cursoId, gre])
 
   useEffect(carregar, [carregar])
 
@@ -104,8 +101,24 @@ export default function Painel() {
     return `${f(serie[0].dia)} – ${f(serie[serie.length - 1].dia)}`
   }, [serie])
 
-  const institucional = painel === 'institucional'
   const cursoAtivo = dados?.institucional.inscricoes.find((c) => c.id === dados.cursoId) || null
+  const opcoes = dados?.opcoes || { cursos: [], gres: [] }
+  const comResultado = useMemo(
+    () => new Set(opcoes.cursos.filter((c) => c.temConsolidado || c.temAvaliacao).map((c) => c.id)),
+    [opcoes.cursos])
+
+  /**
+   * Os cursos que o seletor oferece: publicados OU com planilha importada.
+   *
+   * A união importa porque as duas listas não se contêm. Um curso encerrado
+   * pode sair do ar e continuar tendo resultado -- e ele é justamente o que
+   * mais interessa nesta tela. Filtrar só por publicado o esconderia do único
+   * lugar onde os números dele existem.
+   */
+  const cursosDoSeletor = useMemo(() => {
+    const todos = dados?.institucional.inscricoes || []
+    return todos.filter((c) => c.publicado || comResultado.has(c.id))
+  }, [dados, comResultado])
 
   return (
     <div className="space-y-6 animate-fade-in" style={variaveisDoTema(dark)}>
@@ -117,48 +130,68 @@ export default function Painel() {
             {dados && ` · atualizado às ${new Date(dados.geradoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
           </p>
 
-          {/* O filtro ativo fica escrito, e não só destacado na lista: sem isso,
-              quem chega na tela já filtrada leria os números como se fossem os
-              da rede inteira. */}
-          {cursoAtivo && institucional && (
-            <button
-              onClick={() => setCursoId(null)}
-              className="mt-2 inline-flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-full text-[13px] font-medium transition-colors"
-              style={{ background: 'var(--p-trilho)', color: 'var(--p-texto)' }}
-              title="Remover o filtro"
-            >
-              <Filter size={13} style={{ color: 'var(--p-roscaA)' }} />
-              {cursoAtivo.curso}
-              <X size={14} style={{ color: 'var(--p-texto3)' }} />
-            </button>
-          )}
+          {/* O filtro ativo fica escrito, e não só selecionado na caixa: sem
+              isso, quem chega na tela já filtrada leria os números como se
+              fossem os da rede inteira. */}
+          <div className="flex flex-wrap gap-2 mt-2">
+            {cursoAtivo && (
+              <button
+                onClick={() => setCursoId(null)}
+                className="inline-flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-full text-[13px] font-medium transition-colors"
+                style={{ background: 'var(--p-trilho)', color: 'var(--p-texto)' }}
+                title="Remover o filtro"
+              >
+                <Filter size={13} style={{ color: 'var(--p-roscaA)' }} />
+                {cursoAtivo.curso}
+                <X size={14} style={{ color: 'var(--p-texto3)' }} />
+              </button>
+            )}
+            {dados?.gre && (
+              <button
+                onClick={() => setGre(null)}
+                className="inline-flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-full text-[13px] font-medium transition-colors"
+                style={{ background: 'var(--p-trilho)', color: 'var(--p-texto)' }}
+                title="Remover o filtro"
+              >
+                <Filter size={13} style={{ color: 'var(--p-roscaB)' }} />
+                {dados.gre}
+                <X size={14} style={{ color: 'var(--p-texto3)' }} />
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <Alternador
-            opcoes={PAINEIS.map((p) => ({ valor: p.chave, rotulo: p.rotulo }))}
-            valor={painel}
-            aoTrocar={setPainel}
+          {/* A lista traz TODOS os cursos publicados, e não só os que têm
+              planilha: o filtro também recorta base e inscrições, que existem
+              para qualquer curso. O ponto marca quais já têm resultado, para
+              que ver os cartões de conclusão vazios seja uma escolha
+              informada, e não uma surpresa. */}
+          <Seletor
+            rotulo="Todos os cursos"
+            valor={cursoId}
+            aoTrocar={(v) => setCursoId(v ? Number(v) : null)}
+            opcoes={cursosDoSeletor.map((c) => ({
+              valor: c.id,
+              rotulo: comResultado.has(c.id) ? `● ${c.curso}` : c.curso,
+            }))}
           />
 
-          {/* O período só recorta as séries diárias, que são todas do
-              institucional -- os totais acumulados não dependem dele e o
-              operacional nem tem série. Deixá-lo à vista no operacional seria
-              oferecer um controle que não faz nada. */}
-          {institucional && (
-            <>
-              <Alternador
-                opcoes={PERIODOS.map((p) => ({ valor: p.dias, rotulo: p.rotulo }))}
-                valor={dias}
-                aoTrocar={setDias}
-              />
-              {periodo && (
-                <span className="hidden lg:flex items-center gap-2 px-3.5 py-2 rounded-xl text-[13px] border"
-                  style={{ borderColor: 'var(--p-cartaoBorda)', color: 'var(--p-texto2)' }}>
-                  <Calendar size={14} /> {periodo}
-                </span>
-              )}
-            </>
+          <Seletor
+            rotulo="Todas as GREs"
+            valor={gre}
+            aoTrocar={setGre}
+            opcoes={opcoes.gres.map((g) => ({
+              valor: g.chave,
+              rotulo: `${g.chave} · ${g.total.toLocaleString('pt-BR')}`,
+            }))}
+          />
+
+          {periodo && (
+            <span className="hidden lg:flex items-center gap-2 px-3.5 py-2 rounded-xl text-[13px] border"
+              style={{ borderColor: 'var(--p-cartaoBorda)', color: 'var(--p-texto2)' }}>
+              <Calendar size={14} /> {periodo}
+            </span>
           )}
 
           <button
@@ -184,17 +217,14 @@ export default function Painel() {
           </button>
         </div>
       ) : dados ? (
-        institucional
-          ? (
-            <BlocoInstitucional
-              dados={dados}
-              serie={serie}
-              dias={dias}
-              cursoAtivo={cursoAtivo}
-              aoFiltrarCurso={(id) => setCursoId((atual) => (atual === id ? null : id))}
-            />
-          )
-          : <BlocoOperacional dados={dados} rotuloMes={rotuloDoMes(dados.mes)} />
+        <BlocoInstitucional
+          dados={dados}
+          serie={serie}
+          dias={DIAS}
+          cursoAtivo={cursoAtivo}
+          greAtiva={dados.gre}
+          aoFiltrarCurso={(id) => setCursoId((atual) => (atual === id ? null : id))}
+        />
       ) : null}
     </div>
   )

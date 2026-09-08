@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUp, ArrowDown } from 'lucide-react'
+import { ArrowUp, ArrowDown, TrendingUp, BarChart3, Trophy, PieChart } from 'lucide-react'
 
 /**
  * Os gráficos do painel institucional.
@@ -22,57 +22,112 @@ import { ArrowUp, ArrowDown } from 'lucide-react'
  * `.card` do próprio sistema, para o dashboard acompanhar o claro/escuro do
  * resto sem manter uma segunda definição de superfície que uma hora divergiria.
  */
+/**
+ * As cores dos gráficos, nos dois temas.
+ *
+ * Tudo na família roxa da marca, para o dashboard não parecer um sistema
+ * diferente colado dentro deste. Só o que é gráfico mora aqui: fundo de página
+ * e caixa de card vêm da classe `.card` do próprio sistema.
+ *
+ * ─── Por que roxo dá certo aqui, mesmo sendo uma cor só ───
+ *
+ * Quase tudo neste dashboard é MAGNITUDE, não identidade: ranking de GREs,
+ * inscritos por curso, faixa etária, eixos. Magnitude se codifica com um hue só
+ * em intensidades diferentes -- é a forma correta, não um remendo para caber na
+ * marca. Cores categóricas só apareceriam se houvesse séries sem ordem entre
+ * si, e aqui existe um caso: barras de acesso contra a linha de inscrições.
+ *
+ * Para esse par escolhi dois roxos com distância medida, não dois vizinhos
+ * quaisquer: no claro, #A855F7 e #5B21B6 dão ΔE 20,1 para visão normal e 16,1
+ * para protanopia, com contraste acima de 3:1 nos dois. Trocar um deles por um
+ * roxo mais próximo derruba isso rápido -- #8B5CF6 com #C084FC, por exemplo,
+ * cai para ΔE 13,1 e as duas séries viram a mesma cor.
+ */
 export const TEMA = {
   claro: {
     texto: '#0F172A',
     texto2: '#475569',
     texto3: '#94A3B8',
-    grade: 'rgba(15,23,42,0.07)',
-    trilho: 'rgba(15,23,42,0.06)',
-    trilhoForte: 'rgba(15,23,42,0.16)',
-    cartaoBorda: 'rgba(15,23,42,0.08)',
+    grade: 'rgba(88,28,135,0.10)',
+    trilho: 'rgba(88,28,135,0.08)',
+    trilhoForte: 'rgba(88,28,135,0.20)',
+    cartaoBorda: 'rgba(88,28,135,0.12)',
     balao: '#FFFFFF',
     pontoBorda: '#FFFFFF',
-    // As duas séries do gráfico principal: ΔE 14.7 para deutan e 28.1 para
-    // visão normal. Trocar uma delas pede validar de novo -- azul e roxo, por
-    // exemplo, colidem em ΔE 1.3 e ficam iguais para quem tem daltonismo.
-    barra: '#3B82F6',
-    barraTopo: '#60A5FA',
-    linha: '#DB2777',
-    roscaA: '#0891B2',
-    roscaB: '#7C3AED',
+    barra: '#A855F7',
+    barraTopo: '#C4B5FD',
+    linha: '#5B21B6',
+    roscaA: '#7C3AED',
+    roscaB: '#A78BFA',
     negativo: '#DC2626',
   },
   escuro: {
     texto: '#F1EEFB',
     texto2: 'rgba(241,238,251,0.60)',
-    texto3: 'rgba(241,238,251,0.36)',
-    grade: 'rgba(255,255,255,0.08)',
-    trilho: 'rgba(255,255,255,0.09)',
-    trilhoForte: 'rgba(255,255,255,0.20)',
-    cartaoBorda: 'rgba(255,255,255,0.10)',
+    texto3: 'rgba(241,238,251,0.38)',
+    grade: 'rgba(196,181,253,0.12)',
+    trilho: 'rgba(196,181,253,0.12)',
+    trilhoForte: 'rgba(196,181,253,0.26)',
+    cartaoBorda: 'rgba(196,181,253,0.14)',
     balao: '#241C3D',
     pontoBorda: '#241C3D',
-    barra: '#4EA3F7',
-    barraTopo: '#7DC0FF',
-    linha: '#EC4899',
-    roscaA: '#22D3EE',
-    roscaB: '#A78BFA',
+    barra: '#A855F7',
+    barraTopo: '#C4B5FD',
+    /* No escuro a linha inverte: fica MAIS clara que as barras.
+     *
+     * Um roxo escuro sobre fundo escuro tem contraste 2,26:1 e some. O par
+     * claro-sobre-médio dá ΔE 23,6 e contraste acima de 3:1 -- passa em tudo
+     * menos na faixa de luminosidade que o validador recomenda para
+     * preenchimentos categóricos de mesmo peso, que não é o caso aqui: um traço
+     * de 2,5px precisa de mais luz que uma barra cheia para pesar igual. */
+    linha: '#D8B4FE',
+    roscaA: '#A78BFA',
+    roscaB: '#7C3AED',
     negativo: '#FB7185',
   },
 }
 
-export const variaveisDoTema = (escuro) => {
-  const t = escuro ? TEMA.escuro : TEMA.claro
-  return Object.fromEntries(Object.entries(t).map(([chave, valor]) => [`--p-${chave}`, valor]))
+/**
+ * A rampa de magnitude: um roxo só, do claro ao escuro.
+ *
+ * Usada em tudo que é ranking ou proporção. As duas versões foram validadas
+ * como rampa ordinal -- luminosidade sempre descendo, degraus separados o
+ * bastante para se distinguirem, e a ponta clara ainda visível contra o fundo.
+ */
+export const RAMPA = {
+  claro: ['#A78BFA', '#9061F9', '#7C3AED', '#6220CE', '#4C1D95'],
+  escuro: ['#DDD6FE', '#C4B5FD', '#A78BFA', '#8B5CF6', '#7C3AED'],
 }
 
-/** Os quatro gradientes dos cartões do topo. */
+export const degrau = (i, total, escuro = false) => {
+  const r = escuro ? RAMPA.escuro : RAMPA.claro
+  if (total <= 1) return r[Math.floor(r.length / 2)]
+  return r[Math.min(r.length - 1, Math.round((i / (total - 1)) * (r.length - 1)))]
+}
+
+export const variaveisDoTema = (escuro) => {
+  const t = escuro ? TEMA.escuro : TEMA.claro
+  const base = Object.fromEntries(Object.entries(t).map(([k, v]) => [`--p-${k}`, v]))
+  const rampa = Object.fromEntries((escuro ? RAMPA.escuro : RAMPA.claro).map((c, i) => [`--p-r${i + 1}`, c]))
+  return { ...base, ...rampa }
+}
+
+/**
+ * Os quatro gradientes dos cartões do topo, em profundidades diferentes do
+ * mesmo roxo.
+ *
+ * Aqui a cor é decoração, não dado: cada cartão já se identifica pelo ícone e
+ * pelo rótulo, e ninguém precisa distinguir um do outro pela cor. Por isso eles
+ * podem ser variações próximas -- o que numa codificação de dados seria erro.
+ *
+ * Os nomes das chaves seguem sendo posicionais para não obrigar a renomear
+ * cada chamada quando a paleta mudar de novo.
+ */
 export const GRADIENTES = {
-  azul: ['#1D4ED8', '#3B82F6'],
-  ciano: ['#0E7490', '#06B6D4'],
-  roxo: ['#6D28D9', '#9333EA'],
-  rosa: ['#BE185D', '#EC4899'],
+  azul: ['#4C1D95', '#7C3AED'],
+  ciano: ['#5B21B6', '#9061F9'],
+  roxo: ['#6D28D9', '#A855F7'],
+  rosa: ['#7E22CE', '#C084FC'],
 }
 
 const br = (n) => Number(n || 0).toLocaleString('pt-BR')
@@ -170,7 +225,13 @@ export function Sparkline({ pontos, cor = 'rgba(255,255,255,0.9)', largura = 150
 
 /* ═══ Cartão de indicador ═══ */
 
-export function CartaoKpi({ icone: Icone, rotulo, valor, sufixo, variacao, comparativo, gradiente = 'azul', serie, duracao }) {
+export function CartaoKpi({
+  icone: Icone, rotulo, valor, sufixo, variacao, comparativo,
+  gradiente = 'azul', serie, duracao,
+  // Taxa e nota nao sao contagem: 69% e 4,73 precisam da casa decimal que um
+  // total de pessoas nunca quer.
+  decimais = 0,
+}) {
   const [de, para] = GRADIENTES[gradiente] || GRADIENTES.azul
   const subiu = (variacao ?? 0) >= 0
 
@@ -191,7 +252,7 @@ export function CartaoKpi({ icone: Icone, rotulo, valor, sufixo, variacao, compa
         <div className="min-w-0 flex-1">
           <p className="text-[14px] text-white/85 leading-snug">{rotulo}</p>
           <div className="text-[34px] font-bold text-white leading-none mt-1.5">
-            <Contador valor={valor} sufixo={sufixo} duracao={duracao} />
+            <Contador valor={valor} sufixo={sufixo} duracao={duracao} decimais={decimais} />
           </div>
         </div>
       </div>
@@ -400,7 +461,9 @@ export function BarrasRotuladas({ dados, altura = '100%', formatarValor, mostrar
               className="w-full rounded-t-md animate-coluna origin-bottom transition-opacity group-hover:opacity-80"
               style={{
                 height: `${Math.max(2, alturaPct)}%`,
-                background: 'linear-gradient(180deg, var(--p-roscaA) 0%, var(--p-barra) 100%)',
+                // Do topo claro para a base escura: a barra ganha peso onde
+                // encosta no eixo, que e onde a leitura comeca.
+                background: 'linear-gradient(180deg, var(--p-r2) 0%, var(--p-r4) 100%)',
                 animationDelay: `${i * 35}ms`,
               }}
               title={`${d.titulo || d.rotulo}: ${br(d.valor)}${d.nota ? ` · ${d.nota}` : ''}`}
@@ -476,6 +539,361 @@ export function LegendaDeRosca({ fatias, total }) {
   )
 }
 
+
+
+/**
+ * Os símbolos de gênero, desenhados à mão.
+ *
+ * A biblioteca de ícones do projeto (lucide 0.294) não traz Vênus nem Marte, e
+ * o substituto natural -- um boneco genérico -- seria o mesmo desenho nos dois
+ * lados, carregando a distinção só na cor. Cor sozinha não é rótulo: quem tem
+ * daltonismo veria dois ícones iguais.
+ *
+ * São traços simples num quadro de 24x24, no mesmo peso dos ícones da lucide
+ * para não destoarem do resto da tela. Ficam em <g>, e não em <svg> aninhado,
+ * porque svg dentro de svg é suportado mas se comporta de formas diferentes
+ * entre navegadores na hora de posicionar.
+ */
+const SIMBOLOS = {
+  feminino: (
+    <>
+      <circle cx="12" cy="9" r="5" />
+      <line x1="12" y1="14" x2="12" y2="22" />
+      <line x1="8.5" y1="18.5" x2="15.5" y2="18.5" />
+    </>
+  ),
+  masculino: (
+    <>
+      <circle cx="10" cy="14" r="5" />
+      <line x1="13.6" y1="10.4" x2="20" y2="4" />
+      <polyline points="14.5,4 20,4 20,9.5" />
+    </>
+  ),
+}
+
+function Simbolo({ nome, x, y, tamanho = 21, cor }) {
+  const desenho = SIMBOLOS[nome]
+  if (!desenho) return null
+  const escala = tamanho / 24
+  return (
+    <g
+      transform={`translate(${x} ${y}) scale(${escala})`}
+      fill="none"
+      stroke={cor}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {desenho}
+    </g>
+  )
+}
+
+/* ═══ Rosca com rótulo no próprio arco ═══ */
+
+/**
+ * A rosca grande, com cada fatia nomeada ao lado dela.
+ *
+ * Rótulo direto em vez de legenda embaixo. A legenda obriga um vaivém -- olhar
+ * a cor no arco, descer, procurar a mesma cor na lista, subir de novo -- e esse
+ * vaivém é justamente o que cansa em painel projetado ou lido de relance. Com o
+ * nome encostado na fatia, a leitura acaba onde começou.
+ *
+ * Também é o que libera espaço: sem a lista embaixo, o desenho ocupa o cartão
+ * inteiro, que era o pedido.
+ *
+ * O rótulo sai por uma cotovelada -- um traço curto saindo do arco, uma dobra e
+ * o texto numa coluna fixa nas laterais. A coluna fixa é o que impede dois
+ * nomes de se atropelarem quando duas fatias caem em ângulos próximos; alinhar
+ * o texto no ângulo exato de cada uma seria mais bonito e ilegível na primeira
+ * vez que duas fatias ficassem pequenas.
+ */
+export function RoscaRotulada({ fatias, total, centroValor, centroRotulo, altura = 300 }) {
+  /**
+   * A caixa e a coluna de texto sao calculadas, e nao chutadas.
+   *
+   * Texto em SVG nao quebra linha nem respeita borda: se o rotulo nao couber,
+   * ele simplesmente sai da caixa e some. COLUNA precisa ser >= a largura do
+   * rotulo mais longo, porque uma fatia pode cair de qualquer lado conforme os
+   * dados mudam -- e o lado esquerdo e o direito tem que aguentar o pior caso
+   * igualmente.
+   */
+  const W = 620, H = 340
+  const cx = W / 2, cy = H / 2
+  const raio = 105, espessura = 38
+  const COLUNA = 180
+  const volta = 2 * Math.PI * raio
+  const soma = total ?? fatias.reduce((s, f) => s + f.valor, 0)
+
+  let acumulado = 0
+  const arcos = fatias.map((f) => {
+    const fracao = soma ? f.valor / soma : 0
+    const meio = acumulado + fracao / 2
+    acumulado += fracao
+    return { ...f, fracao, offset: acumulado - fracao, meio }
+  })
+
+  // -90° para a primeira fatia começar no topo, como todo mundo espera.
+  const ponto = (fracao, r) => {
+    const a = fracao * 2 * Math.PI - Math.PI / 2
+    return [cx + r * Math.cos(a), cy + r * Math.sin(a)]
+  }
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: altura }}>
+      <g transform={`rotate(-90 ${cx} ${cy})`}>
+        <circle cx={cx} cy={cy} r={raio} fill="none" stroke="var(--p-trilho)" strokeWidth={espessura} />
+        {arcos.map((a) => (
+          <circle
+            key={a.rotulo}
+            cx={cx} cy={cy} r={raio} fill="none"
+            stroke={a.cor} strokeWidth={espessura} strokeLinecap="butt"
+            strokeDasharray={`${(volta * a.fracao).toFixed(2)} ${volta}`}
+            strokeDashoffset={-(volta * a.offset)}
+            style={{ transition: 'stroke-dasharray 1s cubic-bezier(0.22,1,0.36,1)' }}
+          />
+        ))}
+      </g>
+
+      {arcos.map((a) => {
+        const [x1, y1] = ponto(a.meio, raio + espessura / 2)
+        const [x2, y2] = ponto(a.meio, raio + espessura / 2 + 20)
+        const direita = x2 >= cx
+        const xTexto = direita ? W - COLUNA : COLUNA
+        const ancora = direita ? 'start' : 'end'
+
+        return (
+          <g key={`r-${a.rotulo}`}>
+            <polyline
+              points={`${x1},${y1} ${x2},${y2} ${xTexto + (direita ? -8 : 8)},${y2}`}
+              fill="none" stroke={a.cor} strokeWidth="1.5" strokeLinejoin="round" opacity="0.65"
+            />
+            <circle cx={x1} cy={y1} r="2.5" fill={a.cor} />
+            {a.simbolo && (
+              <Simbolo
+                nome={a.simbolo}
+                cor={a.cor}
+                x={direita ? xTexto - 28 : xTexto + 7}
+                y={y2 - 21}
+              />
+            )}
+            <text x={xTexto} y={y2 - 4} textAnchor={ancora}
+              style={{ fontSize: 15, fontWeight: 600, fill: 'var(--p-texto)' }}>
+              {/* O nome inteiro fica no title: texto em SVG nao quebra linha, e
+                  a coluna tem largura fixa -- quem precisa do nome completo
+                  passa o mouse. */}
+              <title>{a.titulo || a.rotulo}</title>
+              {a.rotulo}
+            </text>
+            <text x={xTexto} y={y2 + 15} textAnchor={ancora}
+              style={{ fontSize: 14, fill: 'var(--p-texto2)' }}>
+              {br(a.valor)} · {soma ? ((a.valor / soma) * 100).toFixed(1).replace('.', ',') : 0}%
+            </text>
+          </g>
+        )
+      })}
+
+      <text x={cx} y={cy + 2} textAnchor="middle"
+        style={{ fontSize: 52, fontWeight: 700, fill: 'var(--p-texto)' }}>
+        {centroValor}
+      </text>
+      {centroRotulo && (
+        <text x={cx} y={cy + 26} textAnchor="middle"
+          style={{ fontSize: 14, fill: 'var(--p-texto2)' }}>
+          {centroRotulo}
+        </text>
+      )}
+    </svg>
+  )
+}
+
+
+/* ═══ Ranking em pirulito ═══ */
+
+/**
+ * Uma escala que termina em número redondo.
+ *
+ * Sem isso o eixo acabaria em 3.165 e as marcas cairiam em 791, 1.582, 2.374 --
+ * números que ninguém usa para estimar. A regra: sobe até a próxima potência de
+ * dez arredondada para cima e, se isso deixar menos de três marcas, corta o
+ * passo pela metade.
+ */
+function escalaRedonda(maximo) {
+  if (maximo <= 0) return { topo: 1, marcas: [0, 1] }
+  const base = 10 ** Math.floor(Math.log10(maximo))
+  let topo = Math.ceil(maximo / base) * base
+  let passo = base
+  if (topo / passo < 3) passo = base / 2
+  if (topo / passo > 8) passo = base * 2
+  topo = Math.ceil(maximo / passo) * passo
+
+  const marcas = []
+  for (let v = 0; v <= topo + 1e-9; v += passo) marcas.push(Math.round(v))
+  return { topo, marcas }
+}
+
+const compactoBr = (v) => (v >= 1000
+  ? `${(v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mil`
+  : String(v))
+
+/**
+ * Ranking em pirulito: um traço fino até um ponto.
+ *
+ * Preferido à barra cheia quando os itens são muitos e os valores próximos. A
+ * barra pinta uma área grande para cada linha e, empilhadas, viram um bloco de
+ * cor onde a diferença entre o 3º e o 4º se perde. O pirulito concentra a
+ * leitura no ponto -- o olho compara posições, que é o que ele faz melhor.
+ *
+ * O valor aparece escrito à direita porque estimar número em eixo custa uma ida
+ * e volta; quem quer a ordem lê os pontos, quem quer a cifra lê a coluna.
+ */
+export function RankingPirulito({
+  itens, rodape,
+  // Percentual e contagem nao se escrevem igual, e o eixo de um percentual quer
+  // ir ate 100 mesmo quando o maior valor e 95: sem `teto`, duas visoes do mesmo
+  // cartao teriam reguas diferentes e pareceriam comparaveis.
+  formatarValor = br,
+  formatarEixo = compactoBr,
+  teto = null,
+  // O rotulo de uma linha que merece atencao. Uso parcimonioso: destacar tudo
+  // e o mesmo que nao destacar nada.
+  destaque = null,
+}) {
+  const maximo = teto || Math.max(0, ...itens.map((i) => i.valor))
+  const { topo, marcas } = escalaRedonda(maximo)
+
+  return (
+    <div className="flex flex-col gap-1">
+      {itens.map((item, i) => {
+        const pct = topo ? (item.valor / topo) * 100 : 0
+        const marcado = destaque != null && destaque === item.rotulo
+        return (
+          <div key={item.rotulo} className="flex items-center gap-2.5 h-9">
+            <span
+              className="w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-semibold tabular-nums shrink-0"
+              style={{ background: 'var(--p-trilho)', color: 'var(--p-texto2)' }}
+            >
+              {i + 1}
+            </span>
+
+            <span
+              className="text-[13px] truncate shrink-0 w-[38%] max-w-[210px]"
+              style={{
+                color: marcado ? 'var(--p-r5)' : 'var(--p-texto)',
+                fontWeight: marcado ? 600 : 400,
+              }}
+              title={item.titulo || item.rotulo}
+            >
+              {item.rotulo}
+            </span>
+
+            {/* A haste e o ponto compartilham o mesmo cálculo de posição: se um
+                dia forem calculados em lugares diferentes, um vai encostar no
+                outro errado na primeira mudança de escala. */}
+            <span className="relative flex-1 min-w-0 h-full flex items-center">
+              {marcas.map((m) => (
+                <span
+                  key={m}
+                  className="absolute inset-y-0 w-px"
+                  style={{ left: `${(m / topo) * 100}%`, background: 'var(--p-grade)' }}
+                />
+              ))}
+              <span
+                className="absolute h-[2px] rounded-full origin-left animate-barra"
+                style={{
+                  width: `${pct}%`,
+                  background: marcado ? 'var(--p-r5)' : 'var(--p-r3)',
+                  animationDelay: `${i * 45}ms`,
+                }}
+              />
+              <span
+                className="absolute w-3 h-3 rounded-full animate-cena"
+                style={{
+                  left: `${pct}%`,
+                  transform: 'translateX(-50%)',
+                  background: marcado ? 'var(--p-r5)' : 'var(--p-r3)',
+                  animationDelay: `${i * 45}ms`,
+                }}
+              />
+            </span>
+
+            <span
+              className="text-[13px] font-semibold tabular-nums text-center shrink-0 w-[74px] py-1 rounded-lg"
+              style={{
+                background: marcado ? 'var(--p-r5)' : 'var(--p-trilho)',
+                color: marcado ? '#fff' : 'var(--p-r4)',
+              }}
+            >
+              {formatarValor(item.valor)}
+            </span>
+          </div>
+        )
+      })}
+
+      {/* O eixo alinhado com a coluna das hastes: as mesmas larguras da linha
+          acima, para as marcas caírem exatamente sobre as linhas de grade. */}
+      <div className="flex items-center gap-2.5 mt-1">
+        <span className="w-6 shrink-0" />
+        <span className="shrink-0 w-[38%] max-w-[210px]" />
+        <span className="relative flex-1 min-w-0 h-4">
+          <span className="absolute inset-x-0 top-0 h-px" style={{ background: 'var(--p-grade)' }} />
+          {marcas.map((m) => (
+            <span
+              key={m}
+              className="absolute top-1 text-[11px] tabular-nums whitespace-nowrap"
+              style={{
+                left: `${(m / topo) * 100}%`,
+                transform: m === 0 ? 'none' : 'translateX(-50%)',
+                color: 'var(--p-texto3)',
+              }}
+            >
+              {formatarEixo(m)}
+            </span>
+          ))}
+        </span>
+        <span className="w-[74px] shrink-0" />
+      </div>
+
+      {rodape && (
+        <div
+          className="flex items-center gap-2.5 mt-3 px-3 py-2 rounded-xl text-[12px]"
+          style={{ background: 'var(--p-trilho)', color: 'var(--p-texto2)' }}
+        >
+          <TrendingUp size={14} style={{ color: 'var(--p-r3)' }} className="shrink-0" />
+          {rodape}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** As três medidas que resumem um ranking. */
+export function ResumoDoRanking({ total, maior, participacao }) {
+  const itens = [
+    { icone: BarChart3, valor: br(total), rotulo: 'Total' },
+    { icone: Trophy, valor: br(maior), rotulo: 'Maior valor' },
+    { icone: PieChart, valor: `${participacao}%`, rotulo: 'Participação do líder' },
+  ]
+
+  return (
+    <div className="flex items-stretch">
+      {itens.map((i, indice) => (
+        <div
+          key={i.rotulo}
+          className={`flex-1 text-center px-3 ${indice > 0 ? 'border-l' : ''}`}
+          style={{ borderColor: 'var(--p-cartaoBorda)' }}
+        >
+          <i.icone size={16} className="mx-auto mb-1" style={{ color: 'var(--p-r3)' }} />
+          <div className="text-[17px] font-bold tabular-nums leading-none" style={{ color: 'var(--p-texto)' }}>
+            {i.valor}
+          </div>
+          <div className="text-[11px] mt-1" style={{ color: 'var(--p-texto3)' }}>{i.rotulo}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /* ═══ Lista ranqueada ═══ */
 
 export function ListaRanqueada({ itens, sufixo = '', mostrarPosicao = true, aoClicar, selecionado }) {
@@ -519,7 +937,7 @@ export function ListaRanqueada({ itens, sufixo = '', mostrarPosicao = true, aoCl
                 className="h-full rounded-full animate-barra origin-left"
                 style={{
                   width: `${(item.valor / maximo) * 100}%`,
-                  background: 'linear-gradient(90deg, var(--p-roscaB) 0%, var(--p-roscaA) 100%)',
+                  background: 'linear-gradient(90deg, var(--p-r4) 0%, var(--p-r2) 100%)',
                   animationDelay: `${i * 50}ms`,
                 }}
               />
@@ -534,29 +952,162 @@ export function ListaRanqueada({ itens, sufixo = '', mostrarPosicao = true, aoCl
   )
 }
 
-/* ═══ Linhas com ícone (lista de registros) ═══ */
 
-export function LinhasComIcone({ linhas }) {
+/* ═══ Carrossel de cursos ═══ */
+
+/**
+ * Um curso por vez, do mais procurado para o menos, girando sozinho.
+ *
+ * Substitui a lista de cinco linhas no mesmo espaço. A troca vale porque a
+ * lista mostrava cinco nomes espremidos e nenhuma imagem; aqui cada curso
+ * ocupa o cartão inteiro por alguns segundos -- cabe a capa, o número de
+ * inscritos, a fatia que ele representa e a posição no ranking.
+ *
+ * Três coisas que um carrossel precisa ter para não irritar:
+ *
+ * 1. Para quando o mouse entra. Ninguém consegue ler algo que foge, e a
+ *    intenção de ler é justamente o que o ponteiro parado sinaliza.
+ * 2. Para de vez quando um curso está filtrado. Ali o cartão deixou de ser
+ *    vitrine e virou o estado atual da tela -- girar seria contradizer o
+ *    filtro que a pessoa acabou de aplicar.
+ * 3. Não gira para quem pediu menos movimento no sistema
+ *    (`prefers-reduced-motion`), que é acessibilidade e não preferência.
+ */
+export function CarrosselDeCursos({ itens, selecionado, aoClicar, segundos = 5 }) {
+  const [indice, setIndice] = useState(0)
+  const [pausado, setPausado] = useState(false)
+  // Capa que nao carregou cai no degrade, em vez de deixar o icone de imagem
+  // quebrada no meio do cartao. Guardado por id: a mesma capa nao e tentada de
+  // novo a cada volta do carrossel.
+  const [semCapa, setSemCapa] = useState(() => new Set())
+
+  const total = itens.reduce((s, i) => s + i.valor, 0)
+  const posicaoSelecionada = itens.findIndex((i) => i.id === selecionado)
+  const travado = posicaoSelecionada >= 0
+  const atual = itens[travado ? posicaoSelecionada : Math.min(indice, itens.length - 1)]
+
+  const menosMovimento = useMemo(
+    () => typeof window !== 'undefined'
+      && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches,
+    [],
+  )
+
+  useEffect(() => {
+    if (pausado || travado || menosMovimento || itens.length < 2) return
+    const id = setInterval(() => setIndice((i) => (i + 1) % itens.length), segundos * 1000)
+    return () => clearInterval(id)
+  }, [pausado, travado, menosMovimento, itens.length, segundos])
+
+  if (!atual) return null
+
+  const fatia = total ? (atual.valor / total) * 100 : 0
+  const posicao = itens.indexOf(atual) + 1
+
   return (
-    <div className="grid gap-1">
-      {linhas.map((l, i) => (
-        <div key={`${l.titulo}-${i}`} className="flex items-center gap-3 py-1.5">
-          <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-            style={{ background: `${l.cor}22`, color: l.cor }}>
-            <l.icone size={15} />
+    <div
+      className="flex flex-col h-full"
+      onMouseEnter={() => setPausado(true)}
+      onMouseLeave={() => setPausado(false)}
+    >
+      <div
+        onClick={aoClicar ? () => aoClicar(atual) : undefined}
+        role={aoClicar ? 'button' : undefined}
+        tabIndex={aoClicar ? 0 : undefined}
+        onKeyDown={aoClicar ? (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); aoClicar(atual) }
+        } : undefined}
+        className={`relative flex-1 min-h-0 rounded-xl overflow-hidden ${aoClicar ? 'cursor-pointer' : ''}`}
+        style={{ background: 'var(--p-trilho)' }}
+      >
+        {/* key no indice: remonta o bloco a cada troca, e a animação de entrada
+            roda de novo. Sem isso o conteúdo trocaria sem transição nenhuma. */}
+        <div key={atual.id} className="absolute inset-0 animate-cena">
+          {atual.imagem && !semCapa.has(atual.id) ? (
+            <img
+              src={atual.imagem}
+              alt=""
+              loading="lazy"
+              className="absolute inset-0 w-full h-full object-cover"
+              onError={() => setSemCapa((s) => new Set(s).add(atual.id))}
+            />
+          ) : (
+            <div
+              className="absolute inset-0"
+              style={{ background: 'linear-gradient(135deg, var(--p-roscaB) 0%, var(--p-barra) 100%)' }}
+            />
+          )}
+
+          {/* Véu escuro de baixo para cima: o texto precisa de contraste sobre
+              uma capa que pode ser clara, escura ou cheia de detalhe -- e não há
+              como saber qual antes de a coordenação subir a imagem. */}
+          <div
+            className="absolute inset-0"
+            style={{ background: 'linear-gradient(180deg, rgba(10,8,30,0.15) 0%, rgba(10,8,30,0.55) 45%, rgba(10,8,30,0.88) 100%)' }}
+          />
+
+          <span className="absolute top-3 left-3 w-8 h-8 rounded-lg bg-white/15 backdrop-blur-sm flex items-center justify-center text-[15px] font-bold text-white tabular-nums">
+            {posicao}
           </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-[13px] truncate" style={{ color: 'var(--p-texto)' }}>{l.titulo}</span>
-            <span className="block text-[11px] truncate" style={{ color: 'var(--p-texto3)' }}>{l.detalhe}</span>
-          </span>
-          {l.valor != null && (
-            <span className="text-[13px] font-semibold tabular-nums shrink-0"
-              style={{ color: 'var(--p-texto)' }}>
-              {l.valor}
+
+          {atual.aberto && (
+            <span className="absolute top-4 right-3 px-2 py-1 rounded-full bg-white/15 backdrop-blur-sm text-[10px] font-semibold text-white uppercase tracking-wide">
+              inscrições abertas
             </span>
           )}
+
+          <div className="absolute inset-x-0 bottom-0 p-4">
+            <p className="text-[14px] font-semibold text-white leading-snug line-clamp-2">
+              {atual.rotulo}
+            </p>
+
+            <div className="flex items-end justify-between gap-3 mt-2">
+              <span className="text-[26px] font-bold text-white leading-none tabular-nums">
+                {Number(atual.valor).toLocaleString('pt-BR')}
+              </span>
+              <span className="text-[13px] text-white/75 tabular-nums pb-0.5">
+                {fatia.toFixed(1).replace('.', ',')}% das inscrições
+              </span>
+            </div>
+
+            <div className="h-1.5 rounded-full bg-white/20 overflow-hidden mt-2.5">
+              <div
+                className="h-full rounded-full animate-barra origin-left"
+                style={{ width: `${fatia}%`, background: 'var(--p-r2)' }}
+              />
+            </div>
+          </div>
         </div>
-      ))}
+      </div>
+
+      {/* Um traço por curso. O traço da vez é mais largo e mostra o tempo até a
+          próxima virada, que é o que evita a sensação de troca aleatória. */}
+      <div className="flex items-center justify-center gap-1.5 pt-3 shrink-0">
+        {itens.map((item, i) => {
+          const ativo = item === atual
+          return (
+            <button
+              key={item.id}
+              onClick={() => { setIndice(i); if (travado && aoClicar) aoClicar(atual) }}
+              title={item.rotulo}
+              className="h-1.5 rounded-full overflow-hidden transition-all"
+              style={{ width: ativo ? 26 : 10, background: 'var(--p-trilho)' }}
+            >
+              {ativo && (
+                <span
+                  className="block h-full rounded-full"
+                  style={{
+                    background: 'var(--p-roscaA)',
+                    animation: (pausado || travado || menosMovimento || itens.length < 2)
+                      ? 'none'
+                      : `barra ${segundos}s linear both`,
+                    width: (pausado || travado || menosMovimento || itens.length < 2) ? '100%' : undefined,
+                  }}
+                />
+              )}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
