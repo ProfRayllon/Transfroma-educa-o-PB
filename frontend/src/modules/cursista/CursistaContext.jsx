@@ -4,7 +4,6 @@ import cursistaApi, {
   CURSISTA_UNAUTHORIZED_EVENT,
   CURSISTA_SENHA_PENDENTE_EVENT,
   CURSISTA_CADASTRO_PENDENTE_EVENT,
-  getCursistaErrorDetails,
   getCursistaErrorMessage,
   somenteDigitos,
 } from './api'
@@ -97,9 +96,7 @@ export function CursistaProvider({ children }) {
       setCadastroPendente(!data.cursista?.cadastroConfirmado)
       return data
     } catch (error) {
-      const erro = new Error(getCursistaErrorMessage(error, 'CPF ou senha incorretos.'))
-      erro.details = getCursistaErrorDetails(error)
-      throw erro
+      throw new Error(getCursistaErrorMessage(error, 'CPF ou senha incorretos.'))
     }
   }
 

@@ -51,22 +51,6 @@ export function getCursistaErrorMessage(error, fallback = 'Não foi possível co
   return error.response?.data?.message || fallback
 }
 
-export function getCursistaErrorDetails(error) {
-  const dados = error.response?.data || {}
-  const headers = error.response?.headers || {}
-  const retryAfter = Number(headers['retry-after'] || 0)
-
-  return {
-    maxTentativas: dados.maxTentativas,
-    tentativasUsadas: dados.tentativasUsadas,
-    tentativasRestantes: dados.tentativasRestantes,
-    bloqueado: dados.bloqueado,
-    bloqueioMinutos: dados.bloqueioMinutos,
-    bloqueadoAte: dados.bloqueadoAte,
-    tentarNovamenteEmSegundos: dados.tentarNovamenteEmSegundos || (retryAfter > 0 ? retryAfter : null),
-  }
-}
-
 /** Formata CPF durante a digitacao: 123.456.789-01 */
 export function formatarCpf(valor) {
   const digitos = String(valor || '').replace(/\D/g, '').slice(0, 11)

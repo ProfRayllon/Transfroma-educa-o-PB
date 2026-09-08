@@ -17,8 +17,6 @@ const TOKEN_EXPIRES_IN = process.env.CURSISTA_JWT_EXPIRES_IN || '4h'
  */
 const TOKEN_AUDIENCE = 'cursista'
 
-const MAX_FAILED_ATTEMPTS = 5
-const LOCK_MINUTES = 5
 const MIN_PASSWORD_LENGTH = 8
 
 /**
@@ -57,15 +55,10 @@ function verificarToken(token) {
   return jwt.verify(token, JWT_SECRET, { audience: TOKEN_AUDIENCE })
 }
 
-function erro(statusCode, message, payload) {
+function erro(statusCode, message) {
   const error = new Error(message)
   error.statusCode = statusCode
-  if (payload) error.payload = payload
   return error
-}
-
-function segundosAte(data) {
-  return Math.max(0, Math.ceil((new Date(data).getTime() - Date.now()) / 1000))
 }
 
 /**
@@ -112,12 +105,6 @@ async function login({ cpf, senha, req }) {
   const conta = await repo.findByCpfForAuth(cpfNormalizado)
   if (!conta) throw credenciaisInvalidas()
 
-  // Conta bloqueada e conta inativa so podem ser reveladas DEPOIS que a senha
-  // confere. Respondidas antes, elas viram um oraculo: so existem para CPF que
-  // esta na base, e qualquer resposta diferente do 401 generico confirma que
-  // aquela pessoa e cursista do programa (dado pessoal, LGPD).
-  const bloqueada = Boolean(conta.locked_until) && new Date(conta.locked_until) > new Date()
-
   const primeiroAcesso = !conta.password_hash
 
   // A guarda de SENHA_PADRAO vazia vem ANTES da comparacao, e nao pode virar um
@@ -129,44 +116,18 @@ async function login({ cpf, senha, req }) {
     : await bcrypt.compare(String(senha || ''), conta.password_hash)
 
   if (!senhaConfere) {
-    const tentativasUsadas = Number(conta.failed_attempts || 0) + 1
-    const bloqueouAgora = tentativasUsadas >= MAX_FAILED_ATTEMPTS
-    const bloqueadoAte = bloqueouAgora ? new Date(Date.now() + LOCK_MINUTES * 60 * 1000).toISOString() : null
-    await repo.registerFailedLogin(conta.id, {
-      maxAttempts: MAX_FAILED_ATTEMPTS,
-      lockMinutes: LOCK_MINUTES,
-    })
     await registrar({
       actorType: 'cursista',
       actorId: conta.id,
-      action: conta.failed_attempts + 1 >= MAX_FAILED_ATTEMPTS ? ACOES.CONTA_BLOQUEADA : ACOES.LOGIN_FALHA,
+      action: ACOES.LOGIN_FALHA,
       cursistaId: conta.id,
       req,
     })
-    throw erro(401, 'CPF ou senha incorretos.', {
-      maxTentativas: MAX_FAILED_ATTEMPTS,
-      tentativasUsadas: Math.min(tentativasUsadas, MAX_FAILED_ATTEMPTS),
-      tentativasRestantes: Math.max(0, MAX_FAILED_ATTEMPTS - tentativasUsadas),
-      bloqueado: bloqueouAgora,
-      bloqueioMinutos: LOCK_MINUTES,
-      bloqueadoAte,
-      tentarNovamenteEmSegundos: bloqueouAgora ? LOCK_MINUTES * 60 : null,
-    })
+    throw credenciaisInvalidas()
   }
 
   // A partir daqui a senha confere, entao o titular provou ser dono da conta e
   // informar o motivo real da recusa nao entrega nada a um atacante.
-  if (bloqueada) {
-    throw erro(429, 'Muitas tentativas. Tente novamente em alguns minutos.', {
-      maxTentativas: MAX_FAILED_ATTEMPTS,
-      tentativasUsadas: MAX_FAILED_ATTEMPTS,
-      tentativasRestantes: 0,
-      bloqueado: true,
-      bloqueioMinutos: LOCK_MINUTES,
-      bloqueadoAte: new Date(conta.locked_until).toISOString(),
-      tentarNovamenteEmSegundos: segundosAte(conta.locked_until),
-    })
-  }
   if (conta.status !== 'ativo') {
     throw erro(403, 'Cadastro inativo. Procure a coordenacao do programa.')
   }
@@ -228,7 +189,5 @@ module.exports = {
   validarNovaSenha,
   SENHA_PADRAO,
   TOKEN_AUDIENCE,
-  MAX_FAILED_ATTEMPTS,
-  LOCK_MINUTES,
   MIN_PASSWORD_LENGTH,
 }
