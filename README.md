@@ -321,3 +321,7 @@ mysql -u root -p transforma_db < database/cleanup_keep_admin.sql
 ```
 
 Depois, entre no painel com o admin restante e atualize nome, e-mail e senha para os dados reais.
+##------------------------------
+Pronto, você está de volta na branch e o ambiente subiu. Recarregue: http://127.0.0.1:5173 → Dashboard
+
+Entre como admin@transforma.pb.gov.br, senha Transforma@2026.
