@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { AlertTriangle, Eye, EyeOff, Fingerprint, Lock, LogIn } from 'lucide-react'
+import { AlertTriangle, Clock, Eye, EyeOff, Fingerprint, Lock, LogIn, ShieldAlert } from 'lucide-react'
 import { useCursista } from '../CursistaContext'
 import { formatarCpf } from '../api'
 import CursistaShell, { BOTAO_PRINCIPAL, CartaoCursista, TituloCartao } from '../CursistaShell'
@@ -14,24 +14,46 @@ export default function LoginCursista() {
   const [senha, setSenha] = useState('')
   const [mostrarSenha, setMostrarSenha] = useState(false)
   const [erro, setErro] = useState('')
+  const [detalhesErro, setDetalhesErro] = useState(null)
+  const [esperaSegundos, setEsperaSegundos] = useState(null)
   const [enviando, setEnviando] = useState(false)
 
   // Para onde voltar depois de entrar (ex.: o curso que ele tentou se inscrever).
   const destino = location.state?.de || '/area-do-cursista'
 
+  useEffect(() => {
+    if (!esperaSegundos || esperaSegundos <= 0) return undefined
+    const timer = window.setInterval(() => {
+      setEsperaSegundos((valor) => (valor && valor > 0 ? valor - 1 : 0))
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [esperaSegundos])
+
+  const formatarEspera = (segundos) => {
+    const total = Math.max(0, Number(segundos || 0))
+    const minutos = Math.floor(total / 60)
+    const resto = total % 60
+    return `${String(minutos).padStart(2, '0')}:${String(resto).padStart(2, '0')}`
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     setErro('')
+    setDetalhesErro(null)
     setEnviando(true)
     try {
       const resultado = await entrar(cpf, senha)
       navigate(resultado.precisaDefinirSenha ? '/area-do-cursista/senha' : destino, { replace: true })
     } catch (error) {
       setErro(error.message)
+      setDetalhesErro(error.details || null)
+      setEsperaSegundos(error.details?.tentarNovamenteEmSegundos || null)
     } finally {
       setEnviando(false)
     }
   }
+
+  const bloqueioAtivo = Boolean(detalhesErro?.bloqueado && esperaSegundos > 0)
 
   return (
     <CursistaShell
@@ -48,7 +70,20 @@ export default function LoginCursista() {
           {erro && (
             <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
-              <span>{erro}</span>
+              <div className="min-w-0 space-y-1">
+                <p>{erro}</p>
+                {Number.isFinite(Number(detalhesErro?.tentativasRestantes)) && (
+                  <p className="text-xs">
+                    Tentativas usadas: {detalhesErro.tentativasUsadas} de {detalhesErro.maxTentativas}.
+                    {' '}Restam {detalhesErro.tentativasRestantes}.
+                  </p>
+                )}
+                {bloqueioAtivo && (
+                  <p className="flex items-center gap-1.5 text-xs font-bold">
+                    <Clock size={13} /> Tente novamente em {formatarEspera(esperaSegundos)}.
+                  </p>
+                )}
+              </div>
             </div>
           )}
 
@@ -93,10 +128,17 @@ export default function LoginCursista() {
             </div>
           </div>
 
-          <button type="submit" disabled={enviando} className={`${BOTAO_PRINCIPAL} w-full`}>
+          <button type="submit" disabled={enviando || bloqueioAtivo} className={`${BOTAO_PRINCIPAL} w-full`}>
             <LogIn size={15} />
-            {enviando ? 'Entrando...' : 'Entrar'}
+            {enviando ? 'Entrando...' : bloqueioAtivo ? `Aguarde ${formatarEspera(esperaSegundos)}` : 'Entrar'}
           </button>
+
+          <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12px] leading-relaxed text-amber-800">
+            <ShieldAlert size={15} className="mt-0.5 flex-shrink-0" />
+            <span>
+              Por segurança, o acesso é bloqueado por 5 minutos após 5 tentativas incorretas.
+            </span>
+          </div>
 
           {/* A senha de primeiro acesso NAO aparece aqui: e comunicada pela
               coordenacao por canal interno. Publicar o valor nesta tela o
