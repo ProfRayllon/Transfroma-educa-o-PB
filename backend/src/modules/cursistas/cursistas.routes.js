@@ -2,7 +2,6 @@
 
 const express = require('express')
 const rateLimit = require('express-rate-limit')
-const { ipKeyGenerator } = require('express-rate-limit')
 
 const auth = require('./cursistas.auth')
 const repo = require('./cursistas.repo')
@@ -10,7 +9,6 @@ const service = require('./cursistas.service')
 const admin = require('./cursistas.admin')
 const { importar } = require('./cursistas.import')
 const { exportarInscritos, marcarComoExportadas } = require('./cursistas.export')
-const { normalizeCpf } = require('../../shared/cpf')
 // Limites declarados como TOTAL pretendido; `porProcesso` divide pelo numero de
 // processos do cluster, senao cada um contaria os seus e o freio valeria o dobro.
 const { porProcesso } = require('../../shared/concorrencia')
@@ -25,35 +23,6 @@ const { registrar, ACOES } = require('../../shared/audit')
  */
 module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsuarioInterno }) {
   const router = express.Router()
-
-  // ---------------------------------------------------------------------------
-  // Limites de tentativa
-  // ---------------------------------------------------------------------------
-
-  // Sao DOIS freios empilhados, e cada um cobre um ataque diferente.
-  //
-  // Por IP + CPF: forca bruta de senha contra uma conta especifica.
-  const limiteLoginPorConta = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: porProcesso(10),
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { message: 'Muitas tentativas de acesso. Tente novamente em alguns minutos.' },
-    keyGenerator: (req) => `${ipKeyGenerator(req.ip)}:${normalizeCpf(req.body?.cpf)}`,
-  })
-
-  // Por IP apenas: varredura da base de CPFs. O freio acima sozinho NAO cobre este
-  // caso -- como o CPF entra na chave, cada CPF novo ganharia um orcamento novo e o
-  // limite nunca dispararia numa varredura. Como a senha inicial e o proprio CPF,
-  // cada acerto e uma tomada de conta, entao este e o freio que realmente segura.
-  const limiteLoginPorOrigem = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: porProcesso(40),
-    standardHeaders: false,
-    legacyHeaders: false,
-    message: { message: 'Muitas tentativas de acesso. Tente novamente em alguns minutos.' },
-    keyGenerator: (req) => ipKeyGenerator(req.ip),
-  })
 
   /**
    * Freio da importacao.
@@ -158,7 +127,7 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
   // Area do cursista
   // ---------------------------------------------------------------------------
 
-  router.post('/auth/login', limiteLoginPorOrigem, limiteLoginPorConta, tratar(async (req, res) => {
+  router.post('/auth/login', tratar(async (req, res) => {
     const resultado = await auth.login({ cpf: req.body?.cpf, senha: req.body?.senha, req })
     res.json(resultado)
   }))
