@@ -411,32 +411,54 @@ async function findRawById(id) {
 }
 
 /**
- * Insere ou atualiza um lote de cursistas da base oficial.
- *
- * Em lote de proposito: com ~13 mil registros, um INSERT por linha seriam 13 mil
- * idas ao banco (dezenas de segundos, estourando o timeout do proxy e segurando
- * uma transacao longa). Em lotes de 500, sao ~26 consultas.
- *
- * O UPDATE nao toca em password_hash nem em cadastro_confirmado: reimportar a
- * base atualiza cadastro, nunca derruba quem ja acessou. E usa COALESCE nos
- * campos de contato para nao apagar o que o cursista preencheu com o vazio da
- * planilha.
+ * Separa registros novos dos que ja existem e dos conflitos de matricula.
+ * Recebe lotes pequenos para manter os IN (...) leves na VPS.
  */
-/**
- * `atualizarStatus` so vem verdadeiro quando a planilha realmente tem a coluna
- * ATIVO. Sem ela, o status de quem ja existe fica fora da clausula de
- * atualizacao e e preservado -- importar uma base incompleta nao pode reativar
- * em silencio contas que a coordenacao desativou.
- */
-async function upsertLoteFromImport(records, connection, { atualizarStatus = false } = {}) {
+async function classificarParaImportacao(records, connection, { bloquear = false } = {}) {
+  const runner = connection || getPool()
+  if (records.length === 0) return { novos: [], existentes: [], conflitos: [] }
+
+  const cpfs = records.map((record) => record.cpf)
+  const [linhasCpf] = await runner.query(
+    `SELECT cpf FROM cursistas WHERE cpf IN (?)${bloquear ? ' FOR UPDATE' : ''}`,
+    [cpfs]
+  )
+  const cpfsExistentes = new Set(linhasCpf.map((linha) => linha.cpf))
+
+  const usuarioIds = records.map((record) => record.usuarioId).filter(Boolean)
+  const donoPorUsuarioId = new Map()
+  if (usuarioIds.length > 0) {
+    const [linhasUsuario] = await runner.query(
+      `SELECT usuario_id, cpf FROM cursistas WHERE usuario_id IN (?)${bloquear ? ' FOR UPDATE' : ''}`,
+      [usuarioIds]
+    )
+    linhasUsuario.forEach((linha) => donoPorUsuarioId.set(linha.usuario_id, linha.cpf))
+  }
+
+  const novos = []
+  const existentes = []
+  const conflitos = []
+
+  records.forEach((record) => {
+    if (cpfsExistentes.has(record.cpf)) {
+      existentes.push(record)
+      return
+    }
+    const dono = record.usuarioId && donoPorUsuarioId.get(record.usuarioId)
+    if (dono && dono !== record.cpf) {
+      conflitos.push({ ...record, motivo: `USUARIO_ID ${record.usuarioId} ja pertence a outro CPF no sistema` })
+      return
+    }
+    novos.push(record)
+  })
+
+  return { novos, existentes, conflitos }
+}
+
+/** Insere um lote sem alterar qualquer CPF ou matricula que ja exista. */
+async function inserirLoteImportacao(records, connection) {
   const runner = connection || getPool()
   if (records.length === 0) return { inseridos: 0, atualizados: 0, conflitos: [] }
-
-  // O upsert em lote nao permite saber, linha a linha, o que foi insercao ou
-  // atualizacao (affectedRows vem somado), entao conferimos antes quais ja existem.
-  const cpfs = records.map((record) => record.cpf)
-  const [existentes] = await runner.query('SELECT cpf FROM cursistas WHERE cpf IN (?)', [cpfs])
-  const jaExistiam = new Set(existentes.map((row) => row.cpf))
 
   // usuario_id tambem e chave unica: se o da planilha ja pertence a OUTRO CPF, o
   // upsert atualizaria o cadastro daquela pessoa (nome, e-mails, funcao) em vez
@@ -493,43 +515,18 @@ async function upsertLoteFromImport(records, connection, { atualizarStatus = fal
     })
     .join(', ')
 
-  await runner.query(
-    `INSERT INTO cursistas
+  const [resultado] = await runner.query(
+    `INSERT IGNORE INTO cursistas
        (usuario_id, cpf, name, funcao, componente_curricular, eixo_tecnologico, curso_tecnico,
         formacao_encontrada, qtde_vinculos, data_inicio_rede,
         birth_date, email_institucional, email_pessoal, genero, status)
-     VALUES ${placeholders}
-     ON DUPLICATE KEY UPDATE
-       usuario_id = COALESCE(VALUES(usuario_id), usuario_id),
-       name = VALUES(name),
-       -- COALESCE, e nao atribuicao direta, por causa da importacao parcial.
-       -- Um lote de 20 linhas montado so com a aba USUARIOS chega aqui sem
-       -- nenhum dado funcional, e a atribuicao direta apagaria funcao,
-       -- componente e eixo dessas 20 pessoas sem avisar ninguem -- justamente
-       -- de quem se queria corrigir outra coisa.
-       --
-       -- Efeito colateral aceito: a planilha nao consegue mais LIMPAR um destes
-       -- campos, so troca-lo. Limpar passou a ser trabalho da tela de edicao,
-       -- onde a acao e explicita e fica na auditoria.
-       funcao = COALESCE(VALUES(funcao), funcao),
-       componente_curricular = COALESCE(VALUES(componente_curricular), componente_curricular),
-       eixo_tecnologico = COALESCE(VALUES(eixo_tecnologico), eixo_tecnologico),
-       curso_tecnico = COALESCE(VALUES(curso_tecnico), curso_tecnico),
-       formacao_encontrada = VALUES(formacao_encontrada),
-       qtde_vinculos = VALUES(qtde_vinculos),
-       data_inicio_rede = COALESCE(VALUES(data_inicio_rede), data_inicio_rede),
-       birth_date = COALESCE(birth_date, VALUES(birth_date)),
-       email_institucional = COALESCE(VALUES(email_institucional), email_institucional),
-       email_pessoal = COALESCE(VALUES(email_pessoal), email_pessoal),
-       genero = COALESCE(genero, VALUES(genero))${atualizarStatus ? ',\n       status = VALUES(status)' : ''}`,
+     VALUES ${placeholders}`,
     valores
   )
 
-  const atualizados = gravaveis.filter((record) => jaExistiam.has(record.cpf)).length
-
   return {
-    inseridos: gravaveis.length - atualizados,
-    atualizados,
+    inseridos: Number(resultado.affectedRows || 0),
+    atualizados: 0,
     conflitos,
   }
 }
@@ -706,7 +703,7 @@ module.exports = {
   registerSuccessfulLogin,
   registerFailedLogin,
   atualizarCadastro,
-  upsertLoteFromImport,
+  inserirLoteImportacao,
   substituirVinculos,
   list,
   estatisticas,
@@ -721,4 +718,5 @@ module.exports = {
   excluir,
   encontrarConflito,
   findRawById,
+  classificarParaImportacao,
 }

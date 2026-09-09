@@ -22,18 +22,8 @@ function erro(statusCode, message) {
 const texto = (valor, limite) => String(valor ?? '').trim().slice(0, limite) || null
 const bandeira = (valor) => ['1', 'sim', 'true', 's'].includes(String(valor ?? '').trim().toLowerCase())
 
-/**
- * Importa a base oficial de docentes (.xlsx com as abas USUARIOS e
- * PERFIL_DOCENTE), unindo as duas por USUARIO_ID.
- *
- * A planilha nao e a fonte da senha nem do estado de acesso: PRIMEIRO_ACESSO e
- * CADASTRO_CONFIRMADO da origem sao ignorados de proposito, porque quem manda
- * neles e o que o cursista ja fez NESTE sistema. Reimportar a base atualiza
- * cadastro, nunca derruba acesso.
- */
-async function importar({ arquivo, actor, req }) {
-  requireMysql()
-
+/** Le e valida o arquivo sem consultar nem alterar o banco. */
+function lerRegistros(arquivo) {
   if (!Buffer.isBuffer(arquivo) || arquivo.length === 0) {
     throw erro(400, 'Envie o arquivo .xlsx da base.')
   }
@@ -80,33 +70,37 @@ async function importar({ arquivo, actor, req }) {
     const nome = texto(linha.NOME_COMPLETO, 150)
 
     if (!cpf || !isValidCpf(cpf)) {
-      rejeitados.push({ linha: numeroDaLinha, motivo: 'CPF invalido' })
+      rejeitados.push({ tipo: 'invalido', linha: numeroDaLinha, cpf: String(linha.CPF || ''), name: nome || '', usuarioId: texto(linha.USUARIO_ID, 20) || '', motivo: 'CPF invalido' })
       return
     }
     if (!nome) {
-      rejeitados.push({ linha: numeroDaLinha, motivo: 'NOME_COMPLETO vazio' })
+      rejeitados.push({ tipo: 'invalido', linha: numeroDaLinha, cpf, name: '', usuarioId: texto(linha.USUARIO_ID, 20) || '', motivo: 'NOME_COMPLETO vazio' })
       return
     }
     if (cpfsVistos.has(cpf)) {
-      rejeitados.push({ linha: numeroDaLinha, motivo: `CPF repetido (ja aparece na linha ${cpfsVistos.get(cpf)})` })
+      rejeitados.push({ tipo: 'duplicado', linha: numeroDaLinha, cpf, name: nome, usuarioId: texto(linha.USUARIO_ID, 20) || '', motivo: `CPF repetido no arquivo (ja aparece na linha ${cpfsVistos.get(cpf)})` })
       return
     }
     cpfsVistos.set(cpf, numeroDaLinha)
 
     const usuarioId = texto(linha.USUARIO_ID, 20)
-    // USUARIO_ID tambem e chave unica. Repetido no arquivo, o upsert atualizaria
-    // o cadastro de OUTRA pessoa (nome, e-mails, funcao) em vez de inserir esta,
-    // misturando dado pessoal entre contas.
+    // USUARIO_ID tambem e chave unica. Repetido no arquivo tornaria ambiguo qual
+    // pessoa deveria receber a matricula, entao a segunda linha e recusada.
     if (usuarioId && usuarioIdsVistos.has(usuarioId)) {
       rejeitados.push({
+        tipo: 'duplicado',
         linha: numeroDaLinha,
+        cpf,
+        name: nome,
+        usuarioId,
         motivo: `USUARIO_ID repetido (ja aparece na linha ${usuarioIdsVistos.get(usuarioId)})`,
       })
       return
     }
     if (usuarioId) usuarioIdsVistos.set(usuarioId, numeroDaLinha)
     const perfil = (usuarioId && perfilPorUsuario.get(usuarioId)) || perfilPorCpf.get(cpf) || {}
-    if (!Object.keys(perfil).length) semPerfil += 1
+    const semPerfilDoRegistro = !Object.keys(perfil).length
+    if (semPerfilDoRegistro) semPerfil += 1
 
     const vinculos = []
     for (let ordem = 1; ordem <= MAX_VINCULOS; ordem += 1) {
@@ -117,6 +111,8 @@ async function importar({ arquivo, actor, req }) {
     }
 
     validos.push({
+      linha: numeroDaLinha,
+      semPerfil: semPerfilDoRegistro,
       usuarioId,
       cpf,
       name: nome,
@@ -133,10 +129,8 @@ async function importar({ arquivo, actor, req }) {
       emailInstitucional: texto(String(perfil.EMAIL_INSTITUCIONAL || '').toLowerCase(), 150),
       emailPessoal: texto(String(perfil.EMAIL_PESSOAL || '').toLowerCase(), 150),
       genero: texto(perfil.GENERO, 40),
-      // ATIVO da base controla se a conta pode entrar. Quando a coluna nao vem na
-      // planilha, `status` fica indefinido e o upsert PRESERVA o valor atual --
-      // sem isso, importar uma base sem essa coluna reativaria em silencio todas
-      // as contas que a coordenacao havia desativado.
+      // ATIVO define o estado inicial de contas novas. Cadastros existentes nem
+      // chegam a gravacao e, portanto, conservam seu status atual.
       status: temColunaAtivo
         ? (bandeira(linha.ATIVO) ? 'ativo' : 'inativo')
         : null,
@@ -144,31 +138,89 @@ async function importar({ arquivo, actor, req }) {
     })
   })
 
-  let inseridos = 0
-  let atualizados = 0
+  return {
+    totalLinhas: usuarios.registros.length,
+    validos,
+    rejeitados,
+    semPerfil,
+  }
+}
 
-  if (validos.length > 0) {
+const resumoDoRegistro = (registro) => ({
+  linha: registro.linha,
+  cpf: registro.cpf,
+  name: registro.name,
+  usuarioId: registro.usuarioId || '',
+})
+
+/** Consulta o banco e devolve a previa; nenhuma linha e gravada nesta etapa. */
+async function validar({ arquivo }) {
+  requireMysql()
+  const leitura = lerRegistros(arquivo)
+  const novos = []
+  const problemas = [...leitura.rejeitados]
+
+  for (let i = 0; i < leitura.validos.length; i += TAMANHO_DO_LOTE) {
+    const lote = leitura.validos.slice(i, i + TAMANHO_DO_LOTE)
+    const classificacao = await repo.classificarParaImportacao(lote)
+    novos.push(...classificacao.novos)
+    classificacao.existentes.forEach((registro) => problemas.push({
+      tipo: 'duplicado',
+      ...resumoDoRegistro(registro),
+      motivo: 'CPF ja cadastrado no sistema',
+    }))
+    classificacao.conflitos.forEach((registro) => problemas.push({
+      tipo: 'duplicado',
+      ...resumoDoRegistro(registro),
+      motivo: registro.motivo,
+    }))
+  }
+
+  return {
+    totalLinhas: leitura.totalLinhas,
+    novos: novos.length,
+    invalidos: problemas.filter((item) => item.tipo === 'invalido').length,
+    duplicados: problemas.filter((item) => item.tipo === 'duplicado').length,
+    semPerfil: novos.filter((registro) => registro.semPerfil).length,
+    comMultiplosVinculos: novos.filter((registro) => registro.vinculos.length > 1).length,
+    novosDados: novos.map(resumoDoRegistro),
+    problemas,
+  }
+}
+
+/**
+ * Confirma a importacao inserindo apenas CPFs novos. Registros existentes sao
+ * ignorados por completo, portanto suas inscricoes e seus dados permanecem.
+ */
+async function importar({ arquivo, actor, req }) {
+  requireMysql()
+  const leitura = lerRegistros(arquivo)
+
+  let inseridos = 0
+  let ignoradosExistentes = 0
+  let conflitos = 0
+  let semPerfil = 0
+  let comMultiplosVinculos = 0
+
+  if (leitura.validos.length > 0) {
     const conexao = await getPool().getConnection()
     try {
       await conexao.beginTransaction()
-      for (let i = 0; i < validos.length; i += TAMANHO_DO_LOTE) {
-        const lote = validos.slice(i, i + TAMANHO_DO_LOTE)
-        const resultado = await repo.upsertLoteFromImport(lote, conexao, {
-          atualizarStatus: temColunaAtivo,
-        })
+      for (let i = 0; i < leitura.validos.length; i += TAMANHO_DO_LOTE) {
+        const lote = leitura.validos.slice(i, i + TAMANHO_DO_LOTE)
+        const classificacao = await repo.classificarParaImportacao(lote, conexao, { bloquear: true })
+        ignoradosExistentes += classificacao.existentes.length
+        conflitos += classificacao.conflitos.length
+        if (classificacao.novos.length === 0) continue
+        semPerfil += classificacao.novos.filter((registro) => registro.semPerfil).length
+        comMultiplosVinculos += classificacao.novos.filter((registro) => registro.vinculos.length > 1).length
+
+        const resultado = await repo.inserirLoteImportacao(classificacao.novos, conexao)
         inseridos += resultado.inseridos
-        atualizados += resultado.atualizados
-
-        // Registro cujo USUARIO_ID ja pertence a outro CPF nao e gravado: seria
-        // sobrescrever o cadastro de outra pessoa.
-        for (const conflito of resultado.conflitos) {
-          rejeitados.push({
-            linha: cpfsVistos.get(conflito.cpf) ?? '?',
-            motivo: `USUARIO_ID ${conflito.usuarioId} ja pertence a outro CPF no sistema`,
-          })
-        }
-
-        const gravados = lote.filter((r) => !resultado.conflitos.some((c) => c.cpf === r.cpf))
+        conflitos += resultado.conflitos.length
+        const gravados = classificacao.novos.filter((registro) => (
+          !resultado.conflitos.some((conflito) => conflito.cpf === registro.cpf)
+        ))
         await repo.substituirVinculos(gravados, conexao)
       }
       await conexao.commit()
@@ -181,14 +233,13 @@ async function importar({ arquivo, actor, req }) {
   }
 
   const resumo = {
-    totalLinhas: usuarios.registros.length,
+    totalLinhas: leitura.totalLinhas,
     inseridos,
-    atualizados,
-    rejeitados: rejeitados.length,
+    atualizados: 0,
+    ignoradosExistentes,
+    rejeitados: leitura.rejeitados.length + conflitos,
     semPerfil,
-    comMultiplosVinculos: validos.filter((v) => v.vinculos.length > 1).length,
-    // Amostra para o admin corrigir a origem sem despejar o arquivo inteiro na tela.
-    exemplosRejeitados: rejeitados.slice(0, 50),
+    comMultiplosVinculos,
   }
 
   await registrar({
@@ -200,13 +251,14 @@ async function importar({ arquivo, actor, req }) {
     details: {
       totalLinhas: resumo.totalLinhas,
       inseridos,
-      atualizados,
-      rejeitados: rejeitados.length,
-      semPerfil,
+      atualizados: 0,
+      ignoradosExistentes,
+      rejeitados: resumo.rejeitados,
+      semPerfil: resumo.semPerfil,
     },
   })
 
   return resumo
 }
 
-module.exports = { importar, ABA_USUARIOS, ABA_PERFIL }
+module.exports = { importar, validar, ABA_USUARIOS, ABA_PERFIL }

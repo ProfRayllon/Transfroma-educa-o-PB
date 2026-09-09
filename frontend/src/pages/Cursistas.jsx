@@ -26,6 +26,29 @@ const ORIGENS = [
 
 const TIPO_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
+const valorCsv = (valor) => `"${String(valor ?? '').replace(/"/g, '""')}"`
+
+function baixarProblemasImportacao(problemas) {
+  const cabecalho = ['TIPO', 'LINHA', 'CPF', 'NOME_COMPLETO', 'USUARIO_ID', 'MOTIVO']
+  const linhas = problemas.map((item) => [
+    item.tipo === 'duplicado' ? 'DUPLICADO' : 'INVALIDO',
+    item.linha,
+    item.cpf,
+    item.name,
+    item.usuarioId,
+    item.motivo,
+  ])
+  const csv = `\uFEFF${[cabecalho, ...linhas].map((linha) => linha.map(valorCsv).join(';')).join('\r\n')}`
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `problemas-importacao-cursistas-${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
 function Indicador({ icon: Icon, valor, label, cor = 'brand', destaque }) {
   const cores = {
     brand: 'bg-brand-100 text-brand-700',
@@ -202,6 +225,7 @@ export default function Cursistas() {
    * cinza por um minuto nao diz se esta trabalhando, travou ou morreu.
    */
   const [progresso, setProgresso] = useState(null)
+  const [previaImport, setPreviaImport] = useState(null)
   const [resultadoImport, setResultadoImport] = useState(null)
   const [exportando, setExportando] = useState(false)
   const [confirmarReset, setConfirmarReset] = useState(null)
@@ -260,7 +284,8 @@ export default function Cursistas() {
 
     setImportando(true)
     setResultadoImport(null)
-    setProgresso({ fase: 'enviando', percentual: 0, segundos: 0 })
+    setPreviaImport(null)
+    setProgresso({ fase: 'enviando', etapa: 'validacao', percentual: 0, segundos: 0 })
 
     const inicio = Date.now()
     const relogio = setInterval(() => {
@@ -269,35 +294,23 @@ export default function Cursistas() {
 
     try {
       // Envia os bytes do .xlsx direto; base64 inflaria o arquivo em 33% a toa.
-      const { data } = await api.post('/cursistas/admin/cursistas/importar', arquivo, {
+      const { data } = await api.post('/cursistas/admin/cursistas/importar/validar', arquivo, {
         headers: { 'Content-Type': TIPO_XLSX },
         onUploadProgress: (evento) => {
           const percentual = evento.total ? Math.round((evento.loaded * 100) / evento.total) : 0
           setProgresso((atual) => ({
             ...atual,
-            // Terminado o envio, o que resta e o servidor gravando.
-            fase: percentual >= 100 ? 'processando' : 'enviando',
+            fase: percentual >= 100 ? 'validando' : 'enviando',
             percentual,
           }))
         },
       })
-      setResultadoImport(data)
-      await Promise.all([carregarEstatisticas(), carregarLista()])
+      setPreviaImport({ ...data, arquivo })
     } catch (error) {
-      /**
-       * Conexao perdida nao quer dizer importacao perdida.
-       *
-       * O nginx corta a conexao que passa de 60 s, mas o servidor continua e a
-       * transacao commita do mesmo jeito. Anunciar "erro ao importar" faria a
-       * coordenacao repetir a carga achando que nada entrou -- ou pior, achar
-       * que a base ficou pela metade. Sem resposta do servidor, a unica coisa
-       * honesta a dizer e que nao deu para saber, e onde conferir.
-       */
       const status = error.response?.status
 
       if (!error.response) {
-        await Promise.all([carregarEstatisticas(), carregarLista()])
-        mostrar('erro', 'A conexão caiu antes da resposta, mas a importação pode ter concluído no servidor. Confira o total em "Cursistas na base" — se estiver certo, não precisa repetir. Repetir também é seguro: a importação é por CPF e não duplica ninguém.')
+        mostrar('erro', 'A conexão caiu durante a validação. Nenhum cadastro foi importado; selecione o arquivo novamente.')
       } else if (status === 413) {
         /**
          * 413 vem do nginx, nao da API: e uma pagina HTML de erro, sem o campo
@@ -315,6 +328,56 @@ export default function Cursistas() {
       setImportando(false)
       setProgresso(null)
       if (arquivoRef.current) arquivoRef.current.value = ''
+    }
+  }
+
+  const confirmarImportacao = async () => {
+    const previa = previaImport
+    const arquivo = previa?.arquivo
+    if (!arquivo || previa.novos === 0) return
+
+    setImportando(true)
+    setProgresso({ fase: 'enviando', etapa: 'importacao', percentual: 0, segundos: 0 })
+    const inicio = Date.now()
+    const relogio = setInterval(() => {
+      setProgresso((atual) => (atual ? { ...atual, segundos: Math.floor((Date.now() - inicio) / 1000) } : atual))
+    }, 1000)
+
+    try {
+      const { data } = await api.post('/cursistas/admin/cursistas/importar', arquivo, {
+        params: { confirmar: 'novos' },
+        headers: { 'Content-Type': TIPO_XLSX },
+        onUploadProgress: (evento) => {
+          const percentual = evento.total ? Math.round((evento.loaded * 100) / evento.total) : 0
+          setProgresso((atual) => ({
+            ...atual,
+            fase: percentual >= 100 ? 'processando' : 'enviando',
+            percentual,
+          }))
+        },
+      })
+      setPreviaImport(null)
+      setResultadoImport({
+        ...data,
+        problemas: previa.problemas,
+        duplicados: previa.duplicados,
+        invalidos: previa.invalidos,
+      })
+      await Promise.all([carregarEstatisticas(), carregarLista()])
+    } catch (error) {
+      const status = error.response?.status
+      if (!error.response) {
+        await Promise.all([carregarEstatisticas(), carregarLista()])
+        mostrar('erro', 'A conexão caiu antes da resposta. A importação pode ter terminado; confira o total antes de repetir. Se repetir, CPFs existentes serão ignorados.')
+      } else if (status === 413) {
+        mostrar('erro', 'O arquivo ultrapassa o limite do servidor. Nenhum cadastro foi importado.')
+      } else {
+        mostrar('erro', getApiErrorMessage(error, 'Erro ao importar os novos cadastros.'))
+      }
+    } finally {
+      clearInterval(relogio)
+      setImportando(false)
+      setProgresso(null)
     }
   }
 
@@ -460,12 +523,18 @@ export default function Cursistas() {
             <Loader2 size={17} className="text-brand-700 animate-spin flex-shrink-0" />
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold text-gray-800">
-                {progresso.fase === 'enviando' ? 'Enviando a planilha...' : 'Gravando os cadastros...'}
+                {progresso.fase === 'enviando'
+                  ? 'Enviando a planilha...'
+                  : progresso.fase === 'validando'
+                    ? 'Verificando os cadastros...'
+                    : 'Gravando somente os novos cadastros...'}
               </div>
               <div className="text-xs text-gray-500 mt-0.5">
                 {progresso.fase === 'enviando'
                   ? `${progresso.percentual}% enviado`
-                  : 'O servidor está gravando tudo de uma vez. Não feche nem recarregue esta página.'}
+                  : progresso.fase === 'validando'
+                    ? 'Nenhum dado está sendo gravado nesta etapa.'
+                    : 'O servidor está gravando tudo de uma vez. Não feche nem recarregue esta página.'}
               </div>
             </div>
             <div className="text-right flex-shrink-0">
@@ -686,13 +755,112 @@ export default function Cursistas() {
         )}
       </div>
 
+      {/* Previa: nesta etapa o backend apenas le e classifica o arquivo. */}
+      <Modal
+        open={Boolean(previaImport)}
+        onClose={() => !importando && setPreviaImport(null)}
+        title="Conferir importação"
+        size="xl"
+        footer={previaImport && (
+          <>
+            <button type="button" onClick={() => setPreviaImport(null)} disabled={importando} className="btn-secondary disabled:opacity-50">
+              Cancelar
+            </button>
+            {previaImport.problemas.length > 0 && (
+              <button type="button" onClick={() => baixarProblemasImportacao(previaImport.problemas)} className="btn-secondary">
+                <Download size={14} /> Baixar inválidos e duplicados
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={confirmarImportacao}
+              disabled={importando || previaImport.novos === 0}
+              className="btn-primary disabled:opacity-50"
+            >
+              <Upload size={14} /> Importar {previaImport.novos} novo(s)
+            </button>
+          </>
+        )}
+      >
+        {previaImport && (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-800">
+              A planilha foi apenas verificada. Nenhum cadastro foi gravado ainda.
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2.5">
+                <div className="text-xl font-bold text-green-700">{previaImport.novos}</div>
+                <div className="text-xs text-green-700">novos</div>
+              </div>
+              <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5">
+                <div className="text-xl font-bold text-amber-700">{previaImport.duplicados}</div>
+                <div className="text-xs text-amber-700">duplicados</div>
+              </div>
+              <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2.5">
+                <div className="text-xl font-bold text-red-700">{previaImport.invalidos}</div>
+                <div className="text-xs text-red-700">inválidos</div>
+              </div>
+              <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5">
+                <div className="text-xl font-bold text-gray-700">{previaImport.totalLinhas}</div>
+                <div className="text-xs text-gray-600">linhas lidas</div>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <h3 className="text-sm font-semibold text-gray-800">Cadastros novos que serão incluídos</h3>
+                {previaImport.novosDados.length > 200 && (
+                  <span className="text-xs text-gray-400">Exibindo os primeiros 200</span>
+                )}
+              </div>
+              {previaImport.novosDados.length === 0 ? (
+                <p className="py-6 text-center text-sm text-gray-500">Nenhum cadastro novo encontrado.</p>
+              ) : (
+                <div className="max-h-80 overflow-auto border border-gray-200 rounded-lg">
+                  <table className="w-full">
+                    <thead className="sticky top-0 bg-white">
+                      <tr className="border-b border-gray-200">
+                        <th className="table-header px-3 w-16">Linha</th>
+                        <th className="table-header px-3">Nome</th>
+                        <th className="table-header px-3 w-40">CPF</th>
+                        <th className="table-header px-3 w-36">Matrícula</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previaImport.novosDados.slice(0, 200).map((item) => (
+                        <tr key={`${item.linha}-${item.cpf}`} className="border-b border-gray-100 last:border-0">
+                          <td className="table-cell px-3 text-gray-400">{item.linha}</td>
+                          <td className="table-cell px-3 font-medium text-gray-800">{item.name}</td>
+                          <td className="table-cell px-3 font-mono text-xs text-gray-600">{item.cpf}</td>
+                          <td className="table-cell px-3 font-mono text-xs text-gray-500">{item.usuarioId || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* Resultado da importação */}
       <Modal
         open={Boolean(resultadoImport)}
         onClose={() => setResultadoImport(null)}
         title="Importação concluída"
         size="md"
-        footer={<button onClick={() => setResultadoImport(null)} className="btn-primary">Fechar</button>}
+        footer={resultadoImport && (
+          <>
+            {resultadoImport.problemas?.length > 0 && (
+              <button type="button" onClick={() => baixarProblemasImportacao(resultadoImport.problemas)} className="btn-secondary">
+                <Download size={14} /> Baixar problemas
+              </button>
+            )}
+            <button onClick={() => setResultadoImport(null)} className="btn-primary">Fechar</button>
+          </>
+        )}
       >
         {resultadoImport && (
           <div className="space-y-4">
@@ -701,9 +869,9 @@ export default function Cursistas() {
                 <div className="text-xl font-bold text-green-700">{resultadoImport.inseridos}</div>
                 <div className="text-xs text-green-700">novos cadastros</div>
               </div>
-              <div className="rounded-xl bg-blue-50 border border-blue-200 px-3 py-2.5">
-                <div className="text-xl font-bold text-blue-700">{resultadoImport.atualizados}</div>
-                <div className="text-xs text-blue-700">atualizados</div>
+              <div className="rounded-xl bg-gray-50 border border-gray-200 px-3 py-2.5">
+                <div className="text-xl font-bold text-gray-700">{resultadoImport.ignoradosExistentes}</div>
+                <div className="text-xs text-gray-600">já cadastrados ignorados</div>
               </div>
             </div>
 
@@ -719,30 +887,22 @@ export default function Cursistas() {
 
             <div className="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5 text-xs text-gray-600 space-y-1.5">
               <p>
-                <strong>A importação soma, não substitui.</strong> Só as linhas do arquivo
-                são tocadas — quem já estava na base e não aparece nele continua
-                exatamente como estava. Nada é excluído por importação.
+                <strong>A importação incluiu somente cadastros novos.</strong> Nenhum
+                cadastro existente foi atualizado ou excluído.
               </p>
               <p>
-                Quem já tinha senha continua com ela: a importação atualiza o cadastro
-                e nunca derruba o acesso de quem já entrou.
+                As inscrições, senhas e dados de quem já estava no sistema permanecem
+                exatamente como estavam.
               </p>
             </div>
 
-            {resultadoImport.rejeitados > 0 && (
-              <div>
-                <div className="flex items-center gap-2 text-sm font-medium text-red-700 mb-2">
-                  <AlertTriangle size={15} />
-                  {resultadoImport.rejeitados} linha(s) rejeitada(s)
-                </div>
-                <ul className="text-xs text-gray-600 space-y-1 max-h-48 overflow-y-auto">
-                  {resultadoImport.exemplosRejeitados.map((r) => (
-                    <li key={r.linha} className="flex gap-2">
-                      <span className="text-gray-400 flex-shrink-0">linha {r.linha}:</span>
-                      <span>{r.motivo}</span>
-                    </li>
-                  ))}
-                </ul>
+            {(resultadoImport.invalidos > 0 || resultadoImport.duplicados > 0) && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+                <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" />
+                <span>
+                  {resultadoImport.invalidos} inválido(s) e {resultadoImport.duplicados} duplicado(s)
+                  não foram importados. Use <strong>Baixar problemas</strong> para conferir.
+                </span>
               </div>
             )}
           </div>

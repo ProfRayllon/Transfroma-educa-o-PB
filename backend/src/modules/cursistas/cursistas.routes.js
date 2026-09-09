@@ -7,7 +7,7 @@ const auth = require('./cursistas.auth')
 const repo = require('./cursistas.repo')
 const service = require('./cursistas.service')
 const admin = require('./cursistas.admin')
-const { importar } = require('./cursistas.import')
+const importacao = require('./cursistas.import')
 const { exportarInscritos, marcarComoExportadas } = require('./cursistas.export')
 // Limites declarados como TOTAL pretendido; `porProcesso` divide pelo numero de
 // processos do cluster, senao cada um contaria os seus e o freio valeria o dobro.
@@ -278,12 +278,22 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
     limit: '25mb',
   })
 
+  router.post('/admin/cursistas/importar/validar', ...soAdmin, receberPlanilha, tratar(async (req, res) => {
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      return res.status(400).json({ message: 'Envie o arquivo .xlsx da base no corpo da requisicao.' })
+    }
+    res.json(await importacao.validar({ arquivo: req.body }))
+  }))
+
   router.post('/admin/cursistas/importar', ...soAdmin, limiteImportacao, receberPlanilha, tratar(async (req, res) => {
     if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
       return res.status(400).json({ message: 'Envie o arquivo .xlsx da base no corpo da requisicao.' })
     }
+    if (String(req.query.confirmar) !== 'novos') {
+      return res.status(400).json({ message: 'Valide a planilha e confirme a importacao dos novos cadastros.' })
+    }
     const actor = await getUsuarioInterno(req.user.id)
-    res.json(await importar({ arquivo: req.body, actor, req }))
+    res.json(await importacao.importar({ arquivo: req.body, actor, req }))
   }))
 
   /**
