@@ -61,7 +61,6 @@ function lerRegistros(arquivo) {
   const validos = []
   const rejeitados = []
   const cpfsVistos = new Map()
-  const usuarioIdsVistos = new Map()
   let semPerfil = 0
 
   usuarios.registros.forEach((linha, posicao) => {
@@ -84,21 +83,9 @@ function lerRegistros(arquivo) {
     cpfsVistos.set(cpf, numeroDaLinha)
 
     const usuarioId = texto(linha.USUARIO_ID, 20)
-    // USUARIO_ID tambem e chave unica. Repetido no arquivo tornaria ambiguo qual
-    // pessoa deveria receber a matricula, entao a segunda linha e recusada.
-    if (usuarioId && usuarioIdsVistos.has(usuarioId)) {
-      rejeitados.push({
-        tipo: 'duplicado',
-        linha: numeroDaLinha,
-        cpf,
-        name: nome,
-        usuarioId,
-        motivo: `USUARIO_ID repetido (ja aparece na linha ${usuarioIdsVistos.get(usuarioId)})`,
-      })
-      return
-    }
-    if (usuarioId) usuarioIdsVistos.set(usuarioId, numeroDaLinha)
-    const perfil = (usuarioId && perfilPorUsuario.get(usuarioId)) || perfilPorCpf.get(cpf) || {}
+    // CPF e a referencia principal. USUARIO_ID so ajuda a ligar as abas quando
+    // o CPF nao foi repetido no perfil.
+    const perfil = perfilPorCpf.get(cpf) || (usuarioId && perfilPorUsuario.get(usuarioId)) || {}
     const semPerfilDoRegistro = !Object.keys(perfil).length
     if (semPerfilDoRegistro) semPerfil += 1
 

@@ -411,7 +411,7 @@ async function findRawById(id) {
 }
 
 /**
- * Separa registros novos dos que ja existem e dos conflitos de matricula.
+ * Separa registros novos dos que ja existem usando exclusivamente o CPF.
  * Recebe lotes pequenos para manter os IN (...) leves na VPS.
  */
 async function classificarParaImportacao(records, connection, { bloquear = false } = {}) {
@@ -425,34 +425,18 @@ async function classificarParaImportacao(records, connection, { bloquear = false
   )
   const cpfsExistentes = new Set(linhasCpf.map((linha) => linha.cpf))
 
-  const usuarioIds = records.map((record) => record.usuarioId).filter(Boolean)
-  const donoPorUsuarioId = new Map()
-  if (usuarioIds.length > 0) {
-    const [linhasUsuario] = await runner.query(
-      `SELECT usuario_id, cpf FROM cursistas WHERE usuario_id IN (?)${bloquear ? ' FOR UPDATE' : ''}`,
-      [usuarioIds]
-    )
-    linhasUsuario.forEach((linha) => donoPorUsuarioId.set(linha.usuario_id, linha.cpf))
-  }
-
   const novos = []
   const existentes = []
-  const conflitos = []
 
   records.forEach((record) => {
     if (cpfsExistentes.has(record.cpf)) {
       existentes.push(record)
       return
     }
-    const dono = record.usuarioId && donoPorUsuarioId.get(record.usuarioId)
-    if (dono && dono !== record.cpf) {
-      conflitos.push({ ...record, motivo: `USUARIO_ID ${record.usuarioId} ja pertence a outro CPF no sistema` })
-      return
-    }
     novos.push(record)
   })
 
-  return { novos, existentes, conflitos }
+  return { novos, existentes, conflitos: [] }
 }
 
 /** Insere um lote sem alterar qualquer CPF ou matricula que ja exista. */
@@ -460,33 +444,26 @@ async function inserirLoteImportacao(records, connection) {
   const runner = connection || getPool()
   if (records.length === 0) return { inseridos: 0, atualizados: 0, conflitos: [] }
 
-  // usuario_id tambem e chave unica: se o da planilha ja pertence a OUTRO CPF, o
-  // upsert atualizaria o cadastro daquela pessoa (nome, e-mails, funcao) em vez
-  // de inserir esta -- misturando dado pessoal entre contas. Esses registros sao
-  // separados e devolvidos como conflito, nao gravados.
-  const usuarioIds = records.map((record) => record.usuarioId).filter(Boolean)
-  const donoPorUsuarioId = new Map()
+  // Matricula nao participa da decisao de duplicidade. Quando esta vazia ou ja
+  // esta em uso, ganha um identificador tecnico derivado do CPF novo.
+  const usuarioIds = records.flatMap((record) => [record.usuarioId, `IMP${record.cpf}`]).filter(Boolean)
+  const idsEmUso = new Set()
   if (usuarioIds.length > 0) {
     const [rows] = await runner.query(
-      'SELECT usuario_id, cpf FROM cursistas WHERE usuario_id IN (?)',
+      'SELECT usuario_id FROM cursistas WHERE usuario_id IN (?)',
       [usuarioIds]
     )
-    rows.forEach((row) => donoPorUsuarioId.set(row.usuario_id, row.cpf))
+    rows.forEach((row) => idsEmUso.add(row.usuario_id))
   }
 
-  const conflitos = []
-  const gravaveis = records.filter((record) => {
-    const dono = record.usuarioId && donoPorUsuarioId.get(record.usuarioId)
-    if (dono && dono !== record.cpf) {
-      conflitos.push({ usuarioId: record.usuarioId, cpf: record.cpf })
-      return false
-    }
-    return true
+  const gravaveis = records.map((record) => {
+    let usuarioId = record.usuarioId
+    if (!usuarioId || idsEmUso.has(usuarioId)) usuarioId = `IMP${record.cpf}`
+    // Protecao para uma base antiga ter usado manualmente o mesmo identificador.
+    if (idsEmUso.has(usuarioId)) usuarioId = null
+    if (usuarioId) idsEmUso.add(usuarioId)
+    return { ...record, usuarioId }
   })
-
-  if (gravaveis.length === 0) {
-    return { inseridos: 0, atualizados: 0, conflitos }
-  }
 
   const valores = []
   const placeholders = gravaveis
@@ -527,7 +504,7 @@ async function inserirLoteImportacao(records, connection) {
   return {
     inseridos: Number(resultado.affectedRows || 0),
     atualizados: 0,
-    conflitos,
+    conflitos: [],
   }
 }
 

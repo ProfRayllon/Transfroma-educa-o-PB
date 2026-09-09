@@ -792,7 +792,8 @@ export default function Cursistas() {
         {previaImport && (
           <div className="space-y-4">
             <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-800">
-              A planilha foi apenas verificada. Nenhum cadastro foi gravado ainda.
+              A planilha foi apenas verificada, usando somente o CPF para encontrar
+              duplicados. Nenhum cadastro foi gravado ainda.
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
