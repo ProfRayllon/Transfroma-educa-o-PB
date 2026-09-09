@@ -290,7 +290,10 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
       return res.status(400).json({ message: 'Envie o arquivo .xlsx da base no corpo da requisicao.' })
     }
     if (String(req.query.confirmar) !== 'novos') {
-      return res.status(400).json({ message: 'Valide a planilha e confirme a importacao dos novos cadastros.' })
+      return res.status(409).json({
+        message: 'Esta tela esta desatualizada. Recarregue a pagina para analisar a planilha antes de confirmar.',
+        code: 'FRONTEND_DESATUALIZADO',
+      })
     }
     const actor = await getUsuarioInterno(req.user.id)
     res.json(await importacao.importar({ arquivo: req.body, actor, req }))

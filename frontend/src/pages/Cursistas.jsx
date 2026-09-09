@@ -226,6 +226,7 @@ export default function Cursistas() {
    */
   const [progresso, setProgresso] = useState(null)
   const [previaImport, setPreviaImport] = useState(null)
+  const [abaPrevia, setAbaPrevia] = useState('novos')
   const [resultadoImport, setResultadoImport] = useState(null)
   const [exportando, setExportando] = useState(false)
   const [confirmarReset, setConfirmarReset] = useState(null)
@@ -285,6 +286,7 @@ export default function Cursistas() {
     setImportando(true)
     setResultadoImport(null)
     setPreviaImport(null)
+    setAbaPrevia('novos')
     setProgresso({ fase: 'enviando', etapa: 'validacao', percentual: 0, segundos: 0 })
 
     const inicio = Date.now()
@@ -517,51 +519,6 @@ export default function Cursistas() {
         </div>
       )}
 
-      {progresso && (
-        <div className="card border-brand-200 bg-brand-50/40">
-          <div className="flex items-center gap-3 mb-3">
-            <Loader2 size={17} className="text-brand-700 animate-spin flex-shrink-0" />
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold text-gray-800">
-                {progresso.fase === 'enviando'
-                  ? 'Enviando a planilha...'
-                  : progresso.fase === 'validando'
-                    ? 'Verificando os cadastros...'
-                    : 'Gravando somente os novos cadastros...'}
-              </div>
-              <div className="text-xs text-gray-500 mt-0.5">
-                {progresso.fase === 'enviando'
-                  ? `${progresso.percentual}% enviado`
-                  : progresso.fase === 'validando'
-                    ? 'Nenhum dado está sendo gravado nesta etapa.'
-                    : 'O servidor está gravando tudo de uma vez. Não feche nem recarregue esta página.'}
-              </div>
-            </div>
-            <div className="text-right flex-shrink-0">
-              <div className="text-lg font-bold leading-none text-brand-800 tabular-nums">{progresso.segundos}s</div>
-              <div className="text-[10px] uppercase tracking-wide text-gray-400">decorridos</div>
-            </div>
-          </div>
-
-          <div className="h-1.5 rounded-full bg-brand-100 overflow-hidden">
-            {progresso.fase === 'enviando' ? (
-              <div className="h-full bg-brand-700 transition-all duration-300" style={{ width: `${progresso.percentual}%` }} />
-            ) : (
-              // Sem percentual: a gravacao e uma transacao unica, e inventar uma
-              // barra que avanca sozinha mentiria sobre o andamento.
-              <div className="h-full w-1/3 bg-brand-700 animate-pulse" />
-            )}
-          </div>
-
-          {progresso.fase === 'processando' && progresso.segundos > 25 && (
-            <p className="text-xs text-gray-500 mt-3 leading-relaxed">
-              Com 13 mil linhas isso leva cerca de um minuto. Se a conexão cair antes da
-              resposta, a gravação continua no servidor — basta conferir o total depois.
-            </p>
-          )}
-        </div>
-      )}
-
       {/* Painel de acesso — apenas números agregados, sem identificar ninguém. */}
       {cad && (
         <>
@@ -755,9 +712,59 @@ export default function Cursistas() {
         )}
       </div>
 
+      <Modal
+        open={Boolean(progresso)}
+        onClose={() => {}}
+        closable={false}
+        title={progresso?.etapa === 'validacao' ? 'Analisando a base' : 'Importando novos cadastros'}
+        size="sm"
+      >
+        {progresso && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <Loader2 size={20} className="text-brand-700 animate-spin flex-shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold text-gray-800">
+                  {progresso.fase === 'enviando'
+                    ? 'Enviando a planilha...'
+                    : progresso.fase === 'validando'
+                      ? 'Procurando novos, duplicados e inválidos...'
+                      : 'Gravando somente os novos cadastros...'}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {progresso.fase === 'enviando'
+                    ? `${progresso.percentual}% enviado`
+                    : progresso.fase === 'validando'
+                      ? 'Nenhum dado está sendo gravado nesta etapa.'
+                      : 'Não feche nem recarregue esta página.'}
+                </div>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <div className="text-lg font-bold leading-none text-brand-800 tabular-nums">{progresso.segundos}s</div>
+                <div className="text-[10px] uppercase tracking-wide text-gray-400">decorridos</div>
+              </div>
+            </div>
+
+            <div className="h-1.5 rounded-full bg-brand-100 overflow-hidden">
+              {progresso.fase === 'enviando' ? (
+                <div className="h-full bg-brand-700 transition-all duration-300" style={{ width: `${progresso.percentual}%` }} />
+              ) : (
+                <div className="h-full w-1/3 bg-brand-700 animate-pulse" />
+              )}
+            </div>
+
+            {progresso.fase === 'processando' && progresso.segundos > 25 && (
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Com milhares de linhas, a gravação pode levar cerca de um minuto.
+              </p>
+            )}
+          </div>
+        )}
+      </Modal>
+
       {/* Previa: nesta etapa o backend apenas le e classifica o arquivo. */}
       <Modal
-        open={Boolean(previaImport)}
+        open={Boolean(previaImport) && !progresso}
         onClose={() => !importando && setPreviaImport(null)}
         title="Conferir importação"
         size="xl"
@@ -807,40 +814,94 @@ export default function Cursistas() {
               </div>
             </div>
 
-            <div>
-              <div className="flex items-center justify-between gap-3 mb-2">
-                <h3 className="text-sm font-semibold text-gray-800">Cadastros novos que serão incluídos</h3>
-                {previaImport.novosDados.length > 200 && (
-                  <span className="text-xs text-gray-400">Exibindo os primeiros 200</span>
+            <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+              <button
+                type="button"
+                onClick={() => setAbaPrevia('novos')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${abaPrevia === 'novos' ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500'}`}
+              >
+                Novos ({previaImport.novos})
+              </button>
+              <button
+                type="button"
+                onClick={() => setAbaPrevia('problemas')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${abaPrevia === 'problemas' ? 'bg-white text-red-700 shadow-sm' : 'text-gray-500'}`}
+              >
+                Duplicados e inválidos ({previaImport.problemas.length})
+              </button>
+            </div>
+
+            {abaPrevia === 'novos' ? (
+              <div>
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <h3 className="text-sm font-semibold text-gray-800">Cadastros novos que serão incluídos</h3>
+                  {previaImport.novosDados.length > 200 && <span className="text-xs text-gray-400">Exibindo os primeiros 200</span>}
+                </div>
+                {previaImport.novosDados.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-gray-500">Nenhum cadastro novo encontrado.</p>
+                ) : (
+                  <div className="max-h-80 overflow-auto border border-gray-200 rounded-lg">
+                    <table className="w-full">
+                      <thead className="sticky top-0 bg-white">
+                        <tr className="border-b border-gray-200">
+                          <th className="table-header px-3 w-16">Linha</th>
+                          <th className="table-header px-3">Nome</th>
+                          <th className="table-header px-3 w-40">CPF</th>
+                          <th className="table-header px-3 w-36">Matrícula</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {previaImport.novosDados.slice(0, 200).map((item) => (
+                          <tr key={`${item.linha}-${item.cpf}`} className="border-b border-gray-100 last:border-0">
+                            <td className="table-cell px-3 text-gray-400">{item.linha}</td>
+                            <td className="table-cell px-3 font-medium text-gray-800">{item.name}</td>
+                            <td className="table-cell px-3 font-mono text-xs text-gray-600">{item.cpf}</td>
+                            <td className="table-cell px-3 font-mono text-xs text-gray-500">{item.usuarioId || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
-              {previaImport.novosDados.length === 0 ? (
-                <p className="py-6 text-center text-sm text-gray-500">Nenhum cadastro novo encontrado.</p>
-              ) : (
-                <div className="max-h-80 overflow-auto border border-gray-200 rounded-lg">
-                  <table className="w-full">
-                    <thead className="sticky top-0 bg-white">
-                      <tr className="border-b border-gray-200">
-                        <th className="table-header px-3 w-16">Linha</th>
-                        <th className="table-header px-3">Nome</th>
-                        <th className="table-header px-3 w-40">CPF</th>
-                        <th className="table-header px-3 w-36">Matrícula</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {previaImport.novosDados.slice(0, 200).map((item) => (
-                        <tr key={`${item.linha}-${item.cpf}`} className="border-b border-gray-100 last:border-0">
-                          <td className="table-cell px-3 text-gray-400">{item.linha}</td>
-                          <td className="table-cell px-3 font-medium text-gray-800">{item.name}</td>
-                          <td className="table-cell px-3 font-mono text-xs text-gray-600">{item.cpf}</td>
-                          <td className="table-cell px-3 font-mono text-xs text-gray-500">{item.usuarioId || '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            ) : (
+              <div>
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <h3 className="text-sm font-semibold text-gray-800">Registros que não serão importados</h3>
+                  {previaImport.problemas.length > 200 && <span className="text-xs text-gray-400">Exibindo os primeiros 200</span>}
                 </div>
-              )}
-            </div>
+                {previaImport.problemas.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-gray-500">Nenhum duplicado ou inválido encontrado.</p>
+                ) : (
+                  <div className="max-h-80 overflow-auto border border-gray-200 rounded-lg">
+                    <table className="w-full">
+                      <thead className="sticky top-0 bg-white">
+                        <tr className="border-b border-gray-200">
+                          <th className="table-header px-3 w-20">Tipo</th>
+                          <th className="table-header px-3 w-16">Linha</th>
+                          <th className="table-header px-3">Nome</th>
+                          <th className="table-header px-3 w-36">CPF</th>
+                          <th className="table-header px-3">Motivo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {previaImport.problemas.slice(0, 200).map((item, indice) => (
+                          <tr key={`${item.linha}-${item.cpf}-${indice}`} className="border-b border-gray-100 last:border-0">
+                            <td className={`table-cell px-3 text-xs font-medium ${item.tipo === 'duplicado' ? 'text-amber-700' : 'text-red-700'}`}>
+                              {item.tipo === 'duplicado' ? 'Duplicado' : 'Inválido'}
+                            </td>
+                            <td className="table-cell px-3 text-gray-400">{item.linha}</td>
+                            <td className="table-cell px-3 text-gray-800">{item.name || '—'}</td>
+                            <td className="table-cell px-3 font-mono text-xs text-gray-600">{item.cpf || '—'}</td>
+                            <td className="table-cell px-3 text-xs text-gray-600">{item.motivo}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </Modal>
