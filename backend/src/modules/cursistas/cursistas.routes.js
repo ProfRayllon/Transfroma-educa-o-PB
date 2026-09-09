@@ -223,6 +223,10 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
   // maior alcance do modulo.
   // ---------------------------------------------------------------------------
 
+  router.get('/admin/cursistas-opcoes', ...soAdmin, tratar(async (_req, res) => {
+    res.json(await repo.listarOpcoesFormulario())
+  }))
+
   /**
    * `:id` vem da URL e nao e confiavel. Sem esta conferencia, "abc" viraria NaN
    * e chegaria ao driver do MySQL como parametro invalido -- erro 500 no lugar

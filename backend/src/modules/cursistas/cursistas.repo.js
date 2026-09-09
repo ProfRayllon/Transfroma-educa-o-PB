@@ -223,6 +223,52 @@ async function criarManual(dados, connection) {
   return resultado.insertId
 }
 
+/** Gera uma matricula estavel e unica para cadastros feitos pelo formulario. */
+async function gerarUsuarioIdManual(id, connection) {
+  const runner = connection || getPool()
+  const usuarioId = `MAN${String(id).padStart(9, '0')}`
+  await runner.execute(
+    'UPDATE cursistas SET usuario_id = ? WHERE id = ? AND usuario_id IS NULL',
+    [usuarioId, id]
+  )
+  return usuarioId
+}
+
+/** Valores ja usados na base para preencher o formulario manual sem digitacao livre. */
+async function listarOpcoesFormulario() {
+  requireMysql()
+  const pool = getPool()
+  const distintos = async (coluna) => {
+    const [linhas] = await pool.query(
+      `SELECT DISTINCT ${coluna} AS valor
+         FROM cursistas
+        WHERE ${coluna} IS NOT NULL AND TRIM(${coluna}) <> ''
+        ORDER BY ${coluna}`
+    )
+    return linhas.map((linha) => linha.valor)
+  }
+
+  const [funcoes, componentes, eixos, cursos, escolas] = await Promise.all([
+    distintos('funcao'),
+    distintos('componente_curricular'),
+    distintos('eixo_tecnologico'),
+    distintos('curso_tecnico'),
+    pool.query(
+      `SELECT inep, MAX(gre) AS gre, MAX(escola) AS escola
+         FROM cursista_vinculos
+        WHERE inep IS NOT NULL AND TRIM(inep) <> ''
+        GROUP BY inep
+        ORDER BY escola, inep`
+    ).then(([linhas]) => linhas.map((linha) => ({
+      inep: linha.inep || '',
+      gre: linha.gre || '',
+      escola: linha.escola || '',
+    }))),
+  ])
+
+  return { funcoes, componentes, eixos, cursos, escolas }
+}
+
 /**
  * Grava a edicao e devolve os nomes dos campos que realmente mudaram.
  *
@@ -667,6 +713,8 @@ module.exports = {
 
   // Manutencao pela coordenacao
   criarManual,
+  gerarUsuarioIdManual,
+  listarOpcoesFormulario,
   atualizarPeloAdmin,
   definirVinculos,
   contarDependencias,

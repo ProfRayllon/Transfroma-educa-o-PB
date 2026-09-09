@@ -19,6 +19,15 @@ import api, { getApiErrorMessage } from '../../lib/api'
 
 const MAX_VINCULOS = 4
 
+const GENEROS = [
+  '', 'Mulher cisgênero', 'Homem cisgênero', 'Mulher transgênero',
+  'Homem transgênero', 'Não-binário', 'Outros', 'Prefiro não informar',
+]
+
+const OPCOES_VAZIAS = {
+  funcoes: [], componentes: [], eixos: [], cursos: [], escolas: [],
+}
+
 const VAZIO = {
   cpf: '', name: '', usuarioId: '', funcao: '', componenteCurricular: '',
   eixoTecnologico: '', cursoTecnico: '', dataInicioRede: '', birthDate: '',
@@ -28,6 +37,11 @@ const VAZIO = {
 }
 
 const soData = (valor) => (valor ? String(valor).slice(0, 10) : '')
+
+const comValorAtual = (opcoes, atual) => {
+  if (!atual || opcoes.includes(atual)) return opcoes
+  return [atual, ...opcoes]
+}
 
 function Campo({ label, children, dica, className = '' }) {
   return (
@@ -47,6 +61,14 @@ export default function FormularioCursista({ open, cursistaId, onClose, onSalvo 
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState(null)
   const [cpfOriginal, setCpfOriginal] = useState('')
+  const [opcoes, setOpcoes] = useState(OPCOES_VAZIAS)
+
+  useEffect(() => {
+    if (!open) return
+    api.get('/cursistas/admin/cursistas-opcoes')
+      .then(({ data }) => setOpcoes({ ...OPCOES_VAZIAS, ...data }))
+      .catch(() => setOpcoes(OPCOES_VAZIAS))
+  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -85,6 +107,17 @@ export default function FormularioCursista({ open, cursistaId, onClose, onSalvo 
     setForm((atual) => ({
       ...atual,
       vinculos: atual.vinculos.map((v, i) => (i === indice ? { ...v, [campo]: valor } : v)),
+    }))
+  }
+
+  const setInep = (indice) => (evento) => {
+    const inep = evento.target.value.replace(/\D/g, '').slice(0, 12)
+    const escola = opcoes.escolas.find((item) => String(item.inep) === inep)
+    setForm((atual) => ({
+      ...atual,
+      vinculos: atual.vinculos.map((vinculo, i) => (i === indice
+        ? { ...vinculo, inep, ...(escola ? { gre: escola.gre, escola: escola.escola } : {}) }
+        : vinculo)),
     }))
   }
 
@@ -177,8 +210,12 @@ export default function FormularioCursista({ open, cursistaId, onClose, onSalvo 
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
-              <Campo label="Matrícula (USUARIO_ID)" dica="Da base oficial. Deixe vazio se não houver.">
-                <input value={form.usuarioId || ''} onChange={set('usuarioId')} maxLength={20} placeholder="USR000001" className="input-field font-mono" />
+              <Campo label="Matrícula (USUARIO_ID)" dica={editando ? 'Identificador do cadastro.' : 'Será gerada automaticamente ao criar.'}>
+                <input
+                  value={editando ? (form.usuarioId || '') : 'Automática'}
+                  readOnly
+                  className="input-field font-mono bg-gray-50 text-gray-500"
+                />
               </Campo>
               <Campo label="Situação da conta">
                 <select value={form.status} onChange={set('status')} className="select-field">
@@ -197,16 +234,28 @@ export default function FormularioCursista({ open, cursistaId, onClose, onSalvo 
             <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Dados funcionais</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <Campo label="Função">
-                <input value={form.funcao || ''} onChange={set('funcao')} maxLength={120} placeholder="Professor(a) da Formação Geral Básica" className="input-field" />
+                <select value={form.funcao || ''} onChange={set('funcao')} className="select-field">
+                  <option value="">Selecione</option>
+                  {comValorAtual(opcoes.funcoes, form.funcao).map((valor) => <option key={valor} value={valor}>{valor}</option>)}
+                </select>
               </Campo>
               <Campo label="Componente curricular">
-                <input value={form.componenteCurricular || ''} onChange={set('componenteCurricular')} maxLength={120} placeholder="Língua Portuguesa" className="input-field" />
+                <select value={form.componenteCurricular || ''} onChange={set('componenteCurricular')} className="select-field">
+                  <option value="">Selecione</option>
+                  {comValorAtual(opcoes.componentes, form.componenteCurricular).map((valor) => <option key={valor} value={valor}>{valor}</option>)}
+                </select>
               </Campo>
               <Campo label="Eixo tecnológico">
-                <input value={form.eixoTecnologico || ''} onChange={set('eixoTecnologico')} maxLength={120} className="input-field" />
+                <select value={form.eixoTecnologico || ''} onChange={set('eixoTecnologico')} className="select-field">
+                  <option value="">Selecione</option>
+                  {comValorAtual(opcoes.eixos, form.eixoTecnologico).map((valor) => <option key={valor} value={valor}>{valor}</option>)}
+                </select>
               </Campo>
               <Campo label="Curso técnico">
-                <input value={form.cursoTecnico || ''} onChange={set('cursoTecnico')} maxLength={120} className="input-field" />
+                <select value={form.cursoTecnico || ''} onChange={set('cursoTecnico')} className="select-field">
+                  <option value="">Selecione</option>
+                  {comValorAtual(opcoes.cursos, form.cursoTecnico).map((valor) => <option key={valor} value={valor}>{valor}</option>)}
+                </select>
               </Campo>
               <Campo label="Início na rede estadual">
                 <input type="date" value={form.dataInicioRede || ''} onChange={set('dataInicioRede')} className="input-field" />
@@ -237,7 +286,11 @@ export default function FormularioCursista({ open, cursistaId, onClose, onSalvo 
                 <input value={form.phone || ''} onChange={set('phone')} maxLength={20} placeholder="83999990000" className="input-field" />
               </Campo>
               <Campo label="Gênero">
-                <input value={form.genero || ''} onChange={set('genero')} maxLength={40} className="input-field" />
+                <select value={form.genero || ''} onChange={set('genero')} className="select-field">
+                  {comValorAtual(GENEROS, form.genero).map((valor) => (
+                    <option key={valor || 'vazio'} value={valor}>{valor || 'Selecione'}</option>
+                  ))}
+                </select>
               </Campo>
             </div>
           </div>
@@ -265,11 +318,17 @@ export default function FormularioCursista({ open, cursistaId, onClose, onSalvo 
                 <div key={indice} className="flex items-start gap-2">
                   <input
                     value={vinculo.inep || ''}
-                    onChange={setVinculo(indice, 'inep')}
+                    onChange={setInep(indice)}
+                    list={`inep-escolas-${indice}`}
                     placeholder="INEP"
                     maxLength={12}
                     className="input-field font-mono w-28 flex-shrink-0"
                   />
+                  <datalist id={`inep-escolas-${indice}`}>
+                    {opcoes.escolas.map((item) => (
+                      <option key={item.inep} value={item.inep}>{item.escola}</option>
+                    ))}
+                  </datalist>
                   <input
                     value={vinculo.gre || ''}
                     onChange={setVinculo(indice, 'gre')}

@@ -421,6 +421,13 @@ export default function Cursistas() {
           <button onClick={() => setFormulario({ id: null })} className="btn-secondary text-sm">
             <UserPlus size={14} /> Novo cursista
           </button>
+          <a
+            href="/modelos/modelo-importacao-cursistas.xlsx"
+            download
+            className="btn-secondary text-sm"
+          >
+            <FileSpreadsheet size={14} /> Baixar modelo
+          </a>
           <button
             onClick={() => arquivoRef.current?.click()}
             disabled={importando}

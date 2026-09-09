@@ -170,6 +170,7 @@ async function criar({ corpo, actor, req }) {
   try {
     await conexao.beginTransaction()
     novoId = await repo.criarManual(dados, conexao)
+    if (!dados.usuarioId) await repo.gerarUsuarioIdManual(novoId, conexao)
     if (dados.vinculos?.length) await repo.definirVinculos(novoId, dados.vinculos, conexao)
     await conexao.commit()
   } catch (error) {
