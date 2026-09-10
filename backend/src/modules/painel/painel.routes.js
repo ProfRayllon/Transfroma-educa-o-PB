@@ -3,6 +3,7 @@
 const express = require('express')
 const repo = require('./painel.repo')
 const resultados = require('../resultados/resultados.repo')
+const { montarCsv } = require('../../shared/csv')
 
 /**
  * O painel institucional, numa chamada so.
@@ -74,6 +75,21 @@ function normalizarCurso(valor) {
  * "1a GRE  " e outra com "1ª GRE" ocupariam duas entradas para o mesmo
  * resultado, e vinte variacoes esvaziariam o cache inteiro.
  */
+const ROTULOS_STATUS = {
+  concluido: 'Concluido',
+  nao_concluido: 'Nao concluido',
+  em_andamento: 'Em andamento',
+}
+
+function normalizarStatus(valor) {
+  return Object.keys(ROTULOS_STATUS).includes(String(valor)) ? String(valor) : null
+}
+
+const formatarCpf = (cpf) => {
+  const d = String(cpf || '')
+  return d.length === 11 ? `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}` : d
+}
+
 function normalizarGre(valor) {
   const texto = String(valor || '').trim()
   return /^\d{1,2}ª GRE$/.test(texto) ? texto : null
@@ -103,6 +119,7 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
       const [
         totais, porGre, funil, perfil, inscricoes, serie,
         conclusao, conclusaoPorGre, avaliacao, nota, evolucao, opcoes,
+        escolasConcluintes, porFuncao,
       ] = await Promise.all([
         repo.totais({ cursoId, dias, gre }),
         repo.porGre({ cursoId }),
@@ -122,6 +139,12 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
         resultados.avaliacaoNota({ cursoId }),
         resultados.evolucaoDaConclusao({ cursoId }),
         resultados.opcoesDeFiltro(),
+
+        /* Escolas e funcao pertencem ao painel de concluintes. Vem no mesmo
+           pacote porque sao agregados de poucos bytes -- o que NAO vem aqui e a
+           lista de gente, que tem rota propria e paginacao. */
+        resultados.escolasDoConsolidado({ cursoId, gre }),
+        resultados.concluintesPorFuncao({ cursoId, gre }),
       ])
 
       const dados = {
@@ -139,7 +162,10 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
         opcoes,
         institucional: {
           totais, porGre, funil, perfil, inscricoes, serie,
-          resultados: { conclusao, porGre: conclusaoPorGre, avaliacao, nota, evolucao },
+          resultados: {
+            conclusao, porGre: conclusaoPorGre, avaliacao, nota, evolucao,
+            escolas: escolasConcluintes, porFuncao,
+          },
         },
       }
 
@@ -151,6 +177,77 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
       const status = erro.status || 500
       res.status(status).json({
         message: status === 503 ? erro.message : 'Nao foi possivel montar o dashboard.',
+      })
+    }
+  })
+
+  /**
+   * A lista de docentes do consolidado.
+   *
+   * Rota separada, e sem o cache de um minuto que o dashboard usa: aqui a
+   * resposta muda a cada busca digitada e a cada pagina virada, e guardar isso
+   * encheria o cache de combinacoes que ninguem repete -- alem de deixar dado
+   * pessoal parado na memoria do processo.
+   *
+   * O CPF sai mascarado do repositorio. Quem precisa do numero inteiro usa a
+   * exportacao, que e um ato deliberado.
+   */
+  router.get('/concluintes/lista', requireRole(...PERFIS_COM_ACESSO), async (req, res) => {
+    try {
+      const dados = await resultados.listaDeConcluintes({
+        cursoId: normalizarCurso(req.query.curso),
+        gre: normalizarGre(req.query.gre),
+        status: normalizarStatus(req.query.status),
+        busca: String(req.query.busca || '').slice(0, 80),
+        pagina: Number(req.query.pagina) || 1,
+        porPagina: Number(req.query.porPagina) || 25,
+      })
+      res.json(dados)
+    } catch (erro) {
+      const status = erro.status || 500
+      res.status(status).json({
+        message: status === 503 ? erro.message : 'Nao foi possivel carregar a lista.',
+      })
+    }
+  })
+
+  /**
+   * A mesma lista em CSV, com o CPF completo.
+   *
+   * Aqui o numero inteiro sai, porque a planilha existe para cruzar com outros
+   * sistemas e CPF pela metade nao cruza com nada. O que separa isto da tela e
+   * que baixar um arquivo e uma acao deliberada, feita por alguem que ja passou
+   * pelo login e pelo perfil.
+   */
+  router.get('/concluintes/exportar', requireRole(...PERFIS_COM_ACESSO), async (req, res) => {
+    try {
+      const linhas = await resultados.listaParaExportar({
+        cursoId: normalizarCurso(req.query.curso),
+        gre: normalizarGre(req.query.gre),
+        status: normalizarStatus(req.query.status),
+      })
+
+      const csv = montarCsv([
+        { titulo: 'Docente', valor: (l) => l.docente },
+        // O CPF vai com pontuacao para o Excel nao tratar como numero e comer o
+        // zero a esquerda -- que e como o CPF chega torto de volta na proxima
+        // planilha.
+        { titulo: 'CPF', valor: (l) => formatarCpf(l.cpf) },
+        { titulo: 'GRE', valor: (l) => l.gre },
+        { titulo: 'INEP', valor: (l) => l.inep },
+        { titulo: 'Escola', valor: (l) => l.escola },
+        { titulo: 'Curso', valor: (l) => l.curso },
+        { titulo: 'Situacao', valor: (l) => ROTULOS_STATUS[l.status] || l.status },
+      ], linhas)
+
+      const hoje = new Date().toISOString().slice(0, 10)
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+      res.setHeader('Content-Disposition', `attachment; filename="docentes-concluintes-${hoje}.csv"`)
+      res.send(csv)
+    } catch (erro) {
+      const status = erro.status || 500
+      res.status(status).json({
+        message: status === 503 ? erro.message : 'Nao foi possivel exportar a lista.',
       })
     }
   })

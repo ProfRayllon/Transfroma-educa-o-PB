@@ -8,6 +8,7 @@ import {
   Rosca, RoscaRotulada, LegendaDeRosca, ListaRanqueada, CarrosselDeCursos,
   RankingPirulito, ResumoDoRanking,
 } from './graficos'
+import ListaDeConcluintes from './listaConcluintes'
 
 /**
  * Os blocos do dashboard.
@@ -182,10 +183,13 @@ function variacaoDaSerie(serie, chave) {
  * por um link antigo.
  */
 const BLOCOS_POR_SECAO = {
-  concluintes: ['kpiConclusao', 'gre'],
+  concluintes: ['kpiConclusao', 'situacao', 'funcao', 'gre', 'escolas', 'lista'],
   progresso: ['kpiCurso', 'rosca', 'carrossel', 'avaliacao'],
   sistema: ['kpiBase', 'movimento', 'perfil', 'gre'],
-  tudo: ['kpiConclusao', 'kpiCurso', 'kpiBase', 'movimento', 'rosca', 'carrossel', 'gre', 'perfil', 'avaliacao'],
+  tudo: [
+    'kpiConclusao', 'kpiCurso', 'kpiBase', 'movimento', 'rosca', 'carrossel',
+    'gre', 'perfil', 'avaliacao', 'situacao', 'funcao', 'escolas', 'lista',
+  ],
 }
 
 export function BlocoInstitucional({
@@ -236,6 +240,35 @@ export function BlocoInstitucional({
   const R = dados.institucional.resultados
   const temConclusao = R.conclusao.base > 0
   const temAvaliacao = R.nota.respostas > 0
+
+  /**
+   * Concluiu, e nao concluiu. Duas fatias, e nao tres.
+   *
+   * A planilha distingue apenas esses dois estados. "Em andamento" e "nao
+   * iniciou" nao existem nela: quem esta fazendo o curso agora esta dentro de
+   * "nao concluiu", indistinguivel de quem nunca abriu. Inventar a terceira
+   * fatia seria repartir um numero que ninguem mediu.
+   */
+  const fatiasSituacao = [
+    { rotulo: 'Concluiram', valor: R.conclusao.concluintes, cor: 'var(--p-r5)' },
+    {
+      rotulo: 'Nao concluiram',
+      valor: Math.max(0, R.conclusao.base - R.conclusao.concluintes),
+      cor: 'var(--p-trilhoForte)',
+    },
+  ]
+
+  /* A funcao vive no cadastro, e nao na planilha: este bloco so enxerga quem
+     teve o CPF encontrado. Sem ninguem encontrado, ele nao aparece -- uma rosca
+     vazia com titulo faria parecer que a informacao nao existe, quando o que
+     falta e o cruzamento. */
+  const cob = R.porFuncao?.cobertura || { concluintes: 0, comCadastro: 0 }
+  const temFuncao = (R.porFuncao?.itens?.length || 0) > 0 && cob.comCadastro > 0
+  const fatiasFuncao = (R.porFuncao?.itens || []).slice(0, 6).map((f, i) => ({
+    rotulo: f.chave,
+    valor: f.total,
+    cor: `var(--p-r${Math.min(5, i + 1)})`,
+  }))
 
   const inscricoesNoPeriodo = serie.reduce((s, p) => s + p.inscricao, 0)
   // O funil vem sempre da base inteira, então o primeiro degrau dele é o
@@ -501,6 +534,61 @@ export function BlocoInstitucional({
           indicadores.length >= 4 ? 'xl:grid-cols-4'
             : indicadores.length === 3 ? 'xl:grid-cols-3' : 'xl:grid-cols-2'}`}>
           {indicadores.map((k) => <CartaoKpi key={k.chave} {...k} />)}
+        </div>
+      )}
+
+      {/* ─── Situação e quem concluiu ─── */}
+      {(mostra('situacao') || mostra('funcao')) && temConclusao && (
+        <div className={`grid grid-cols-1 gap-4 items-stretch ${temFuncao ? 'xl:grid-cols-2' : ''}`}>
+          {mostra('situacao') && (
+            <Cartao className="flex flex-col">
+              <TituloDeBloco
+                acao={<span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>
+                  planilha de {dataCurta(R.conclusao.referencia)}
+                </span>}
+              >
+                Situação no curso
+              </TituloDeBloco>
+              <div className="flex-1 flex items-center justify-center min-h-0">
+                <RoscaRotulada
+                  total={R.conclusao.base}
+                  altura={310}
+                  centroValor={br(R.conclusao.base)}
+                  centroRotulo="docentes"
+                  fatias={fatiasSituacao}
+                />
+              </div>
+            </Cartao>
+          )}
+
+          {mostra('funcao') && temFuncao && (
+            <Cartao className="flex flex-col">
+              <TituloDeBloco
+                acao={<span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>
+                  {pct(cob.comCadastro, cob.concluintes)}% dos concluintes
+                </span>}
+              >
+                Concluintes por função
+              </TituloDeBloco>
+              <div className="flex-1 flex items-center justify-center min-h-0">
+                <RoscaRotulada
+                  total={fatiasFuncao.reduce((s, f) => s + f.valor, 0)}
+                  altura={310}
+                  centroValor={br(cob.comCadastro)}
+                  centroRotulo="com cadastro"
+                  fatias={fatiasFuncao}
+                />
+              </div>
+              {/* O grafico descreve so quem foi encontrado no cadastro. Dizer o
+                  tamanho desse recorte evita que ele seja lido como o retrato
+                  dos oito mil. */}
+              <p className="text-[12px] mt-1" style={{ color: 'var(--p-texto3)' }}>
+                A função vem do cadastro dos cursistas.{' '}
+                <b style={{ color: 'var(--p-texto2)' }}>{br(cob.concluintes - cob.comCadastro)}</b>{' '}
+                concluintes da planilha ainda não têm par na base e ficam fora deste recorte.
+              </p>
+            </Cartao>
+          )}
         </div>
       )}
 
@@ -870,6 +958,35 @@ export function BlocoInstitucional({
             )}
           </Cartao>
         </div>
+      )}
+
+      {/* ─── Escolas ─── */}
+      {mostra('escolas') && temConclusao && R.escolas.maiores.length > 0 && (
+        <Cartao className="flex flex-col">
+          <TituloDeBloco
+            acao={<span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>
+              {br(R.escolas.total)} escolas · {R.escolas.gres} GREs
+            </span>}
+          >
+            Escolas com mais concluintes
+          </TituloDeBloco>
+
+          {/* A barra mede a CONTAGEM, e a taxa vem em texto embaixo. Se a
+              régua fosse o percentual, a escola de 4 em 4 empataria no topo com
+              a de 51 em 61 -- as duas com 100%, e é a segunda que importa. */}
+          <ListaRanqueada
+            itens={R.escolas.maiores.map((e) => ({
+              rotulo: e.escola,
+              valor: e.concluidos,
+              nota: `${e.gre} · ${pctBr(e.taxa)}% de ${br(e.vinculos)} vínculos`,
+            }))}
+          />
+        </Cartao>
+      )}
+
+      {/* ─── Lista ─── */}
+      {mostra('lista') && temConclusao && (
+        <ListaDeConcluintes cursoId={dados.cursoId} gre={dados.gre} />
       )}
 
     </section>
