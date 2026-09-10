@@ -213,8 +213,6 @@ export function BlocoInstitucional({
     return { '--cols': vivas.map(([, largura]) => largura).join(' ') }
   }
 
-  const gradeMovimento = grade([['movimento', '1.45fr'], ['rosca', '1.2fr'], ['carrossel', '1fr']])
-  const gradeRegional = grade([['gre', '1.3fr'], ['perfil', '1fr']])
 
   const [ordemGre, setOrdemGre] = useState('cursistas')
   // Duas leituras no mesmo cartao: como as inscricoes se dividem entre os
@@ -514,6 +512,95 @@ export function BlocoInstitucional({
     : '0'
 
 
+  /* As grades ficam DEPOIS dos derivados de propósito: elas consultam
+     `temFuncao`, e uma const usada antes da própria declaração não é erro
+     de compilação -- é erro em tempo de execução, que só aparece quando
+     alguém abre a tela. */
+  const gradeMovimento = grade([['movimento', '1.45fr'], ['rosca', '1.2fr'], ['carrossel', '1fr']])
+
+  /**
+   * Em Concluintes a GRE sobe para a linha da situação.
+   *
+   * As duas respondem a mesma pergunta -- quantos concluíram, e onde --, e ler
+   * uma logo abaixo da outra obrigava a rolar entre elas. Nos outros painéis a
+   * GRE é um recorte da base, não da conclusão, e continua ao lado do
+   * componente curricular.
+   */
+  const greComSituacao = secao === 'concluintes' && mostra('gre')
+
+  /* `temFuncao` entra na conta da grade, e nao so no JSX: o cartao da funcao
+     some quando ninguem cruzou com o cadastro, e uma coluna reservada para um
+     cartao que nao aparece deixa um vao ao lado dos outros dois. */
+  const gradeSituacao = grade([
+    ['situacao', '1fr'],
+    ...(greComSituacao ? [['gre', '1.35fr']] : []),
+    ...(temFuncao ? [['funcao', '1fr']] : []),
+  ])
+  const gradeRegional = grade([
+    ...(greComSituacao ? [] : [['gre', '1.3fr']]),
+    ['perfil', '1fr'],
+  ])
+
+  /**
+   * O cartão da GRE, montado fora do JSX das linhas.
+   *
+   * Ele aparece em dois lugares conforme o painel: em Concluintes divide a
+   * linha com a rosca de situação, porque as duas respondem a mesma pergunta
+   * -- quantos concluíram --; nos demais fica ao lado do componente
+   * curricular. Escrito uma vez só: duas cópias do mesmo cartão seriam duas
+   * versões dele no primeiro ajuste.
+   */
+  const cartaoGre = mostra('gre') ? (
+      <Cartao className="flex flex-col">
+        <TituloDeBloco
+          acao={
+            /* Reordenar responde a pergunta que sempre aparece: "a maior
+               regional é também a que mais aderiu?" */
+            <TrocaDeVisao
+              opcoes={temConclusao
+                ? [['cursistas', 'Volume'], ['adesao', 'Adesão'], ['conclusao', 'Conclusão']]
+                : [['cursistas', 'Volume'], ['adesao', 'Adesão']]}
+              valor={visaoGre}
+              aoTrocar={setOrdemGre}
+            />
+          }
+        >
+          {visaoGre === 'conclusao' ? 'Conclusão por GRE' : 'Distribuição por GRE'}
+        </TituloDeBloco>
+
+        {/* A conclusão por GRE conta VÍNCULO, e não pessoa: a pergunta aqui é
+            "como está a regional", e quem leciona em duas responde às duas.
+            Somar as barras, por isso, não devolve o total do curso -- esse
+            está no cartão de cima. */}
+        <div style={{ height: 236 }}>
+          <BarrasRotuladas
+            dados={barrasDaGre.map((g) => ({
+              rotulo: g.rotulo,
+              titulo: g.titulo,
+              valor: g.valor,
+              nota: g.nota,
+            }))}
+            formatarValor={(v) => (visaoGre === 'cursistas' ? br(v) : `${pctBr(v)}%`)}
+          />
+        </div>
+
+        {visaoGre === 'conclusao' && piorGre && melhorGre && (
+          <p className="text-[12px] mt-3 leading-relaxed" style={{ color: 'var(--p-texto3)' }}>
+            <b style={{ color: 'var(--p-r5)' }}>{piorGre.gre}</b> conclui{' '}
+            <b style={{ color: 'var(--p-r5)' }}>{pctBr(piorGre.taxa)}%</b> e{' '}
+            <b style={{ color: 'var(--p-r4)' }}>{melhorGre.gre}</b>,{' '}
+            <b style={{ color: 'var(--p-r4)' }}>{pctBr(melhorGre.taxa)}%</b>
+            {/* A razão entre as pontas só é dita quando existe: com a pior em
+                zero a divisão daria infinito, e "Infinity× de diferença" é o
+                tipo de coisa que vai para uma apresentação. */}
+            {piorGre.taxa > 0 && (
+              <> — {virgula(Math.round((melhorGre.taxa / piorGre.taxa) * 10) / 10)}× de diferença entre as pontas</>
+            )}.
+          </p>
+        )}
+      </Cartao>
+  ) : null
+
   return (
     <section className="space-y-4">
       {/* Sem título de faixa: ele nomeava uma das duas faixas quando havia duas.
@@ -538,8 +625,9 @@ export function BlocoInstitucional({
       )}
 
       {/* ─── Situação e quem concluiu ─── */}
-      {(mostra('situacao') || mostra('funcao')) && temConclusao && (
-        <div className={`grid grid-cols-1 gap-4 items-stretch ${temFuncao ? 'xl:grid-cols-2' : ''}`}>
+      {gradeSituacao && temConclusao && (
+        <div className="grid grid-cols-1 gap-4 items-stretch xl:[grid-template-columns:var(--cols)]"
+          style={gradeSituacao}>
           {mostra('situacao') && (
             <Cartao className="flex flex-col">
               <TituloDeBloco
@@ -560,6 +648,8 @@ export function BlocoInstitucional({
               </div>
             </Cartao>
           )}
+
+          {greComSituacao && cartaoGre}
 
           {mostra('funcao') && temFuncao && (
             <Cartao className="flex flex-col">
@@ -727,56 +817,7 @@ export function BlocoInstitucional({
       {gradeRegional && (
       <div className="grid grid-cols-1 gap-4 items-stretch xl:[grid-template-columns:var(--cols)]"
         style={gradeRegional}>
-        {mostra('gre') && (
-        <Cartao className="flex flex-col">
-          <TituloDeBloco
-            acao={
-              /* Reordenar responde a pergunta que sempre aparece: "a maior
-                 regional é também a que mais aderiu?" */
-              <TrocaDeVisao
-                opcoes={temConclusao
-                  ? [['cursistas', 'Volume'], ['adesao', 'Adesão'], ['conclusao', 'Conclusão']]
-                  : [['cursistas', 'Volume'], ['adesao', 'Adesão']]}
-                valor={visaoGre}
-                aoTrocar={setOrdemGre}
-              />
-            }
-          >
-            {visaoGre === 'conclusao' ? 'Conclusão por GRE' : 'Distribuição por GRE'}
-          </TituloDeBloco>
-
-          {/* A conclusão por GRE conta VÍNCULO, e não pessoa: a pergunta aqui é
-              "como está a regional", e quem leciona em duas responde às duas.
-              Somar as barras, por isso, não devolve o total do curso -- esse
-              está no cartão de cima. */}
-          <div style={{ height: 236 }}>
-            <BarrasRotuladas
-              dados={barrasDaGre.map((g) => ({
-                rotulo: g.rotulo,
-                titulo: g.titulo,
-                valor: g.valor,
-                nota: g.nota,
-              }))}
-              formatarValor={(v) => (visaoGre === 'cursistas' ? br(v) : `${pctBr(v)}%`)}
-            />
-          </div>
-
-          {visaoGre === 'conclusao' && piorGre && melhorGre && (
-            <p className="text-[12px] mt-3 leading-relaxed" style={{ color: 'var(--p-texto3)' }}>
-              <b style={{ color: 'var(--p-r5)' }}>{piorGre.gre}</b> conclui{' '}
-              <b style={{ color: 'var(--p-r5)' }}>{pctBr(piorGre.taxa)}%</b> e{' '}
-              <b style={{ color: 'var(--p-r4)' }}>{melhorGre.gre}</b>,{' '}
-              <b style={{ color: 'var(--p-r4)' }}>{pctBr(melhorGre.taxa)}%</b>
-              {/* A razão entre as pontas só é dita quando existe: com a pior em
-                  zero a divisão daria infinito, e "Infinity× de diferença" é o
-                  tipo de coisa que vai para uma apresentação. */}
-              {piorGre.taxa > 0 && (
-                <> — {virgula(Math.round((melhorGre.taxa / piorGre.taxa) * 10) / 10)}× de diferença entre as pontas</>
-              )}.
-            </p>
-          )}
-        </Cartao>
-        )}
+        {!greComSituacao && cartaoGre}
 
         {mostra('perfil') && (
         <Cartao className="flex flex-col">
