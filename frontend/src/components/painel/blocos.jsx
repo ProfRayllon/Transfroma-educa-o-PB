@@ -1097,10 +1097,23 @@ export function BlocoInstitucional({
               {/* Aqui a contagem é de VÍNCULO, e não de pessoa: quem leciona em
                   duas escolas de municípios diferentes concluiu nos dois
                   lugares. Somar as barras, por isso, não devolve o total de
-                  concluintes que está lá em cima. */}
+                  concluintes que está lá em cima.
+                  A escola sem município é dita, e não escondida: ela some do
+                  ranking, e sem esse aviso o buraco viraria um número estranho
+                  que ninguém explica. */}
               <p className="text-[12px] mt-3" style={{ color: 'var(--p-texto3)' }}>
                 O município vem da escola, pelo código INEP. Um docente com escolas em
                 dois municípios conta nos dois — a soma das barras não fecha com o total.
+                {R.porMunicipio.cobertura.escolas > R.porMunicipio.cobertura.comMunicipio && (
+                  <>
+                    {' '}
+                    <b style={{ color: 'var(--p-texto2)' }}>
+                      {br(R.porMunicipio.cobertura.escolas - R.porMunicipio.cobertura.comMunicipio)}
+                    </b>{' '}
+                    de {br(R.porMunicipio.cobertura.escolas)} escolas ainda não têm município
+                    no cadastro do INEP e ficam fora deste ranking.
+                  </>
+                )}
               </p>
             </Cartao>
           )}

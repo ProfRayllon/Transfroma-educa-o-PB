@@ -90,6 +90,9 @@ async function aplicar(pool) {
       INDEX idx_consolidado_curso (course_id, status),
       INDEX idx_consolidado_gre (course_id, gre),
       INDEX idx_consolidado_cpf (cpf),
+      -- Serve a duas contas do painel de concluintes: agrupar por escola e
+      -- juntar com escola_municipio. Sem ele, as duas varrem as doze mil linhas.
+      INDEX idx_consolidado_inep (course_id, inep),
       CONSTRAINT fk_consolidado_importacao
         FOREIGN KEY (importacao_id) REFERENCES resultado_importacoes(id) ON DELETE CASCADE
     ) ENGINE=InnoDB
@@ -138,6 +141,53 @@ async function aplicar(pool) {
       INDEX idx_escola_municipio_nome (municipio)
     ) ENGINE=InnoDB
   `)
+
+  /**
+   * Colunas que vieram junto do de-para do Censo Escolar.
+   *
+   * Adicionadas depois da tabela existir, no padrao do resto do sistema
+   * (ver cursistas.schema.js): confere o INFORMATION_SCHEMA e cria o que
+   * faltar. Assim o deploy nao depende de alguem lembrar de rodar SQL.
+   *
+   * Latitude e longitude entram agora porque chegam na mesma linha e nao custam
+   * nada -- o mapa da Paraiba, quando existir, ja encontra o dado gravado em
+   * vez de exigir uma reimportacao da base inteira.
+   */
+  /* O indice por INEP entrou depois da tabela existir. CREATE INDEX nao aceita
+     IF NOT EXISTS no MySQL 8, entao a checagem e explicita -- repetir o CREATE
+     daria "Duplicate key name" e derrubaria o boot num laco de reinicializacao. */
+  const [indices] = await pool.query(
+    `SELECT COUNT(*) AS existe FROM INFORMATION_SCHEMA.STATISTICS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'consolidado_vinculos'
+        AND INDEX_NAME = 'idx_consolidado_inep'`
+  )
+  if (!Number(indices[0].existe)) {
+    await pool.execute('CREATE INDEX idx_consolidado_inep ON consolidado_vinculos (course_id, inep)')
+  }
+
+  const [colunas] = await pool.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'escola_municipio'
+        AND COLUMN_NAME IN ('localizacao', 'porte', 'latitude', 'longitude')`
+  )
+  const existentes = new Set(colunas.map((c) => c.COLUMN_NAME))
+
+  if (!existentes.has('localizacao')) {
+    await pool.execute(
+      "ALTER TABLE escola_municipio ADD COLUMN localizacao ENUM('Urbana','Rural') DEFAULT NULL AFTER uf"
+    )
+  }
+  if (!existentes.has('porte')) {
+    await pool.execute('ALTER TABLE escola_municipio ADD COLUMN porte VARCHAR(60) DEFAULT NULL AFTER localizacao')
+  }
+  // DECIMAL, e nao FLOAT: coordenada e um valor exato de catalogo, e float
+  // devolve 7.1195000000001 no lugar de 7.1195.
+  if (!existentes.has('latitude')) {
+    await pool.execute('ALTER TABLE escola_municipio ADD COLUMN latitude DECIMAL(10,7) DEFAULT NULL AFTER porte')
+  }
+  if (!existentes.has('longitude')) {
+    await pool.execute('ALTER TABLE escola_municipio ADD COLUMN longitude DECIMAL(10,7) DEFAULT NULL AFTER latitude')
+  }
 
   /**
    * Avaliacao: contagens, nunca respostas individuais.

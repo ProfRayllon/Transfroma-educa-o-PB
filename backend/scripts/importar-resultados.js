@@ -313,16 +313,47 @@ async function importarMunicipios(conn, { registros, colunas }, ctx) {
     throw new Error('A planilha precisa ter as colunas INEP e MUNICIPIO.')
   }
   const cUf = acharColuna(colunas, 'UF')
+  const cLocal = acharColuna(colunas, 'LOCALIZACAO')
+  const cPorte = acharColuna(colunas, 'PORTE')
+  const cLat = acharColuna(colunas, 'LATITUDE')
+  const cLon = acharColuna(colunas, 'LONGITUDE')
+
+  /**
+   * Coordenada com virgula decimal, como o Excel escreve em portugues.
+   *
+   * Number('-7,1195') e NaN, sem erro -- a escola entraria sem posicao e o mapa
+   * teria um buraco que ninguem explicaria.
+   */
+  const decimal = (v) => {
+    const n = Number(String(v || '').trim().replace(',', '.'))
+    return Number.isFinite(n) && n !== 0 ? n : null
+  }
+
+  // Fora da Paraiba nao ha coordenada valida para este programa; um valor
+  // absurdo entrando aqui poria uma escola no meio do oceano.
+  const naPb = (lat, lon) => (
+    lat !== null && lon !== null
+    && lat > -9 && lat < -5 && lon > -39 && lon < -34
+  )
 
   const linhas = registros
     // O Excel entrega o INEP como numero e come o zero a esquerda. Os codigos
     // da Paraiba comecam em 25, entao aqui isso nao morde -- mas a planilha de
     // outro estado morderia, e o padStart custa nada.
-    .map((r) => [
-      String(r[cInep] || '').replace(/\D/g, '').padStart(8, '0'),
-      String(r[cMunicipio] || '').trim(),
-      (cUf ? String(r[cUf] || '').trim().toUpperCase() : 'PB') || 'PB',
-    ])
+    .map((r) => {
+      const lat = cLat ? decimal(r[cLat]) : null
+      const lon = cLon ? decimal(r[cLon]) : null
+      const local = cLocal ? String(r[cLocal] || '').trim() : ''
+      return [
+        String(r[cInep] || '').replace(/\D/g, '').padStart(8, '0'),
+        String(r[cMunicipio] || '').trim(),
+        (cUf ? String(r[cUf] || '').trim().toUpperCase() : 'PB') || 'PB',
+        ['Urbana', 'Rural'].includes(local) ? local : null,
+        cPorte ? (String(r[cPorte] || '').trim() || null) : null,
+        naPb(lat, lon) ? lat : null,
+        naPb(lat, lon) ? lon : null,
+      ]
+    })
     .filter(([inep, municipio]) => inep && inep !== '00000000' && municipio)
 
   if (!linhas.length) throw new Error('Nenhuma linha valida encontrada.')
@@ -330,8 +361,13 @@ async function importarMunicipios(conn, { registros, colunas }, ctx) {
   const LOTE = 1000
   for (let i = 0; i < linhas.length; i += LOTE) {
     await conn.query(
-      `INSERT INTO escola_municipio (inep, municipio, uf) VALUES ?
-       ON DUPLICATE KEY UPDATE municipio = VALUES(municipio), uf = VALUES(uf)`,
+      `INSERT INTO escola_municipio
+         (inep, municipio, uf, localizacao, porte, latitude, longitude)
+       VALUES ?
+       ON DUPLICATE KEY UPDATE
+         municipio = VALUES(municipio), uf = VALUES(uf),
+         localizacao = VALUES(localizacao), porte = VALUES(porte),
+         latitude = VALUES(latitude), longitude = VALUES(longitude)`,
       [linhas.slice(i, i + LOTE)]
     )
   }
@@ -345,12 +381,19 @@ async function importarMunicipios(conn, { registros, colunas }, ctx) {
        FROM consolidado_vinculos v
        LEFT JOIN escola_municipio em ON em.inep = v.inep`
   )
-  const [[qtd]] = await conn.query('SELECT COUNT(*) n, COUNT(DISTINCT municipio) m FROM escola_municipio')
+  const [[qtd]] = await conn.query(
+    `SELECT COUNT(*) n, COUNT(DISTINCT municipio) m,
+            SUM(latitude IS NOT NULL) AS comCoordenada,
+            SUM(localizacao = 'Rural') AS rurais
+       FROM escola_municipio`
+  )
 
   return {
     linhasNaPlanilha: linhas.length,
     escolasNaTabela: qtd.n,
     municipiosDistintos: qtd.m,
+    comCoordenada: qtd.comCoordenada,
+    rurais: qtd.rurais,
     escolasDoConsolidado: cob.escolas,
     comMunicipio: cob.comMunicipio,
     semMunicipio: cob.escolas - cob.comMunicipio,
