@@ -363,6 +363,23 @@ export function BlocoInstitucional({
    * conclusão diferentes.
    */
   const indicadores = [
+    /* Os quatro contam a MESMA planilha, na ordem em que a pergunta se abre:
+       quantos são, que fatia terminou, quantos são esses, e quantos faltam.
+       Cada linha de apoio descreve o próprio número de cima -- e não o do
+       vizinho, que era o erro do painel antigo. */
+    mostra('kpiConclusao') && {
+      chave: 'totalDocentes',
+      icone: Users,
+      rotulo: 'Total de docentes',
+      /* A base do CONSOLIDADO, e não os 13.445 do cadastro: este painel fala da
+         planilha, e misturar os dois universos faria a taxa não fechar com a
+         divisão dos dois cartões ao lado. */
+      valor: temConclusao ? R.conclusao.base : 0,
+      gradiente: 'azul',
+      comparativo: temConclusao
+        ? `${br(R.conclusao.vinculos)} vínculos com escola · planilha de ${dataCurta(R.conclusao.referencia)}`
+        : 'aguardando a planilha de consolidado',
+    },
     mostra('kpiConclusao') && {
       chave: 'taxa',
       icone: CheckCircle2,
@@ -374,7 +391,7 @@ export function BlocoInstitucional({
       decimais: 1,
       gradiente: 'ciano',
       comparativo: temConclusao
-        ? `${br(R.conclusao.concluintes)} de ${br(R.conclusao.base)} · planilha de ${dataCurta(R.conclusao.referencia)}`
+        ? `${br(R.conclusao.concluintes)} de ${br(R.conclusao.base)} docentes`
         : 'aguardando a planilha de consolidado',
     },
     mostra('kpiConclusao') && {
@@ -383,8 +400,20 @@ export function BlocoInstitucional({
       rotulo: 'Concluíram',
       valor: temConclusao ? R.conclusao.concluintes : 0,
       gradiente: 'roxo',
+      comparativo: temConclusao && R.escolas?.total
+        ? `em ${br(R.escolas.total)} escolas de ${R.escolas.gres} GREs`
+        : 'aguardando a planilha de consolidado',
+    },
+    mostra('kpiConclusao') && {
+      chave: 'naoConcluintes',
+      icone: AlertTriangle,
+      rotulo: 'Não concluíram',
+      valor: temConclusao ? R.conclusao.base - R.conclusao.concluintes : 0,
+      gradiente: 'rosa',
+      /* Não é o complemento da taxa por acaso: é a mesma conta vista do outro
+         lado, e dizer isso evita que alguém procure o número em outra fonte. */
       comparativo: temConclusao
-        ? `${br(R.conclusao.base - R.conclusao.concluintes)} ainda não concluíram`
+        ? `${pct(R.conclusao.base - R.conclusao.concluintes, R.conclusao.base)}% do total de docentes`
         : 'aguardando a planilha de consolidado',
     },
     mostra('kpiCurso') && {
