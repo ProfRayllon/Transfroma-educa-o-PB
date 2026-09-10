@@ -204,7 +204,7 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
     } catch (erro) {
       // A mensagem do 503 e informativa (falta MySQL) e passa; qualquer outra
       // vira texto generico, para detalhe de banco nao vazar para a tela.
-      const status = erro.status || 500
+      const status = erro.statusCode || 500
       res.status(status).json({
         message: status === 503 ? erro.message : 'Nao foi possivel montar o dashboard.',
       })
@@ -234,7 +234,7 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
       })
       res.json(dados)
     } catch (erro) {
-      const status = erro.status || 500
+      const status = erro.statusCode || 500
       res.status(status).json({
         message: status === 503 ? erro.message : 'Nao foi possivel carregar a lista.',
       })
@@ -275,7 +275,7 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
       res.setHeader('Content-Disposition', `attachment; filename="docentes-concluintes-${hoje}.csv"`)
       res.send(csv)
     } catch (erro) {
-      const status = erro.status || 500
+      const status = erro.statusCode || 500
       res.status(status).json({
         message: status === 503 ? erro.message : 'Nao foi possivel exportar a lista.',
       })
@@ -302,7 +302,7 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
       })
       res.json(dados)
     } catch (erro) {
-      const status = erro.status || 500
+      const status = erro.statusCode || 500
       res.status(status).json({
         message: status === 503 ? erro.message : 'Nao foi possivel carregar o detalhamento.',
       })
@@ -344,7 +344,7 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
       res.setHeader('Content-Disposition', `attachment; filename="avaliacao-do-curso-${hoje}.csv"`)
       res.send(csv)
     } catch (erro) {
-      const status = erro.status || 500
+      const status = erro.statusCode || 500
       res.status(status).json({
         message: status === 503 ? erro.message : 'Nao foi possivel exportar a avaliacao.',
       })
