@@ -93,10 +93,14 @@ function Cartao({ painel, ordem }) {
             width={LARGURA}
             height={ALTURA}
             onError={() => setSemArte(true)}
-            /* drop-shadow, e não box-shadow: os cantos da arte são
+            /* A arte cresce com a coluna e para antes de forçar rolagem: ela é
+               retrato 3:4, e três delas em largura cheia passariam da altura da
+               tela -- e aí a centralização vertical não teria o que centrar.
+               A sombra é drop-shadow, e não box-shadow: os cantos da arte são
                transparentes, e a sombra de caixa apareceria como um retângulo
                por trás do cartão arredondado. */
-            className="w-full h-auto transition-[filter] duration-300
+            className="w-auto max-w-full mx-auto h-auto max-h-[calc(100vh-15rem)]
+                       transition-[filter] duration-300
                        drop-shadow-sm group-hover:drop-shadow-xl"
           />
         </picture>
@@ -107,18 +111,35 @@ function Cartao({ painel, ordem }) {
 
 export default function PainelCapa() {
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="page-title">Dashboard</h1>
-        <p className="page-subtitle">
-          Três painéis, três perguntas. Escolha por onde começar.
+    /* A capa ocupa a altura útil inteira -- 100vh menos o p-6 do Layout -- para
+       que as artes tenham onde se centrar verticalmente. Sem isso a coluna teria
+       exatamente a altura do conteúdo, e centrar na vertical não moveria nada. */
+    <div className="animate-fade-in flex flex-col min-h-[calc(100vh-3rem)]">
+      {/* Cabeçalho encostado à esquerda; as artes é que ficam centradas. Os dois
+          centrados deixariam a página inteira simétrica e sem entrada -- o olho
+          precisa de um canto por onde começar. */}
+      <div className="mb-8 shrink-0">
+        <p className="text-[11.5px] font-semibold tracking-[0.18em] uppercase
+                      text-brand-600 dark:text-brand-400">
+          Dados que impulsionam a educação
+        </p>
+        <h1 className="text-[34px] sm:text-[40px] font-bold leading-tight mt-1.5 text-balance
+                       text-gray-900 dark:text-gray-50">
+          Painéis de Acompanhamento
+        </h1>
+        <p className="text-[15px] mt-2 max-w-2xl text-gray-600 dark:text-gray-400">
+          Escolha por onde deseja visualizar os dados e tenha insights para fortalecer a formação.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-[1400px]">
-        {PAINEIS.map((p, i) => (
-          <Cartao key={p.slug} painel={p} ordem={i + 1} />
-        ))}
+      {/* flex-1 + items-center: as artes ficam no meio do que sobrou depois do
+          cabeçalho, na vertical, e o mx-auto da grade as centra na horizontal. */}
+      <div className="flex-1 flex items-center justify-center">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full max-w-[1500px] mx-auto">
+          {PAINEIS.map((p, i) => (
+            <Cartao key={p.slug} painel={p} ordem={i + 1} />
+          ))}
+        </div>
       </div>
     </div>
   )
