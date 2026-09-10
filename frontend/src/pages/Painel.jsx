@@ -99,6 +99,7 @@ export default function Painel() {
   const [carregando, setCarregando] = useState(true)
   const [cursoId, setCursoId] = useState(null)
   const [gre, setGre] = useState(null)
+  const [componente, setComponente] = useState(null)
 
   /**
    * Os filtros vão para o servidor, não são recorte de tela.
@@ -114,12 +115,13 @@ export default function Painel() {
         dias: DIAS,
         ...(cursoId ? { curso: cursoId } : {}),
         ...(gre ? { gre } : {}),
+        ...(componente ? { componente } : {}),
       },
     })
       .then(({ data }) => { setDados(data); setErro(null) })
       .catch((e) => setErro(e?.response?.data?.message || 'Não foi possível carregar o dashboard.'))
       .finally(() => setCarregando(false))
-  }, [cursoId, gre])
+  }, [cursoId, gre, componente])
 
   useEffect(carregar, [carregar])
 
@@ -133,6 +135,7 @@ export default function Painel() {
 
   const cursoAtivo = dados?.institucional.inscricoes.find((c) => c.id === dados.cursoId) || null
   const opcoes = dados?.opcoes || { cursos: [], gres: [] }
+  const componentes = dados?.institucional?.resultados?.componentes || []
   const comResultado = useMemo(
     () => new Set(opcoes.cursos.filter((c) => c.temConsolidado || c.temAvaliacao).map((c) => c.id)),
     [opcoes.cursos])
@@ -187,6 +190,18 @@ export default function Painel() {
                 <X size={14} style={{ color: 'var(--p-texto3)' }} />
               </button>
             )}
+            {dados?.componente && (
+              <button
+                onClick={() => setComponente(null)}
+                className="inline-flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-full text-[13px] font-medium transition-colors"
+                style={{ background: 'var(--p-trilho)', color: 'var(--p-texto)' }}
+                title="Remover o filtro"
+              >
+                <Filter size={13} style={{ color: 'var(--p-roscaC)' }} />
+                {dados.componente}
+                <X size={14} style={{ color: 'var(--p-texto3)' }} />
+              </button>
+            )}
             {dados?.gre && (
               <button
                 onClick={() => setGre(null)}
@@ -218,15 +233,33 @@ export default function Painel() {
             }))}
           />
 
-          <Seletor
-            rotulo="Todas as GREs"
-            valor={gre}
-            aoTrocar={setGre}
-            opcoes={opcoes.gres.map((g) => ({
-              valor: g.chave,
-              rotulo: `${g.chave} · ${g.total.toLocaleString('pt-BR')}`,
-            }))}
-          />
+          {/* A GRE recorta conclusão e base; o componente recorta a avaliação.
+              Cada um aparece só no painel onde muda alguma coisa -- um filtro
+              que a tela oferece e que nenhum número obedece é pior do que
+              filtro nenhum. */}
+          {secao !== 'progresso' && (
+            <Seletor
+              rotulo="Todas as GREs"
+              valor={gre}
+              aoTrocar={setGre}
+              opcoes={opcoes.gres.map((g) => ({
+                valor: g.chave,
+                rotulo: `${g.chave} · ${g.total.toLocaleString('pt-BR')}`,
+              }))}
+            />
+          )}
+
+          {(secao === 'progresso' || secao === 'tudo') && componentes.length > 0 && (
+            <Seletor
+              rotulo="Todos os componentes"
+              valor={componente}
+              aoTrocar={setComponente}
+              opcoes={componentes.map((c) => ({
+                valor: c.chave,
+                rotulo: `${c.chave} · ${c.total.toLocaleString('pt-BR')}`,
+              }))}
+            />
+          )}
 
           {periodo && (
             <span className="hidden lg:flex items-center gap-2 px-3.5 py-2 rounded-xl text-[13px] border"

@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react'
 import {
   Users, School, GraduationCap, Eye, AlertTriangle, CheckCircle2,
-  FileText, Layers, Star, Info,
+  FileText, Layers, Star, Info, Target, BookOpen, Compass, PlayCircle,
+  Share2, ClipboardCheck, Signpost, Zap, ThumbsUp, MessageSquare,
 } from 'lucide-react'
 import {
   Cartao, TituloDeBloco, CartaoKpi, BarrasComLinha, BarrasRotuladas,
   Rosca, RoscaRotulada, LegendaDeRosca, ListaRanqueada, CarrosselDeCursos,
-  RankingPirulito, ResumoDoRanking,
+  RankingPirulito, ResumoDoRanking, MosaicoDeIndicadores,
 } from './graficos'
 import ListaDeConcluintes from './listaConcluintes'
+import DetalheDaAvaliacao from './detalheAvaliacao'
 
 /**
  * Os blocos do dashboard.
@@ -76,6 +78,25 @@ const NOME_DA_ESCALA = {
   clareza4: 'Totalmente, entre 4 opções',
   nota5: 'Nota 5, entre 1 e 5',
 }
+
+/* O ícone de cada pergunta. Existe para o mosaico ser varrido pelo desenho
+   antes do texto -- onze tijolos iguais obrigam a ler os onze rótulos. */
+const ICONES_DA_PERGUNTA = [
+  [/relevante para a prática/i, Target],
+  [/claros e bem estruturados/i, FileText],
+  [/ampliar seus conhecimentos/i, GraduationCap],
+  [/desafios reais/i, Compass],
+  [/videoaulas/i, PlayCircle],
+  [/materiais escritos/i, BookOpen],
+  [/recursos interativos/i, Share2],
+  [/atividades propostas/i, ClipboardCheck],
+  [/orientações para realização/i, Signpost],
+  [/aprendizagem ativa/i, Zap],
+  [/escala de 1 a 5/i, Star],
+]
+
+const iconeDaPergunta = (texto) =>
+  (ICONES_DA_PERGUNTA.find(([padrao]) => padrao.test(texto)) || [null, MessageSquare])[1]
 
 const APELIDOS = [
   [/relevante para a prática/i, 'Relevância para a prática'],
@@ -184,11 +205,12 @@ function variacaoDaSerie(serie, chave) {
  */
 const BLOCOS_POR_SECAO = {
   concluintes: ['kpiConclusao', 'situacao', 'funcao', 'gre', 'escolas', 'lista'],
-  progresso: ['kpiCurso', 'rosca', 'carrossel', 'avaliacao'],
+  progresso: ['kpiAvaliacao', 'evolucao', 'notaRosca', 'positivas', 'indicadores', 'detalhe'],
   sistema: ['kpiBase', 'movimento', 'perfil', 'gre'],
   tudo: [
     'kpiConclusao', 'kpiCurso', 'kpiBase', 'movimento', 'rosca', 'carrossel',
     'gre', 'perfil', 'avaliacao', 'situacao', 'funcao', 'escolas', 'lista',
+    'kpiAvaliacao', 'evolucao', 'notaRosca', 'positivas', 'indicadores', 'detalhe',
   ],
 }
 
@@ -372,6 +394,35 @@ export function BlocoInstitucional({
   const maisFraca = comparaveis.length ? comparaveis[comparaveis.length - 1] : null
 
   /**
+   * Os indicadores do consolidado, um por pergunta.
+   *
+   * A régua é `pctPositivo` -- a fatia POSITIVA sobre quem respondeu, com o
+   * neutro fora dos dois lados. Diferente da proporção no topo da escala, ela
+   * compara perguntas de escalas diferentes sem penalizar a que tem mais opções:
+   * "Relevante" conta como positivo mesmo não sendo o topo, e "Parcialmente" não
+   * conta em escala nenhuma.
+   *
+   * A classificação sai da importação, não daqui: a banda de cada resposta é
+   * gravada uma vez, e nenhum gráfico reinventa a sua.
+   */
+  const indicadoresDaAvaliacao = (R.avaliacao || []).map((a) => ({
+    rotulo: rotuloDaPergunta(a.pergunta),
+    titulo: `${a.pergunta} — ${pctBr(a.pctPositivo)}% positivas de ${br(a.respostas)} respostas`,
+    valor: a.pctPositivo,
+    texto: `${pctBr(a.pctPositivo)}%`,
+    icone: iconeDaPergunta(a.pergunta),
+  }))
+
+  /* A distribuição da nota vai do 5 para o 1: é a ordem em que ela se lê, e a
+     rampa acompanha, porque nota é ordinal -- cores sem relação entre si
+     esconderiam que 4 fica ao lado de 5 e não ao lado de 1. */
+  const fatiasNota = [...(R.nota?.distribuicao || [])].reverse().map((d) => ({
+    rotulo: `Nota ${d.nota}`,
+    valor: d.total,
+    cor: `var(--p-r${Math.max(1, Math.min(5, d.nota))})`,
+  }))
+
+  /**
    * Os cartões de indicador deste painel.
    *
    * Cada um pertence a um grupo, e o grupo é que decide em qual painel ele
@@ -456,6 +507,55 @@ export function BlocoInstitucional({
       gradiente: 'rosa',
       comparativo: temAvaliacao
         ? `${pct(R.nota.satisfeitos, R.nota.respostas)}% deram 4 ou 5 · ${br(R.nota.respostas)} respostas`
+        : 'aguardando a planilha de avaliação',
+    },
+    mostra('kpiAvaliacao') && {
+      chave: 'respostas',
+      icone: Users,
+      rotulo: 'Total de respostas',
+      valor: temAvaliacao ? R.nota.respostas : 0,
+      gradiente: 'azul',
+      comparativo: temAvaliacao && R.evolucaoRespostas?.de
+        ? `de ${dataCurta(R.evolucaoRespostas.de)} a ${dataCurta(R.evolucaoRespostas.ate)}`
+        : 'aguardando a planilha de avaliação',
+    },
+    mostra('kpiAvaliacao') && {
+      chave: 'notaMedia',
+      icone: Star,
+      rotulo: 'Nota geral média',
+      valor: temAvaliacao ? R.nota.media : 0,
+      sufixo: ' / 5',
+      decimais: 2,
+      gradiente: 'ciano',
+      comparativo: temAvaliacao
+        ? `${br(R.nota.respostas)} pessoas responderam esta pergunta`
+        : 'aguardando a planilha de avaliação',
+    },
+    mostra('kpiAvaliacao') && {
+      chave: 'positivas',
+      icone: ThumbsUp,
+      rotulo: 'Avaliações positivas',
+      /* Nota 4 ou 5. O 3 fica de fora dos dois lados -- e a resposta de quem
+         nao endossa nem recusa, e conta-lo como positivo inflaria o indicador
+         com quem ficou em cima do muro. */
+      valor: temAvaliacao && R.nota.respostas
+        ? Math.round((R.nota.satisfeitos / R.nota.respostas) * 1000) / 10
+        : 0,
+      sufixo: '%',
+      decimais: 1,
+      gradiente: 'roxo',
+      comparativo: temAvaliacao
+        ? `${br(R.nota.satisfeitos)} deram nota 4 ou 5`
+        : 'aguardando a planilha de avaliação',
+    },
+    mostra('kpiAvaliacao') && {
+      chave: 'componentes',
+      icone: BookOpen,
+      rotulo: 'Componentes curriculares',
+      valor: R.componentes?.length || 0,
+      gradiente: 'rosa',
+      comparativo: R.componentes?.length
+        ? `${R.componentes[0].chave} lidera com ${br(R.componentes[0].total)}`
         : 'aguardando a planilha de avaliação',
     },
     mostra('kpiBase') && {
@@ -1045,6 +1145,99 @@ export function BlocoInstitucional({
             )}
           </Cartao>
         </div>
+      )}
+
+      {/* ─── Evolução, nota e itens mais positivos ─── */}
+      {mostra('evolucao') && temAvaliacao && (
+        <div className="grid grid-cols-1 xl:grid-cols-[1.5fr_1fr_1fr] gap-4 items-stretch">
+          <Cartao className="flex flex-col">
+            <TituloDeBloco
+              acao={<span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>
+                {br(R.evolucaoRespostas.total)} respostas
+              </span>}
+            >
+              Evolução das respostas
+            </TituloDeBloco>
+            {/* Os dias sem resposta vêm preenchidos com zero, do servidor. Um
+                gráfico que pula o dia vazio encurta o eixo e faz o período
+                parecer mais intenso do que foi. */}
+            <div style={{ height: 260 }}>
+              <BarrasComLinha
+                dados={R.evolucaoRespostas.pontos}
+                chaveX="dia"
+                barra={{ chave: 'total', rotulo: 'Respostas', cor: 'var(--p-r3)' }}
+                altura={260}
+                formatarX={(d) => diaCurto(d)}
+              />
+            </div>
+          </Cartao>
+
+          {mostra('notaRosca') && (
+            <Cartao className="flex flex-col">
+              <TituloDeBloco>Distribuição da nota geral</TituloDeBloco>
+              <div className="flex-1 flex flex-col items-center justify-center gap-4 min-h-0">
+                <Rosca
+                  fatias={fatiasNota}
+                  total={R.nota.respostas}
+                  centroValor={br(R.nota.respostas)}
+                  centroRotulo="respostas"
+                  tamanho={168}
+                />
+                <div className="w-full">
+                  <LegendaDeRosca fatias={fatiasNota} total={R.nota.respostas} />
+                </div>
+              </div>
+            </Cartao>
+          )}
+
+          {mostra('positivas') && (
+            <Cartao className="flex flex-col">
+              <TituloDeBloco>Itens mais bem avaliados</TituloDeBloco>
+              <p className="text-[12px] -mt-2 mb-4" style={{ color: 'var(--p-texto3)' }}>
+                % de respostas positivas em cada item
+              </p>
+              <ListaRanqueada
+                mostrarPosicao={false}
+                sufixo="%"
+                itens={[...indicadoresDaAvaliacao]
+                  .sort((a, b) => b.valor - a.valor)
+                  .slice(0, 6)
+                  .map((i) => ({ rotulo: i.rotulo, valor: i.valor }))}
+              />
+            </Cartao>
+          )}
+        </div>
+      )}
+
+      {/* ─── Todos os indicadores ─── */}
+      {mostra('indicadores') && temAvaliacao && (
+        <Cartao className="flex flex-col">
+          <TituloDeBloco
+            acao={maisFraca && (
+              <span className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[12px]"
+                style={{ background: 'var(--p-trilho)', color: 'var(--p-texto2)' }}>
+                <Info size={13} style={{ color: 'var(--p-r4)' }} />
+                Menor: <b style={{ color: 'var(--p-r5)' }}>{rotuloDaPergunta(maisFraca.pergunta)}</b>
+              </span>
+            )}
+          >
+            Indicadores da avaliação do curso
+          </TituloDeBloco>
+          <p className="text-[12.5px] -mt-2 mb-4" style={{ color: 'var(--p-texto3)' }}>
+            Percentual de respostas positivas em cada item, sobre quem respondeu aquela
+            pergunta. O “Parcialmente” fica de fora dos dois lados.
+          </p>
+          <MosaicoDeIndicadores itens={indicadoresDaAvaliacao} colunas={6} />
+        </Cartao>
+      )}
+
+      {/* ─── Detalhamento ─── */}
+      {mostra('detalhe') && temAvaliacao && (
+        <DetalheDaAvaliacao
+          cursoId={dados.cursoId}
+          componente={dados.componente}
+          perguntas={R.avaliacao}
+        />
       )}
 
       {/* ─── Onde e quem concluiu ─── */}

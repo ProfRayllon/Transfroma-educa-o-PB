@@ -217,6 +217,36 @@ async function importarConsolidado(conn, { registros, colunas }, ctx) {
 /* ─────────────────────────── avaliacao ─────────────────────────── */
 
 /**
+ * Em que banda cada resposta cai.
+ *
+ * E o que torna as onze perguntas comparaveis entre si, e a coluna `topo` nao
+ * tornava: acertar o topo de uma escala de tres opcoes e mais facil do que o de
+ * uma de cinco, e o mesmo entusiasmo produzia percentuais diferentes so por
+ * causa do tamanho da regua -- 'Sim' dava 93%, 'Muito relevante' dava 75%.
+ *
+ * Aqui a opcao e classificada pelo SIGNIFICADO. 'Relevante' e positivo mesmo
+ * nao sendo o topo; 'Parcialmente' e neutro em qualquer escala onde apareca,
+ * porque e a resposta de quem nao endossa nem recusa. O indicador da tela e a
+ * fatia positiva sobre quem respondeu -- o neutro fica de fora dos dois lados,
+ * que e a convencao de pesquisa de satisfacao.
+ *
+ * Chave sem acento e em maiuscula, como tudo que passa por `semAcento`.
+ */
+const BANDAS = {
+  'MUITO RELEVANTE': 'positiva', 'RELEVANTE': 'positiva',
+  'POUCO RELEVANTE': 'negativa', 'IRRELEVANTE': 'negativa',
+
+  'TOTALMENTE': 'positiva', 'PARCIALMENTE': 'neutra',
+  'POUCO': 'negativa', 'NADA': 'negativa',
+
+  'SIM': 'positiva', 'NAO': 'negativa',
+
+  '5': 'positiva', '4': 'positiva', '3': 'neutra', '2': 'negativa', '1': 'negativa',
+}
+
+const bandaDe = (resposta) => BANDAS[semAcento(resposta)] || 'indefinida'
+
+/**
  * Deduz a escala pelo conjunto de respostas dadas.
  *
  * O formulario mistura quatro vocabularios e nao anuncia qual e qual. Deduzir
@@ -247,6 +277,7 @@ async function importarAvaliacao(conn, { registros, colunas }, ctx) {
 
   const linhas = []
   const semEscala = []
+  const semBanda = new Set()
 
   perguntas.forEach((pergunta, indice) => {
     // Em branco nao e resposta. Contar o vazio inflaria o denominador e
@@ -266,10 +297,16 @@ async function importarAvaliacao(conn, { registros, colunas }, ctx) {
 
     for (const [chave, total] of contagem) {
       const [resposta, turma, componente] = chave.split(SEP)
+      const banda = bandaDe(resposta)
+      // Resposta que nao cai em banda nenhuma some do indicador. Avisar aqui e
+      // o que impede uma opcao nova no formulario de baixar o percentual em
+      // silencio, sem ninguem ter avaliado pior.
+      if (banda === 'indefinida') semBanda.add(resposta)
       linhas.push([
         importacaoId, ctx.cursoId, indice + 1, pergunta.trim().slice(0, 255),
         escala, resposta.slice(0, 60),
         topo && semAcento(resposta) === topo ? 1 : 0,
+        banda,
         turma || null, componente || null, total,
       ])
     }
@@ -279,15 +316,69 @@ async function importarAvaliacao(conn, { registros, colunas }, ctx) {
   for (let i = 0; i < linhas.length; i += LOTE) {
     await conn.query(
       `INSERT INTO avaliacao_respostas
-         (importacao_id, course_id, ordem, pergunta, escala, resposta, topo, turma, componente, total)
+         (importacao_id, course_id, ordem, pergunta, escala, resposta, topo, banda,
+          turma, componente, total)
        VALUES ?`, [linhas.slice(i, i + LOTE)]
     )
   }
+
+  /**
+   * Uma linha por respondente, para a evolucao no tempo e o detalhamento.
+   *
+   * Nenhuma coluna aqui identifica quem respondeu: o formulario e anonimo e nao
+   * traz CPF, nome nem e-mail. O que se guarda e quando, de que turma, de que
+   * componente, e o que foi marcado.
+   */
+  await conn.query('DELETE FROM avaliacao_respondentes WHERE course_id = ?', [ctx.cursoId])
+
+  const iNota = perguntas.findIndex((q) => classificarEscala(
+    registros.map((r) => r[q]).filter((v) => v !== '')
+  ).escala === 'nota5')
+
+  const pessoas = registros.map((r) => {
+    const respostas = {}
+    let positivas = 0
+    let respondidas = 0
+
+    perguntas.forEach((q, i) => {
+      const v = r[q]
+      if (v === '') return
+      respostas[i + 1] = v
+      respondidas += 1
+      if (bandaDe(v) === 'positiva') positivas += 1
+    })
+
+    const nota = iNota >= 0 ? Number(r[perguntas[iNota]]) : null
+
+    return [
+      importacaoId, ctx.cursoId,
+      carimboSql(r[cCarimbo]),
+      r[cTurma] || null,
+      r[cComponente] || null,
+      Number.isFinite(nota) && nota > 0 ? nota : null,
+      positivas, respondidas,
+      JSON.stringify(respostas),
+    ]
+  })
+
+  for (let i = 0; i < pessoas.length; i += LOTE) {
+    await conn.query(
+      `INSERT INTO avaliacao_respondentes
+         (importacao_id, course_id, respondido_em, turma, componente,
+          nota, positivas, respondidas, respostas)
+       VALUES ?`, [pessoas.slice(i, i + LOTE)]
+    )
+  }
+
+  const semCarimbo = pessoas.filter((p) => !p[2]).length
 
   return {
     respostas: registros.length,
     perguntas: perguntas.length,
     linhasGravadas: linhas.length,
+    respondentesGravados: pessoas.length,
+    semDataDeResposta: semCarimbo,
+    respostasSemBanda: semBanda.size ? [...semBanda].join(' | ') : 'nenhuma',
     // Pergunta sem escala reconhecida entra como 'outra' e nao ganha resposta de
     // topo -- ela conta, mas fica fora da comparacao entre perguntas. Avisar
     // aqui evita que ela desapareca do painel sem ninguem notar.
@@ -398,6 +489,30 @@ async function importarMunicipios(conn, { registros, colunas }, ctx) {
     comMunicipio: cob.comMunicipio,
     semMunicipio: cob.escolas - cob.comMunicipio,
   }
+}
+
+/**
+ * O carimbo do formulario para DATETIME.
+ *
+ * O Google Forms entrega "13/07/2026 18:24:07" -- dia primeiro. `new Date`
+ * desse texto ou falha ou interpreta como mes primeiro, e 13/07 vira 07/13 ou
+ * Invalid Date. Em ambos os casos a evolucao no tempo sairia errada sem erro
+ * nenhum, entao o texto e desmontado por partes.
+ *
+ * O formato ISO tambem e aceito, porque exportacao de outra ferramenta costuma
+ * vir assim.
+ */
+function carimboSql(valor) {
+  const texto = String(valor || '').trim()
+  if (!texto) return null
+
+  const br = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})[ ,]*(\d{2}:\d{2}(:\d{2})?)?/)
+  if (br) return `${br[3]}-${br[2]}-${br[1]} ${br[4] || '00:00:00'}`
+
+  const iso = texto.match(/^(\d{4})-(\d{2})-(\d{2})[T ]*(\d{2}:\d{2}(:\d{2})?)?/)
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]} ${iso[4] || '00:00:00'}`
+
+  return null
 }
 
 /* ─────────────────────────── comum ─────────────────────────── */

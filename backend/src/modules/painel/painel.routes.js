@@ -81,6 +81,21 @@ const ROTULOS_STATUS = {
   em_andamento: 'Em andamento',
 }
 
+/**
+ * O componente curricular filtra a AVALIACAO, e nada mais.
+ *
+ * Ele existe no cadastro do cursista e nas respostas do formulario, mas nao no
+ * consolidado -- entao um filtro de componente nao recorta conclusao. A tela
+ * so o oferece no painel do consolidado por isso.
+ *
+ * Recortado em 120 caracteres, o tamanho da coluna: alem de nao casar com nada,
+ * texto longo entraria na chave do cache e a encheria.
+ */
+function normalizarComponente(valor) {
+  const texto = String(valor || '').trim().slice(0, 120)
+  return texto || null
+}
+
 function normalizarStatus(valor) {
   return Object.keys(ROTULOS_STATUS).includes(String(valor)) ? String(valor) : null
 }
@@ -105,7 +120,8 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
       const dias = normalizarDias(req.query.dias)
       const cursoId = normalizarCurso(req.query.curso)
       const gre = normalizarGre(req.query.gre)
-      const chave = `${mes}|${dias}|${cursoId || 0}|${gre || '-'}`
+      const componente = normalizarComponente(req.query.componente)
+      const chave = `${mes}|${dias}|${cursoId || 0}|${gre || '-'}|${componente || '-'}`
 
       const guardado = doCache(chave)
       if (guardado) return res.json({ ...guardado, doCache: true })
@@ -120,6 +136,7 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
         totais, porGre, funil, perfil, inscricoes, serie,
         conclusao, conclusaoPorGre, avaliacao, nota, evolucao, opcoes,
         escolasConcluintes, porFuncao, porComponente, porMunicipio,
+        evolucaoRespostas, componentes,
       ] = await Promise.all([
         repo.totais({ cursoId, dias, gre }),
         repo.porGre({ cursoId }),
@@ -135,8 +152,10 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
            que filtro nenhum. */
         resultados.conclusao({ cursoId, gre }),
         resultados.conclusaoPorGre({ cursoId }),
-        resultados.avaliacaoPorPergunta({ cursoId }),
-        resultados.avaliacaoNota({ cursoId }),
+        /* A avaliacao aceita `componente`, e nao `gre`: o formulario e anonimo
+           e registra o componente de quem respondeu, mas nao a regional. */
+        resultados.avaliacaoPorPergunta({ cursoId, componente }),
+        resultados.avaliacaoNota({ cursoId, componente }),
         resultados.evolucaoDaConclusao({ cursoId }),
         resultados.opcoesDeFiltro(),
 
@@ -151,6 +170,9 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
            vem do cadastro pelo CPF, e municipio vem da escola pelo INEP. */
         resultados.concluintesPorComponente({ cursoId, gre }),
         resultados.concluintesPorMunicipio({ cursoId, gre }),
+
+        resultados.avaliacaoEvolucao({ cursoId, componente }),
+        resultados.componentesAvaliadores({ cursoId }),
       ])
 
       const dados = {
@@ -161,6 +183,7 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
         // se o servidor recusou o filtro, o rotulo mostra o que ele realmente usou.
         cursoId,
         gre,
+        componente,
         // O que existe para filtrar sai do banco, e nao de uma lista fixa na
         // tela: oferecer um curso sem planilha importada faria a pessoa
         // selecionar, ver tudo zerar, e concluir que o curso fracassou em vez de
@@ -171,6 +194,7 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
           resultados: {
             conclusao, porGre: conclusaoPorGre, avaliacao, nota, evolucao,
             escolas: escolasConcluintes, porFuncao, porComponente, porMunicipio,
+            evolucaoRespostas, componentes,
           },
         },
       }
@@ -254,6 +278,75 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
       const status = erro.status || 500
       res.status(status).json({
         message: status === 503 ? erro.message : 'Nao foi possivel exportar a lista.',
+      })
+    }
+  })
+
+  /**
+   * O detalhamento da avaliacao, resposta a resposta.
+   *
+   * Rota separada e sem cache, pelo mesmo motivo da lista de concluintes: a
+   * resposta muda a cada busca e a cada pagina, e guardar isso encheria o cache
+   * de combinacoes que ninguem repete.
+   */
+  router.get('/avaliacao/detalhe', requireRole(...PERFIS_COM_ACESSO), async (req, res) => {
+    try {
+      const dados = await resultados.avaliacaoDetalhe({
+        cursoId: normalizarCurso(req.query.curso),
+        componente: normalizarComponente(req.query.componente),
+        situacao: ['positiva', 'neutra', 'negativa'].includes(req.query.situacao)
+          ? req.query.situacao : null,
+        busca: String(req.query.busca || '').slice(0, 80),
+        pagina: Number(req.query.pagina) || 1,
+        porPagina: Number(req.query.porPagina) || 25,
+      })
+      res.json(dados)
+    } catch (erro) {
+      const status = erro.status || 500
+      res.status(status).json({
+        message: status === 503 ? erro.message : 'Nao foi possivel carregar o detalhamento.',
+      })
+    }
+  })
+
+  /**
+   * A avaliacao em CSV.
+   *
+   * Sem paginacao e com todas as perguntas em colunas -- e o formato que serve
+   * para cruzar com outra coisa, que e para o que a planilha existe. Continua
+   * sem identificar ninguem: o formulario e anonimo na origem.
+   */
+  router.get('/avaliacao/exportar', requireRole(...PERFIS_COM_ACESSO), async (req, res) => {
+    try {
+      const cursoId = normalizarCurso(req.query.curso)
+      const componente = normalizarComponente(req.query.componente)
+
+      const perguntas = await resultados.avaliacaoPorPergunta({ cursoId })
+      const itens = await resultados.avaliacaoParaExportar({ cursoId, componente })
+
+      const csv = montarCsv([
+        { titulo: 'Data', valor: (l) => (l.quando || '').slice(0, 10).split('-').reverse().join('/') },
+        { titulo: 'Hora', valor: (l) => (l.quando || '').slice(11) },
+        { titulo: 'Turma', valor: (l) => l.turma || '' },
+        { titulo: 'Componente curricular', valor: (l) => l.componente || '' },
+        { titulo: 'Respostas positivas', valor: (l) => `${l.positivas} de ${l.respondidas}` },
+        // Uma coluna por pergunta, com o texto que a pessoa marcou. O cabecalho
+        // e a pergunta inteira: quem abre a planilha meses depois nao tem a tela
+        // do lado para lembrar o que era "item 7".
+        ...perguntas.map((q) => ({
+          titulo: q.pergunta,
+          valor: (l) => l.respostas[String(q.ordem)] || '',
+        })),
+      ], itens)
+
+      const hoje = new Date().toISOString().slice(0, 10)
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+      res.setHeader('Content-Disposition', `attachment; filename="avaliacao-do-curso-${hoje}.csv"`)
+      res.send(csv)
+    } catch (erro) {
+      const status = erro.status || 500
+      res.status(status).json({
+        message: status === 503 ? erro.message : 'Nao foi possivel exportar a avaliacao.',
       })
     }
   })

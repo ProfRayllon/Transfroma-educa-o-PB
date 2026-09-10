@@ -116,6 +116,48 @@ async function aplicar(pool) {
   `)
 
   /**
+   * Uma linha por RESPONDENTE da avaliacao.
+   *
+   * Convive com a tabela somada acima, e as duas nao podem divergir porque sao
+   * gravadas na mesma transacao da mesma importacao.
+   *
+   * Por que agora existe: a tela pediu a evolucao das respostas no tempo e o
+   * detalhamento resposta a resposta, e nenhuma das duas sai de contagens. A
+   * objecao original -- 120 mil linhas por curso -- vinha de contar
+   * pergunta x resposta; uma linha por respondente sao 9.974, dez vezes menos.
+   *
+   * O formulario e ANONIMO e continua sendo: nao ha CPF, nome nem e-mail aqui,
+   * e nada nesta tabela reconstroi quem respondeu. As respostas ficam num JSON
+   * indexado pela ordem da pergunta porque o questionario muda de um curso para
+   * outro -- uma coluna por pergunta engessaria o formulario no formato de 2026.
+   */
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS avaliacao_respondentes (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      importacao_id INT NOT NULL,
+      course_id INT NOT NULL,
+      respondido_em DATETIME DEFAULT NULL,
+      turma VARCHAR(40) DEFAULT NULL,
+      componente VARCHAR(120) DEFAULT NULL,
+
+      -- A nota de 1 a 5, destacada do JSON por ser a unica que a tela ordena,
+      -- filtra e soma. Fica NULL se o formulario do curso nao tiver essa pergunta.
+      nota TINYINT DEFAULT NULL,
+      -- Quantas das perguntas respondidas cairam na banda positiva, e quantas
+      -- foram respondidas. Guardados porque a "situacao" da linha sai deles, e
+      -- recalcular a partir do JSON a cada leitura custaria caro.
+      positivas TINYINT NOT NULL DEFAULT 0,
+      respondidas TINYINT NOT NULL DEFAULT 0,
+      respostas JSON DEFAULT NULL,
+
+      INDEX idx_respondentes_curso (course_id, respondido_em),
+      INDEX idx_respondentes_componente (course_id, componente),
+      CONSTRAINT fk_respondentes_importacao
+        FOREIGN KEY (importacao_id) REFERENCES resultado_importacoes(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB
+  `)
+
+  /**
    * De-para do codigo INEP da escola para o municipio.
    *
    * O municipio nao existe em nenhuma outra tabela do sistema, e o nome da
@@ -153,6 +195,19 @@ async function aplicar(pool) {
    * nada -- o mapa da Paraiba, quando existir, ja encontra o dado gravado em
    * vez de exigir uma reimportacao da base inteira.
    */
+  /* `banda` entrou depois de avaliacao_respostas existir. Mesmo padrao das
+     demais: confere o INFORMATION_SCHEMA e adiciona se faltar. */
+  const [colBanda] = await pool.query(
+    `SELECT COUNT(*) AS existe FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'avaliacao_respostas'
+        AND COLUMN_NAME = 'banda'`
+  )
+  if (!Number(colBanda[0].existe)) {
+    await pool.execute(
+      "ALTER TABLE avaliacao_respostas ADD COLUMN banda ENUM('positiva','neutra','negativa','indefinida') NOT NULL DEFAULT 'indefinida' AFTER topo"
+    )
+  }
+
   /* O indice por INEP entrou depois da tabela existir. CREATE INDEX nao aceita
      IF NOT EXISTS no MySQL 8, entao a checagem e explicita -- repetir o CREATE
      daria "Duplicate key name" e derrubaria o boot num laco de reinicializacao. */
@@ -215,6 +270,20 @@ async function aplicar(pool) {
       escala ENUM('relevancia4','clareza4','sim3','nota5','outra') NOT NULL,
       resposta VARCHAR(60) NOT NULL,
       topo TINYINT(1) NOT NULL DEFAULT 0,
+
+      /**
+       * Em que banda a resposta cai: positiva, neutra ou negativa.
+       *
+       * E o que torna as onze perguntas comparaveis entre si. A coluna topo nao:
+       * acertar o topo de uma escala de tres opcoes e mais facil que o de uma de
+       * cinco, e o mesmo entusiasmo produz percentuais diferentes so por causa
+       * do tamanho da regua.
+       *
+       * A banda classifica pelo SIGNIFICADO da opcao. 'Parcialmente' e neutro em
+       * qualquer escala onde apareca; 'Relevante' e positivo mesmo nao sendo o
+       * topo. O indicador da tela e a fatia positiva sobre quem respondeu.
+       */
+      banda ENUM('positiva','neutra','negativa','indefinida') NOT NULL DEFAULT 'indefinida',
       turma VARCHAR(40) DEFAULT NULL,
       componente VARCHAR(120) DEFAULT NULL,
       total INT NOT NULL DEFAULT 0,

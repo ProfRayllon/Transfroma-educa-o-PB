@@ -896,6 +896,59 @@ export function ResumoDoRanking({ total, maior, participacao }) {
 
 /* ═══ Lista ranqueada ═══ */
 
+/**
+ * Um mosaico de indicadores em percentual.
+ *
+ * Cartoes pequenos, e nao barras: aqui os onze valores ficam entre 80% e 99%, e
+ * um grafico de barras nessa faixa vira onze tracos quase identicos -- o olho
+ * gasta esforco para nao distinguir nada. Como numero escrito, cada um se le
+ * direto, e a comparacao fica por conta de quem quiser fazer.
+ *
+ * O menor de todos recebe destaque. E o unico que carrega informacao num
+ * conjunto onde todo o resto empata.
+ */
+export function MosaicoDeIndicadores({ itens, colunas = 5 }) {
+  const menor = itens.length ? Math.min(...itens.map((i) => i.valor)) : null
+
+  return (
+    <div className="grid gap-3" style={{
+      gridTemplateColumns: `repeat(auto-fit, minmax(${Math.max(150, Math.round(760 / colunas))}px, 1fr))`,
+    }}>
+      {itens.map((item, i) => {
+        const marcado = item.valor === menor && itens.length > 1
+        return (
+          <div
+            key={item.rotulo}
+            title={item.titulo || item.rotulo}
+            className="flex items-center gap-3 px-3.5 py-3 rounded-xl border animate-cena"
+            style={{
+              borderColor: marcado ? 'var(--p-r4)' : 'var(--p-cartaoBorda)',
+              background: marcado ? 'var(--p-trilho)' : 'transparent',
+              animationDelay: `${i * 35}ms`,
+            }}
+          >
+            {item.icone && (
+              <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                style={{ background: 'var(--p-trilho)' }}>
+                <item.icone size={17} style={{ color: marcado ? 'var(--p-r5)' : 'var(--p-r3)' }} />
+              </span>
+            )}
+            <span className="min-w-0">
+              <span className="block text-[12px] truncate" style={{ color: 'var(--p-texto3)' }}>
+                {item.rotulo}
+              </span>
+              <span className="block text-[20px] font-bold tabular-nums leading-tight"
+                style={{ color: marcado ? 'var(--p-r5)' : 'var(--p-texto)' }}>
+                {item.texto}
+              </span>
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function ListaRanqueada({ itens, sufixo = '', mostrarPosicao = true, aoClicar, selecionado }) {
   const maximo = Math.max(1, ...itens.map((i) => i.valor))
 

@@ -27,6 +27,22 @@ function dia(valor) {
 }
 
 /**
+ * DATETIME do MySQL como texto local "AAAA-MM-DD HH:MM".
+ *
+ * toISOString() nao serve: ele converte para UTC, e uma resposta enviada as
+ * 21:24 de 13/07 na Paraiba vira 14/07 no texto. A tabela mostraria o dia
+ * seguinte para toda resposta da noite, e a ultima linha do periodo cairia fora
+ * do intervalo que o proprio cabecalho anuncia.
+ */
+function momento(valor) {
+  if (!valor) return null
+  const d = new Date(valor)
+  const dois = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())} `
+    + `${dois(d.getHours())}:${dois(d.getMinutes())}`
+}
+
+/**
  * Filtro de curso e de GRE para o consolidado.
  *
  * A GRE so existe no consolidado. A avaliacao e anonima e nao carrega regional
@@ -154,7 +170,10 @@ async function avaliacaoPorPergunta({ cursoId = null, componente = null } = {}) 
     `SELECT pergunta, escala,
             MIN(ordem) AS ordem,
             SUM(total) AS respostas,
-            SUM(topo * total) AS topo
+            SUM(topo * total) AS topo,
+            SUM((banda = 'positiva') * total) AS positivas,
+            SUM((banda = 'neutra') * total) AS neutras,
+            SUM((banda = 'negativa') * total) AS negativas
        FROM avaliacao_respostas
       WHERE 1 = 1${onde.join('')}
       GROUP BY pergunta, escala
@@ -170,7 +189,134 @@ async function avaliacaoPorPergunta({ cursoId = null, componente = null } = {}) 
     pctTopo: numero(l.respostas)
       ? Math.round((numero(l.topo) / numero(l.respostas)) * 1000) / 10
       : 0,
+
+    /**
+     * O indicador que a tela usa.
+     *
+     * A fatia POSITIVA sobre quem respondeu, com o neutro fora dos dois lados --
+     * a convencao de pesquisa de satisfacao. Diferente de `pctTopo`, ele
+     * compara perguntas de escalas diferentes sem penalizar a que tem mais
+     * opcoes: 'Relevante' conta como positivo mesmo nao sendo o topo.
+     */
+    positivas: numero(l.positivas),
+    neutras: numero(l.neutras),
+    negativas: numero(l.negativas),
+    pctPositivo: numero(l.respostas)
+      ? Math.round((numero(l.positivas) / numero(l.respostas)) * 1000) / 10
+      : 0,
   }))
+}
+
+/**
+ * Quantas respostas chegaram por dia.
+ *
+ * Sai da tabela de respondentes, e nao da somada: o carimbo do formulario e uma
+ * informacao por pessoa, e some no momento em que as respostas viram contagem.
+ *
+ * Devolve os dias VAZIOS tambem, preenchidos com zero. Um grafico de barras que
+ * pula o dia sem resposta encurta o eixo e faz o periodo parecer mais intenso do
+ * que foi.
+ */
+async function avaliacaoEvolucao({ cursoId = null, componente = null } = {}) {
+  requireMysql()
+
+  const onde = []
+  const params = []
+  if (cursoId) { onde.push(' AND course_id = ?'); params.push(cursoId) }
+  if (componente) { onde.push(' AND componente = ?'); params.push(componente) }
+
+  const [linhas] = await getPool().query(
+    `SELECT DATE(respondido_em) AS dia, COUNT(*) AS total
+       FROM avaliacao_respondentes
+      WHERE respondido_em IS NOT NULL${onde.join('')}
+      GROUP BY DATE(respondido_em)
+      ORDER BY dia`, params
+  )
+  if (!linhas.length) return { pontos: [], de: null, ate: null, total: 0 }
+
+  const porDia = new Map(linhas.map((l) => [dia(l.dia), numero(l.total)]))
+  const primeiro = new Date(`${dia(linhas[0].dia)}T12:00:00`)
+  const ultimo = new Date(`${dia(linhas[linhas.length - 1].dia)}T12:00:00`)
+
+  const pontos = []
+  for (let d = new Date(primeiro); d <= ultimo; d.setDate(d.getDate() + 1)) {
+    const chave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    pontos.push({ dia: chave, total: porDia.get(chave) || 0 })
+  }
+
+  return {
+    pontos,
+    de: pontos[0].dia,
+    ate: pontos[pontos.length - 1].dia,
+    total: pontos.reduce((s, x) => s + x.total, 0),
+  }
+}
+
+/**
+ * O detalhamento, resposta a resposta.
+ *
+ * Nenhuma coluna identifica quem respondeu -- o formulario e anonimo e nao traz
+ * CPF, nome nem e-mail. O que aparece e quando, de que turma, de que
+ * componente, e o que foi marcado.
+ *
+ * As respostas saem como TEXTO, do jeito que a pessoa marcou. Converter
+ * 'Muito relevante' para 5 daria uma tabela de numeros alinhados e uma escala
+ * inventada: as perguntas tem 3, 4 e 5 opcoes, e o mesmo "5" significaria coisas
+ * diferentes em colunas vizinhas.
+ */
+async function avaliacaoDetalhe({
+  cursoId = null, componente = null, situacao = null, busca = '',
+  pagina = 1, porPagina = 25,
+} = {}) {
+  requireMysql()
+
+  const onde = []
+  const params = []
+  if (cursoId) { onde.push(' AND r.course_id = ?'); params.push(cursoId) }
+  if (componente) { onde.push(' AND r.componente = ?'); params.push(componente) }
+  if (situacao === 'positiva') onde.push(' AND r.nota >= 4')
+  if (situacao === 'neutra') onde.push(' AND r.nota = 3')
+  if (situacao === 'negativa') onde.push(' AND r.nota <= 2')
+
+  const termo = String(busca || '').trim()
+  if (termo) {
+    onde.push(' AND (r.componente LIKE ? OR r.turma LIKE ?)')
+    params.push(`%${termo}%`, `%${termo}%`)
+  }
+
+  const filtro = onde.join('')
+  const limite = Math.min(100, Math.max(5, Number(porPagina) || 25))
+  const salto = Math.max(0, ((Number(pagina) || 1) - 1) * limite)
+
+  const [[cont]] = await getPool().query(
+    `SELECT COUNT(*) AS total FROM avaliacao_respondentes r WHERE 1 = 1${filtro}`, params
+  )
+
+  const [linhas] = await getPool().query(
+    `SELECT r.respondido_em, r.turma, r.componente, r.nota,
+            r.positivas, r.respondidas, r.respostas
+       FROM avaliacao_respondentes r
+      WHERE 1 = 1${filtro}
+      ORDER BY r.respondido_em DESC, r.id DESC
+      LIMIT ${limite} OFFSET ${salto}`, params
+  )
+
+  return {
+    total: numero(cont.total),
+    pagina: Number(pagina) || 1,
+    porPagina: limite,
+    itens: linhas.map((l) => ({
+      quando: momento(l.respondido_em),
+      turma: l.turma,
+      componente: l.componente,
+      nota: l.nota === null ? null : numero(l.nota),
+      positivas: numero(l.positivas),
+      respondidas: numero(l.respondidas),
+      // O driver ja devolve JSON como objeto; a string cobre o caso de a coluna
+      // ter sido gravada por outro caminho.
+      respostas: typeof l.respostas === 'string' ? JSON.parse(l.respostas) : (l.respostas || {}),
+    })),
+  }
 }
 
 /** A nota geral de 1 a 5: media e distribuicao. */
@@ -202,6 +348,40 @@ async function avaliacaoNota({ cursoId = null, componente = null } = {}) {
     // 4,7 pode ser todo mundo dando 5 menos um punhado dando 1.
     satisfeitos: distribuicao.filter((d) => d.nota >= 4).reduce((s, d) => s + d.total, 0),
   }
+}
+
+/**
+ * A avaliacao inteira, sem paginacao, para a exportacao.
+ *
+ * Consulta propria em vez de `avaliacaoDetalhe` com um limite alto: aquela
+ * fecha o limite em 100 por pagina, e a exportacao saia com as primeiras cem
+ * linhas e o mesmo nome de arquivo -- uma planilha silenciosamente truncada, que
+ * so seria descoberta por quem conferisse a contagem.
+ */
+async function avaliacaoParaExportar({ cursoId = null, componente = null } = {}) {
+  requireMysql()
+
+  const onde = []
+  const params = []
+  if (cursoId) { onde.push(' AND course_id = ?'); params.push(cursoId) }
+  if (componente) { onde.push(' AND componente = ?'); params.push(componente) }
+
+  const [linhas] = await getPool().query(
+    `SELECT respondido_em, turma, componente, nota, positivas, respondidas, respostas
+       FROM avaliacao_respondentes
+      WHERE 1 = 1${onde.join('')}
+      ORDER BY respondido_em`, params
+  )
+
+  return linhas.map((l) => ({
+    quando: momento(l.respondido_em),
+    turma: l.turma,
+    componente: l.componente,
+    nota: l.nota === null ? null : numero(l.nota),
+    positivas: numero(l.positivas),
+    respondidas: numero(l.respondidas),
+    respostas: typeof l.respostas === 'string' ? JSON.parse(l.respostas) : (l.respostas || {}),
+  }))
 }
 
 /** Os componentes curriculares que responderam, para o filtro da avaliacao. */
@@ -583,6 +763,9 @@ module.exports = {
   avaliacaoPorPergunta,
   avaliacaoNota,
   componentesAvaliadores,
+  avaliacaoEvolucao,
+  avaliacaoDetalhe,
+  avaliacaoParaExportar,
   opcoesDeFiltro,
   evolucaoDaConclusao,
   escolasDoConsolidado,
