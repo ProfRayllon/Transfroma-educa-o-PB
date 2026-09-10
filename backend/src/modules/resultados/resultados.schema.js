@@ -113,6 +113,33 @@ async function aplicar(pool) {
   `)
 
   /**
+   * De-para do codigo INEP da escola para o municipio.
+   *
+   * O municipio nao existe em nenhuma outra tabela do sistema, e o nome da
+   * escola nao o carrega. O unico caminho e o INEP, que e o codigo oficial do
+   * Censo Escolar e ja vem na planilha do consolidado -- falta so a lista que
+   * diz onde cada codigo fica.
+   *
+   * Tabela separada, e nao uma coluna em consolidado_vinculos, porque o
+   * municipio e um atributo da ESCOLA e nao da linha da planilha: repetido em
+   * doze mil linhas, ele sairia errado em algumas delas na primeira correcao, e
+   * a mesma escola apareceria em dois municipios.
+   *
+   * Enquanto estiver vazia, os graficos que dependem dela simplesmente nao
+   * aparecem -- nunca aparecem zerados, que seria dizer que ninguem concluiu.
+   */
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS escola_municipio (
+      inep VARCHAR(12) PRIMARY KEY,
+      municipio VARCHAR(120) NOT NULL,
+      uf CHAR(2) NOT NULL DEFAULT 'PB',
+      atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+      INDEX idx_escola_municipio_nome (municipio)
+    ) ENGINE=InnoDB
+  `)
+
+  /**
    * Avaliacao: contagens, nunca respostas individuais.
    *
    * O formulario nao tem CPF, nome, GRE nem escola -- e isso nao e falha da

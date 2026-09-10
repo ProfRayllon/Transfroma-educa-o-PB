@@ -475,6 +475,108 @@ async function listaParaExportar({ cursoId = null, gre = null, status = null } =
   return linhas
 }
 
+
+/**
+ * Quem concluiu, por componente curricular.
+ *
+ * Igual a `concluintesPorFuncao`: o componente vive no CADASTRO, e chega aqui
+ * pelo CPF. Entao o recorte enxerga so quem teve par na base, e a cobertura
+ * viaja junto para a tela poder dizer sobre quantos ela esta falando.
+ */
+async function concluintesPorComponente({ cursoId = null, gre = null, limite = 8 } = {}) {
+  requireMysql()
+  const f = filtros({ cursoId, gre, alias: 'v' })
+
+  const [linhas] = await getPool().query(
+    `SELECT cur.componente_curricular AS chave, COUNT(DISTINCT v.cpf) AS total
+       FROM consolidado_vinculos v
+       JOIN cursistas cur ON cur.id = v.cursista_id
+      WHERE v.status = 'concluido'
+        AND cur.componente_curricular IS NOT NULL
+        AND cur.componente_curricular <> ''${f.sql}
+      GROUP BY cur.componente_curricular
+      ORDER BY total DESC
+      LIMIT ${Number(limite)}`, f.params
+  )
+
+  const s = filtros({ cursoId, gre })
+  const [[cob]] = await getPool().query(
+    `SELECT COUNT(DISTINCT cpf) AS concluintes,
+            COUNT(DISTINCT CASE WHEN cursista_id IS NOT NULL THEN cpf END) AS comCadastro
+       FROM consolidado_vinculos
+      WHERE status = 'concluido'${s.sql}`, s.params
+  )
+
+  return {
+    itens: linhas.map((l) => ({ chave: l.chave, total: numero(l.total) })),
+    cobertura: { concluintes: numero(cob.concluintes), comCadastro: numero(cob.comCadastro) },
+  }
+}
+
+/**
+ * Quem concluiu, por municipio.
+ *
+ * O caminho e a ESCOLA, e nao a pessoa: o municipio nao existe no cadastro do
+ * cursista, e o unico elo com o territorio e o codigo INEP que a propria
+ * planilha traz. Por isso este recorte depende da tabela escola_municipio estar
+ * carregada -- e enquanto ela estiver vazia a funcao devolve lista vazia, para a
+ * tela esconder o grafico em vez de mostra-lo zerado.
+ *
+ * A contagem e de VINCULOS concluidos, e nao de pessoas: quem leciona em duas
+ * escolas de municipios diferentes concluiu naqueles dois lugares, e somar as
+ * barras nao devolve o total de concluintes do curso. A tela diz isso.
+ */
+async function concluintesPorMunicipio({ cursoId = null, gre = null, limite = 8 } = {}) {
+  requireMysql()
+  const f = filtros({ cursoId, gre, alias: 'v' })
+
+  const [[cob]] = await getPool().query(
+    `SELECT COUNT(DISTINCT v.inep) AS escolas,
+            COUNT(DISTINCT CASE WHEN em.inep IS NOT NULL THEN v.inep END) AS comMunicipio
+       FROM consolidado_vinculos v
+       LEFT JOIN escola_municipio em ON em.inep = v.inep
+      WHERE 1 = 1${f.sql}`, f.params
+  )
+
+  if (!numero(cob.comMunicipio)) {
+    return { itens: [], cobertura: { escolas: numero(cob.escolas), comMunicipio: 0 }, total: 0 }
+  }
+
+  const [linhas] = await getPool().query(
+    `SELECT em.municipio AS chave,
+            SUM(v.status = 'concluido') AS total,
+            COUNT(*) AS vinculos,
+            COUNT(DISTINCT v.inep) AS escolas
+       FROM consolidado_vinculos v
+       JOIN escola_municipio em ON em.inep = v.inep
+      WHERE 1 = 1${f.sql}
+      GROUP BY em.municipio
+      ORDER BY total DESC
+      LIMIT ${Number(limite)}`, f.params
+  )
+
+  const [[tot]] = await getPool().query(
+    `SELECT COUNT(DISTINCT em.municipio) AS municipios
+       FROM consolidado_vinculos v
+       JOIN escola_municipio em ON em.inep = v.inep
+      WHERE 1 = 1${f.sql}`, f.params
+  )
+
+  return {
+    itens: linhas.map((l) => ({
+      chave: l.chave,
+      total: numero(l.total),
+      vinculos: numero(l.vinculos),
+      escolas: numero(l.escolas),
+      taxa: numero(l.vinculos)
+        ? Math.round((numero(l.total) / numero(l.vinculos)) * 1000) / 10
+        : 0,
+    })),
+    cobertura: { escolas: numero(cob.escolas), comMunicipio: numero(cob.comMunicipio) },
+    total: numero(tot.municipios),
+  }
+}
+
 module.exports = {
   conclusao,
   conclusaoPorGre,
@@ -487,4 +589,6 @@ module.exports = {
   concluintesPorFuncao,
   listaDeConcluintes,
   listaParaExportar,
+  concluintesPorComponente,
+  concluintesPorMunicipio,
 }

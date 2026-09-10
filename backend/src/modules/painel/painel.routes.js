@@ -119,7 +119,7 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
       const [
         totais, porGre, funil, perfil, inscricoes, serie,
         conclusao, conclusaoPorGre, avaliacao, nota, evolucao, opcoes,
-        escolasConcluintes, porFuncao,
+        escolasConcluintes, porFuncao, porComponente, porMunicipio,
       ] = await Promise.all([
         repo.totais({ cursoId, dias, gre }),
         repo.porGre({ cursoId }),
@@ -145,6 +145,12 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
            lista de gente, que tem rota propria e paginacao. */
         resultados.escolasDoConsolidado({ cursoId, gre }),
         resultados.concluintesPorFuncao({ cursoId, gre }),
+
+        /* Os tres rankings lado a lado do painel de concluintes. Cada um chega
+           por um caminho diferente: escola vem da propria planilha, componente
+           vem do cadastro pelo CPF, e municipio vem da escola pelo INEP. */
+        resultados.concluintesPorComponente({ cursoId, gre }),
+        resultados.concluintesPorMunicipio({ cursoId, gre }),
       ])
 
       const dados = {
@@ -164,7 +170,7 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
           totais, porGre, funil, perfil, inscricoes, serie,
           resultados: {
             conclusao, porGre: conclusaoPorGre, avaliacao, nota, evolucao,
-            escolas: escolasConcluintes, porFuncao,
+            escolas: escolasConcluintes, porFuncao, porComponente, porMunicipio,
           },
         },
       }

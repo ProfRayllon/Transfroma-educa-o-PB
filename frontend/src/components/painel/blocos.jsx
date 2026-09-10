@@ -268,6 +268,23 @@ export function BlocoInstitucional({
     cor: `var(--p-r${Math.min(5, i + 1)})`,
   }))
 
+  /**
+   * Os três rankings lado a lado: escola, município e componente.
+   *
+   * Cada um chega por um caminho diferente, e é isso que decide se ele aparece:
+   *   - escola     vem da própria planilha, então existe sempre;
+   *   - componente vem do cadastro, pelo CPF -- só existe para quem tem par;
+   *   - município  vem da escola, pelo INEP -- só existe com o de-para carregado.
+   *
+   * Nenhum aparece zerado. Um ranking vazio com título faria parecer que
+   * ninguém concluiu, quando o que falta é o cruzamento.
+   */
+  const temEscolas = (R.escolas?.maiores?.length || 0) > 0
+  const temMunicipios = (R.porMunicipio?.itens?.length || 0) > 0
+  const temComponente = (R.porComponente?.itens?.length || 0) > 0
+  const rankings = [temEscolas, temMunicipios, temComponente].filter(Boolean).length
+  const cobComp = R.porComponente?.cobertura || { concluintes: 0, comCadastro: 0 }
+
   const inscricoesNoPeriodo = serie.reduce((s, p) => s + p.inscricao, 0)
   // O funil vem sempre da base inteira, então o primeiro degrau dele é o
   // denominador honesto para "que fatia da rede este curso alcançou".
@@ -1030,28 +1047,91 @@ export function BlocoInstitucional({
         </div>
       )}
 
-      {/* ─── Escolas ─── */}
-      {mostra('escolas') && temConclusao && R.escolas.maiores.length > 0 && (
-        <Cartao className="flex flex-col">
-          <TituloDeBloco
-            acao={<span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>
-              {br(R.escolas.total)} escolas · {R.escolas.gres} GREs
-            </span>}
-          >
-            Escolas com mais concluintes
-          </TituloDeBloco>
+      {/* ─── Onde e quem concluiu ─── */}
+      {mostra('escolas') && temConclusao && rankings > 0 && (
+        <div className={`grid grid-cols-1 gap-4 items-stretch ${
+          rankings === 3 ? 'xl:grid-cols-3' : rankings === 2 ? 'xl:grid-cols-2' : ''}`}>
 
-          {/* A barra mede a CONTAGEM, e a taxa vem em texto embaixo. Se a
-              régua fosse o percentual, a escola de 4 em 4 empataria no topo com
-              a de 51 em 61 -- as duas com 100%, e é a segunda que importa. */}
-          <ListaRanqueada
-            itens={R.escolas.maiores.map((e) => ({
-              rotulo: e.escola,
-              valor: e.concluidos,
-              nota: `${e.gre} · ${pctBr(e.taxa)}% de ${br(e.vinculos)} vínculos`,
-            }))}
-          />
-        </Cartao>
+          {temEscolas && (
+            <Cartao className="flex flex-col">
+              <TituloDeBloco
+                acao={<span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>
+                  {br(R.escolas.total)} escolas
+                </span>}
+              >
+                Escolas com mais concluintes
+              </TituloDeBloco>
+
+              {/* A barra mede a CONTAGEM, e a taxa vem em texto embaixo. Se a
+                  régua fosse o percentual, a escola de 4 em 4 empataria no topo
+                  com a de 51 em 61 -- as duas com 100%, e é a segunda que
+                  importa. Vale para os três rankings desta linha. */}
+              <ListaRanqueada
+                itens={R.escolas.maiores.map((e) => ({
+                  rotulo: e.escola,
+                  valor: e.concluidos,
+                  nota: `${e.gre} · ${pctBr(e.taxa)}% de ${br(e.vinculos)} vínculos`,
+                }))}
+              />
+            </Cartao>
+          )}
+
+          {temMunicipios && (
+            <Cartao className="flex flex-col">
+              <TituloDeBloco
+                acao={<span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>
+                  {br(R.porMunicipio.total)} municípios
+                </span>}
+              >
+                Municípios com mais concluintes
+              </TituloDeBloco>
+
+              <ListaRanqueada
+                itens={R.porMunicipio.itens.map((m) => ({
+                  rotulo: m.chave,
+                  valor: m.total,
+                  nota: `${m.escolas} escolas · ${pctBr(m.taxa)}% de ${br(m.vinculos)} vínculos`,
+                }))}
+              />
+
+              {/* Aqui a contagem é de VÍNCULO, e não de pessoa: quem leciona em
+                  duas escolas de municípios diferentes concluiu nos dois
+                  lugares. Somar as barras, por isso, não devolve o total de
+                  concluintes que está lá em cima. */}
+              <p className="text-[12px] mt-3" style={{ color: 'var(--p-texto3)' }}>
+                O município vem da escola, pelo código INEP. Um docente com escolas em
+                dois municípios conta nos dois — a soma das barras não fecha com o total.
+              </p>
+            </Cartao>
+          )}
+
+          {temComponente && (
+            <Cartao className="flex flex-col">
+              <TituloDeBloco
+                acao={<span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>
+                  {pct(cobComp.comCadastro, cobComp.concluintes)}% dos concluintes
+                </span>}
+              >
+                Componentes com mais concluintes
+              </TituloDeBloco>
+
+              <ListaRanqueada
+                itens={R.porComponente.itens.map((c) => ({
+                  rotulo: c.chave,
+                  valor: c.total,
+                }))}
+              />
+
+              <p className="text-[12px] mt-3" style={{ color: 'var(--p-texto3)' }}>
+                O componente vem do cadastro do cursista, alcançado pelo CPF.{' '}
+                <b style={{ color: 'var(--p-texto2)' }}>
+                  {br(cobComp.concluintes - cobComp.comCadastro)}
+                </b>{' '}
+                concluintes ainda não têm par na base e ficam fora deste ranking.
+              </p>
+            </Cartao>
+          )}
+        </div>
       )}
 
       {/* ─── Lista ─── */}

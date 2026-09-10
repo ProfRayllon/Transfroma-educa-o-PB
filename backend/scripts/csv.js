@@ -12,10 +12,36 @@
  * As regras que importam: campo entre aspas pode conter virgula e quebra de
  * linha, e aspas dentro de campo entre aspas se escrevem duplicadas ("").
  */
-function lerCsv(texto) {
+/**
+ * Descobre se o arquivo usa virgula ou ponto e virgula.
+ *
+ * O Excel em portugues salva CSV com PONTO E VIRGULA, e as exportacoes deste
+ * proprio sistema tambem. Um leitor fixado em virgula nao falha nesses
+ * arquivos: ele le a linha inteira como uma coluna so, e o dado entra no banco
+ * como "25081454;Monte Horebe" -- errado, sem erro nenhum.
+ *
+ * A conta e feita so no cabecalho, e fora das aspas: o separador certo e o que
+ * mais aparece ali, porque o cabecalho e a unica linha que garantidamente tem
+ * um separador entre cada coluna.
+ */
+function descobrirSeparador(texto) {
+  const cabecalho = texto.split('\n')[0]
+  let virgulas = 0
+  let pontos = 0
+  let entreAspas = false
+  for (const c of cabecalho) {
+    if (c === '"') entreAspas = !entreAspas
+    else if (!entreAspas && c === ',') virgulas += 1
+    else if (!entreAspas && c === ';') pontos += 1
+  }
+  return pontos > virgulas ? ';' : ','
+}
+
+function lerCsv(texto, separador) {
   // O BOM que o Excel escreve gruda no nome da primeira coluna e faz a busca
   // pelo cabecalho falhar por um caractere invisivel.
   if (texto.charCodeAt(0) === 0xfeff) texto = texto.slice(1)
+  const sep = separador || descobrirSeparador(texto)
 
   const linhas = []
   let campo = ''
@@ -35,7 +61,7 @@ function lerCsv(texto) {
     }
 
     if (c === '"') { entreAspas = true; continue }
-    if (c === ',') { linha.push(campo); campo = ''; continue }
+    if (c === sep) { linha.push(campo); campo = ''; continue }
     if (c === '\r') continue
     if (c === '\n') { linha.push(campo); linhas.push(linha); linha = []; campo = ''; continue }
     campo += c
@@ -48,8 +74,8 @@ function lerCsv(texto) {
 }
 
 /** Transforma o CSV em objetos, usando a primeira linha como cabecalho. */
-function lerCsvComCabecalho(texto) {
-  const linhas = lerCsv(texto)
+function lerCsvComCabecalho(texto, separador) {
+  const linhas = lerCsv(texto, separador)
   if (!linhas.length) return { colunas: [], registros: [] }
 
   const colunas = linhas[0].map((c) => c.trim())
@@ -65,4 +91,4 @@ function lerCsvComCabecalho(texto) {
   return { colunas, registros }
 }
 
-module.exports = { lerCsv, lerCsvComCabecalho }
+module.exports = { lerCsv, lerCsvComCabecalho, descobrirSeparador }

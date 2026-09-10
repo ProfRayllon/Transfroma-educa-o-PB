@@ -296,6 +296,67 @@ async function importarAvaliacao(conn, { registros, colunas }, ctx) {
   }
 }
 
+/* ─────────────────────────── municipios ─────────────────────────── */
+
+/**
+ * O de-para INEP -> municipio.
+ *
+ * Nao e uma entrega semanal como as outras duas: e uma lista de referencia que
+ * muda quando a rede abre ou fecha escola. Por isso ela nao passa por
+ * `resultado_importacoes` -- nao ha fotografia a guardar -- e o INSERT e um
+ * upsert: reimportar a lista inteira corrige o que mudou sem apagar o resto.
+ */
+async function importarMunicipios(conn, { registros, colunas }, ctx) {
+  const cInep = acharColuna(colunas, 'INEP')
+  const cMunicipio = acharColuna(colunas, 'MUNICIPIO') || acharColuna(colunas, 'CIDADE')
+  if (!cInep || !cMunicipio) {
+    throw new Error('A planilha precisa ter as colunas INEP e MUNICIPIO.')
+  }
+  const cUf = acharColuna(colunas, 'UF')
+
+  const linhas = registros
+    // O Excel entrega o INEP como numero e come o zero a esquerda. Os codigos
+    // da Paraiba comecam em 25, entao aqui isso nao morde -- mas a planilha de
+    // outro estado morderia, e o padStart custa nada.
+    .map((r) => [
+      String(r[cInep] || '').replace(/\D/g, '').padStart(8, '0'),
+      String(r[cMunicipio] || '').trim(),
+      (cUf ? String(r[cUf] || '').trim().toUpperCase() : 'PB') || 'PB',
+    ])
+    .filter(([inep, municipio]) => inep && inep !== '00000000' && municipio)
+
+  if (!linhas.length) throw new Error('Nenhuma linha valida encontrada.')
+
+  const LOTE = 1000
+  for (let i = 0; i < linhas.length; i += LOTE) {
+    await conn.query(
+      `INSERT INTO escola_municipio (inep, municipio, uf) VALUES ?
+       ON DUPLICATE KEY UPDATE municipio = VALUES(municipio), uf = VALUES(uf)`,
+      [linhas.slice(i, i + LOTE)]
+    )
+  }
+
+  // O que importa saber depois de importar nao e quantas linhas entraram, e sim
+  // quantas escolas do consolidado passaram a ter municipio -- e quais ficaram
+  // sem, que sao as que somem do grafico.
+  const [[cob]] = await conn.query(
+    `SELECT COUNT(DISTINCT v.inep) AS escolas,
+            COUNT(DISTINCT CASE WHEN em.inep IS NOT NULL THEN v.inep END) AS comMunicipio
+       FROM consolidado_vinculos v
+       LEFT JOIN escola_municipio em ON em.inep = v.inep`
+  )
+  const [[qtd]] = await conn.query('SELECT COUNT(*) n, COUNT(DISTINCT municipio) m FROM escola_municipio')
+
+  return {
+    linhasNaPlanilha: linhas.length,
+    escolasNaTabela: qtd.n,
+    municipiosDistintos: qtd.m,
+    escolasDoConsolidado: cob.escolas,
+    comMunicipio: cob.comMunicipio,
+    semMunicipio: cob.escolas - cob.comMunicipio,
+  }
+}
+
 /* ─────────────────────────── comum ─────────────────────────── */
 
 async function registrarImportacao(conn, ctx, linhas) {
@@ -320,8 +381,12 @@ async function principal() {
   const arquivo = args.arquivo
   const referencia = args.referencia || hoje()
 
-  if (!['consolidado', 'avaliacao'].includes(tipo)) throw new Error('--tipo deve ser consolidado ou avaliacao')
-  if (!cursoId) throw new Error('--curso e obrigatorio (o id do curso no sistema)')
+  if (!['consolidado', 'avaliacao', 'municipios'].includes(tipo)) throw new Error('--tipo deve ser consolidado, avaliacao ou municipios')
+  // O de-para de municipio vale para a rede inteira: nao pertence a curso
+  // nenhum, e nao e a fotografia de uma semana.
+  if (tipo !== 'municipios' && !cursoId) {
+    throw new Error('--curso e obrigatorio (o id do curso no sistema)')
+  }
   if (!arquivo || !fs.existsSync(arquivo)) throw new Error(`Arquivo nao encontrado: ${arquivo}`)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(referencia)) throw new Error('--referencia deve ser AAAA-MM-DD')
 
@@ -334,13 +399,17 @@ async function principal() {
   })
 
   try {
-    const [[curso]] = await conn.query('SELECT id, name FROM courses WHERE id = ?', [cursoId])
-    if (!curso) throw new Error(`Curso ${cursoId} nao existe.`)
+    let curso = null
+    if (tipo !== 'municipios') {
+      const [[achado]] = await conn.query('SELECT id, name FROM courses WHERE id = ?', [cursoId])
+      if (!achado) throw new Error(`Curso ${cursoId} nao existe.`)
+      curso = achado
+    }
 
     const dados = lerCsvComCabecalho(fs.readFileSync(arquivo, 'utf8'))
     console.log(`\nArquivo:    ${path.basename(arquivo)}`)
-    console.log(`Curso:      ${curso.id} - ${curso.name}`)
-    console.log(`Referencia: ${referencia}`)
+    if (curso) console.log(`Curso:      ${curso.id} - ${curso.name}`)
+    if (tipo !== 'municipios') console.log(`Referencia: ${referencia}`)
     console.log(`Linhas:     ${dados.registros.length}\n`)
 
     const ctx = { cursoId, tipo, referencia, arquivo }
@@ -348,9 +417,9 @@ async function principal() {
     // Tudo ou nada: a importacao apaga o detalhe antes de gravar o novo. Uma
     // falha no meio, sem transacao, deixaria o curso sem resultado nenhum.
     await conn.beginTransaction()
-    const resumo = tipo === 'consolidado'
-      ? await importarConsolidado(conn, dados, ctx)
-      : await importarAvaliacao(conn, dados, ctx)
+    const resumo = tipo === 'consolidado' ? await importarConsolidado(conn, dados, ctx)
+      : tipo === 'avaliacao' ? await importarAvaliacao(conn, dados, ctx)
+        : await importarMunicipios(conn, dados, ctx)
     await conn.commit()
 
     console.log('Importado:')

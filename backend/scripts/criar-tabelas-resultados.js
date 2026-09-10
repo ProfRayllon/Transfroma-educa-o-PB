@@ -25,7 +25,7 @@ const { aplicar } = require('../src/modules/resultados/resultados.schema')
     `SELECT TABLE_NAME, TABLE_ROWS FROM INFORMATION_SCHEMA.TABLES
       WHERE TABLE_SCHEMA = DATABASE()
         AND TABLE_NAME IN ('resultado_importacoes','consolidado_vinculos',
-                           'consolidado_historico','avaliacao_respostas')
+                           'consolidado_historico','avaliacao_respostas','escola_municipio')
       ORDER BY TABLE_NAME`
   )
   t.forEach((x) => console.log(`  ${x.TABLE_NAME.padEnd(24)} ok`))
