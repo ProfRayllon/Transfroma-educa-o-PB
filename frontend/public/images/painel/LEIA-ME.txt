@@ -1,42 +1,49 @@
-Ilustracoes da capa do Dashboard
-================================
+Artes da capa do Dashboard
+==========================
 
-Coloque aqui as tres imagens dos cartoes da capa (/painel).
+Cada arte E o cartao inteiro da capa (/painel), e o clique e na arte.
 
-  concluintes.png   -> cartao 01, Docentes Concluintes   (o capelo roxo)
-  progresso.png     -> cartao 02, Progresso do Curso      (as barras azuis)
-  sistema.png       -> cartao 03, Dados do Sistema        (o notebook verde)
+  concluintes.png / .webp   cartao 01, Docentes Concluintes
+  progresso.png   / .webp   cartao 02, Consolidado do Curso
+  sistema.png     / .webp   cartao 03, Dados do Sistema
 
-O nome do arquivo importa: a pagina procura exatamente por esses tres.
+O nome do arquivo importa: a pagina procura exatamente por esses.
 
-Formato e tamanho
------------------
-  Formato:  PNG com FUNDO TRANSPARENTE (ou WEBP)
-  Tamanho:  1000 x 750 px  (proporcao 4:3)
-  Peso:     ate 200 KB por imagem
+Como enviar uma arte nova
+-------------------------
+Mande so o PNG. O .webp e gerado a partir dele -- ver "Peso" abaixo.
 
-Por que transparente: o cartao tem um fundo em degrade proprio, diferente em
-cada um dos tres e diferente no modo escuro. Imagem com fundo branco recortado
-apareceria como um retangulo claro dentro do degrade.
+  Formato:   PNG com fundo TRANSPARENTE
+  Tamanho:   1060 x 1413 px (proporcao 3:4)
+  Conteudo:  o cartao completo -- titulo, texto, numero, botao, rodape
 
-Por que 1000 x 750: no maior tamanho de tela o slot da ilustracao tem cerca de
-500 x 375 px. O dobro disso cobre telas de alta densidade sem desperdicio.
+Se mudar a proporcao, avise: a pagina declara 1060x1413 no HTML para reservar o
+espaco antes da imagem baixar. Proporcao diferente sem ajustar isso faz a tela
+pular quando as tres terminam de carregar.
 
-Nao precisa mandar os cartoes inteiros
---------------------------------------
-Nas imagens de referencia, o cartao traz titulo, texto, o numero (01/02/03), a
-caixinha com o indicador e o botao. Nada disso deve estar na imagem: tudo isso
-a pagina desenha, e por bons motivos --
+Peso
+----
+As artes chegaram com 1,3 MB cada -- 3,9 MB numa pagina so. Foram reduzidas para
+1060 px de largura e convertidas para WebP, que ficou em ~130 KB cada.
 
-  - o indicador (13.445, 69,0%, 4,73) vem do banco e muda toda semana;
-  - o texto precisa ser texto para o leitor de tela e para o buscador;
-  - o botao precisa responder ao teclado e ao toque;
-  - o cartao acompanha o modo claro e escuro do sistema.
+A pagina pede o WebP primeiro e cai no PNG so em navegador que nao aceite.
+Depois de colocar um PNG novo aqui, rode:
 
-Mande so o DESENHO: o capelo, as barras, o notebook. Sem fundo, sem moldura,
-sem texto.
+  python scripts/otimiza-capa.py
 
-Enquanto as imagens nao chegam
-------------------------------
-A capa funciona sem elas. Cada cartao desenha uma figura simples no lugar, e
-troca sozinho assim que o arquivo aparecer aqui -- nao precisa mexer no codigo.
+Os originais em tamanho cheio nao ficam no repositorio.
+
+O que a arte carrega junto
+--------------------------
+Como titulo, texto e numero estao DENTRO da imagem:
+
+  - o numero nao acompanha o banco. Ele fica velho em silencio, e trocar exige
+    refazer a arte;
+  - o texto nao e lido por leitor de tela nem encontrado por busca. Por isso
+    cada imagem tem um `alt` em PainelCapa.jsx repetindo o que ela diz -- e esse
+    texto que da nome ao link. Arte nova, alt novo;
+  - a arte e clara. No modo escuro ela continua clara, porque e imagem e nao um
+    componente que responde ao tema.
+
+Nada disso e defeito: foi a escolha de deixar a tela identica a referencia
+aprovada. Fica escrito para quem mexer aqui depois nao descobrir sozinho.
