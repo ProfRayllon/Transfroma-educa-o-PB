@@ -16,6 +16,12 @@ const SITUACOES = [
   { value: 'completo', label: 'Cadastro confirmado' },
 ]
 
+const SITUACOES_CONTA = [
+  { value: '', label: 'Todas as contas' },
+  { value: 'ativo', label: 'Conta ativa' },
+  { value: 'inativo', label: 'Conta inativa' },
+]
+
 // Filtro de origem: e o que permite achar, no meio de treze mil importados, os
 // cadastros que a coordenacao criou a mao -- para conferir ou desfazer.
 const ORIGENS = [
@@ -209,6 +215,7 @@ export default function Cursistas() {
   const [lista, setLista] = useState({ items: [], total: 0, page: 1, perPage: 50 })
   const [busca, setBusca] = useState('')
   const [situacao, setSituacao] = useState('')
+  const [statusConta, setStatusConta] = useState('')
   const [origem, setOrigem] = useState('')
   const [pagina, setPagina] = useState(1)
   const [carregando, setCarregando] = useState(true)
@@ -256,7 +263,7 @@ export default function Cursistas() {
       // POST, e nao GET com query string: o termo pode ser um CPF, e a URL
       // completa iria para o access.log do nginx e para o historico do navegador.
       const { data } = await api.post('/cursistas/admin/cursistas/buscar', {
-        search: busca, situacao, origem, page: pagina, perPage: 50,
+        search: busca, situacao, status: statusConta, origem, page: pagina, perPage: 50,
       })
       setLista(data)
     } catch (error) {
@@ -264,7 +271,7 @@ export default function Cursistas() {
     } finally {
       setCarregando(false)
     }
-  }, [busca, situacao, origem, pagina])
+  }, [busca, situacao, statusConta, origem, pagina])
 
   const carregarResumoCursos = useCallback(async () => {
     try {
@@ -602,6 +609,17 @@ export default function Cursistas() {
                 {SITUACOES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
             </div>
+            <div className="relative">
+              <Lock size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <select
+                value={statusConta}
+                onChange={(e) => { setStatusConta(e.target.value); setPagina(1) }}
+                className="select-field pl-8 text-xs py-2 w-40"
+                aria-label="Situação da conta"
+              >
+                {SITUACOES_CONTA.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </div>
             <select
               value={origem}
               onChange={(e) => { setOrigem(e.target.value); setPagina(1) }}
@@ -632,9 +650,9 @@ export default function Cursistas() {
                   <td colSpan={6} className="table-cell text-center py-12">
                     <Users size={28} className="mx-auto text-gray-300 mb-2" />
                     <p className="text-sm text-gray-500">
-                      {busca || situacao || origem ? 'Nenhum cursista encontrado com esses filtros.' : 'Nenhum cursista na base ainda.'}
+                      {busca || situacao || statusConta || origem ? 'Nenhum cursista encontrado com esses filtros.' : 'Nenhum cursista na base ainda.'}
                     </p>
-                    {!busca && !situacao && !origem && (
+                    {!busca && !situacao && !statusConta && !origem && (
                       <p className="text-xs text-gray-400 mt-1">
                         Use "Importar base (.xlsx)" para carregar os cadastros, ou "Novo cursista" para criar um a um.
                       </p>
