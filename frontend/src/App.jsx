@@ -9,6 +9,7 @@ import Home from './pages/Home'
 import PublicCourses from './pages/PublicCourses'
 import Login from './pages/Login'
 import Painel from './pages/Painel'
+import PainelCapa from './pages/PainelCapa'
 import Cursos from './pages/Cursos'
 import Producao from './pages/Producao'
 import CursoProducao from './pages/CursoProducao'
@@ -81,7 +82,11 @@ export default function App() {
               equipe interna -- cursista nao e usuario do sistema administrativo. */}
           <Route path="/area-do-cursista/*" element={<CursistaRoutes />} />
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route path="painel" element={<Painel />} />
+            {/* A capa lista os paineis; cada um vive no proprio endereco.
+                Antes era tudo uma tela so, e quem entrava para ver a conclusao
+                passava por dez graficos que nao respondiam a pergunta dele. */}
+            <Route path="painel" element={<PainelCapa />} />
+            <Route path="painel/:secao" element={<Painel />} />
             <Route path="cursos" element={<Cursos />} />
             <Route path="cursos/:courseId/ementa" element={<Ementa />} />
             <Route path="cursos/:courseId/producao" element={<CursoProducao />} />

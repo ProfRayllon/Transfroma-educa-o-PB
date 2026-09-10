@@ -1,0 +1,42 @@
+Ilustracoes da capa do Dashboard
+================================
+
+Coloque aqui as tres imagens dos cartoes da capa (/painel).
+
+  concluintes.png   -> cartao 01, Docentes Concluintes   (o capelo roxo)
+  progresso.png     -> cartao 02, Progresso do Curso      (as barras azuis)
+  sistema.png       -> cartao 03, Dados do Sistema        (o notebook verde)
+
+O nome do arquivo importa: a pagina procura exatamente por esses tres.
+
+Formato e tamanho
+-----------------
+  Formato:  PNG com FUNDO TRANSPARENTE (ou WEBP)
+  Tamanho:  1000 x 750 px  (proporcao 4:3)
+  Peso:     ate 200 KB por imagem
+
+Por que transparente: o cartao tem um fundo em degrade proprio, diferente em
+cada um dos tres e diferente no modo escuro. Imagem com fundo branco recortado
+apareceria como um retangulo claro dentro do degrade.
+
+Por que 1000 x 750: no maior tamanho de tela o slot da ilustracao tem cerca de
+500 x 375 px. O dobro disso cobre telas de alta densidade sem desperdicio.
+
+Nao precisa mandar os cartoes inteiros
+--------------------------------------
+Nas imagens de referencia, o cartao traz titulo, texto, o numero (01/02/03), a
+caixinha com o indicador e o botao. Nada disso deve estar na imagem: tudo isso
+a pagina desenha, e por bons motivos --
+
+  - o indicador (13.445, 69,0%, 4,73) vem do banco e muda toda semana;
+  - o texto precisa ser texto para o leitor de tela e para o buscador;
+  - o botao precisa responder ao teclado e ao toque;
+  - o cartao acompanha o modo claro e escuro do sistema.
+
+Mande so o DESENHO: o capelo, as barras, o notebook. Sem fundo, sem moldura,
+sem texto.
+
+Enquanto as imagens nao chegam
+------------------------------
+A capa funciona sem elas. Cada cartao desenha uma figura simples no lugar, e
+troca sozinho assim que o arquivo aparecer aqui -- nao precisa mexer no codigo.

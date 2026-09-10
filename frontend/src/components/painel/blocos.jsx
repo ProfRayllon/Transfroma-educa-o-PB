@@ -171,7 +171,47 @@ function variacaoDaSerie(serie, chave) {
 
 /* ══════════════════ Institucional ══════════════════ */
 
-export function BlocoInstitucional({ dados, serie, dias, cursoAtivo, greAtiva, aoFiltrarCurso }) {
+/**
+ * Que blocos cada painel mostra.
+ *
+ * A tela e uma so; o que muda e o recorte. Tres componentes separados
+ * duplicariam os mesmos calculos derivados -- e duas copias de uma taxa de
+ * conclusao e o comeco de duas taxas de conclusao diferentes.
+ *
+ * `tudo` mantem a tela inteira funcionando para quem chegar por /painel/tudo ou
+ * por um link antigo.
+ */
+const BLOCOS_POR_SECAO = {
+  concluintes: ['kpiConclusao', 'gre'],
+  progresso: ['kpiCurso', 'rosca', 'carrossel', 'avaliacao'],
+  sistema: ['kpiBase', 'movimento', 'perfil', 'gre'],
+  tudo: ['kpiConclusao', 'kpiCurso', 'kpiBase', 'movimento', 'rosca', 'carrossel', 'gre', 'perfil', 'avaliacao'],
+}
+
+export function BlocoInstitucional({
+  dados, serie, dias, cursoAtivo, greAtiva, aoFiltrarCurso, secao = 'tudo',
+}) {
+  const mostra = (bloco) => (BLOCOS_POR_SECAO[secao] || BLOCOS_POR_SECAO.tudo).includes(bloco)
+
+  /**
+   * A largura das colunas de uma linha, contando só os cartões que sobraram.
+   *
+   * Sem isso, uma linha declarada com três colunas e exibindo uma deixaria dois
+   * terços em branco -- o cartão preso na primeira fatia, o resto vazio.
+   *
+   * Vai por variável CSS, e não por classe montada em texto: o Tailwind varre o
+   * código-fonte à procura das classes que existem, e uma classe formada em
+   * tempo de execução nunca chega ao CSS final.
+   */
+  const grade = (colunas) => {
+    const vivas = colunas.filter(([bloco]) => mostra(bloco))
+    if (!vivas.length) return null
+    return { '--cols': vivas.map(([, largura]) => largura).join(' ') }
+  }
+
+  const gradeMovimento = grade([['movimento', '1.45fr'], ['rosca', '1.2fr'], ['carrossel', '1fr']])
+  const gradeRegional = grade([['gre', '1.3fr'], ['perfil', '1fr']])
+
   const [ordemGre, setOrdemGre] = useState('cursistas')
   // Duas leituras no mesmo cartao: como as inscricoes se dividem entre os
   // cursos, e quem e a rede que se inscreve. Sao perguntas vizinhas e cada uma
@@ -284,6 +324,89 @@ export function BlocoInstitucional({ dados, serie, dias, cursoAtivo, greAtiva, a
   const maisFraca = comparaveis.length ? comparaveis[comparaveis.length - 1] : null
 
   /**
+   * Os cartões de indicador deste painel.
+   *
+   * Cada um pertence a um grupo, e o grupo é que decide em qual painel ele
+   * aparece. O mesmo cartão nunca é escrito duas vezes -- dois "Taxa de
+   * conclusão" em arquivos diferentes seriam o começo de duas taxas de
+   * conclusão diferentes.
+   */
+  const indicadores = [
+    mostra('kpiConclusao') && {
+      chave: 'taxa',
+      icone: CheckCircle2,
+      rotulo: 'Taxa de conclusão',
+      // Por PESSOA, e não pela linha da planilha: ela traz um vínculo por
+      // escola, e quem leciona em duas apareceria duas vezes.
+      valor: temConclusao ? R.conclusao.taxa : 0,
+      sufixo: '%',
+      decimais: 1,
+      gradiente: 'ciano',
+      comparativo: temConclusao
+        ? `${br(R.conclusao.concluintes)} de ${br(R.conclusao.base)} · planilha de ${dataCurta(R.conclusao.referencia)}`
+        : 'aguardando a planilha de consolidado',
+    },
+    mostra('kpiConclusao') && {
+      chave: 'concluintes',
+      icone: GraduationCap,
+      rotulo: 'Concluíram',
+      valor: temConclusao ? R.conclusao.concluintes : 0,
+      gradiente: 'roxo',
+      comparativo: temConclusao
+        ? `${br(R.conclusao.base - R.conclusao.concluintes)} ainda não concluíram`
+        : 'aguardando a planilha de consolidado',
+    },
+    mostra('kpiCurso') && {
+      chave: 'inscricoes',
+      icone: GraduationCap,
+      rotulo: cursoAtivo ? 'Inscrições no curso' : 'Inscrições em cursos',
+      valor: t.inscricoes,
+      gradiente: 'roxo',
+      serie: serie.map((x) => x.inscricao),
+      variacao: variacaoDaSerie(serie, 'inscricao'),
+      comparativo: `${br(inscricoesNoPeriodo)} nos últimos ${dias} dias`,
+    },
+    mostra('kpiCurso') && {
+      chave: 'nota',
+      icone: Star,
+      rotulo: 'Avaliação do curso',
+      // A nota vem com a proporção de 4 e 5 embaixo porque média esconde a
+      // forma: 4,7 pode ser todo mundo dando 5 menos um punhado dando 1, e a
+      // decisão de quem lê muda conforme o caso.
+      valor: temAvaliacao ? R.nota.media : 0,
+      sufixo: ' / 5',
+      decimais: 2,
+      gradiente: 'rosa',
+      comparativo: temAvaliacao
+        ? `${pct(R.nota.satisfeitos, R.nota.respostas)}% deram 4 ou 5 · ${br(R.nota.respostas)} respostas`
+        : 'aguardando a planilha de avaliação',
+    },
+    mostra('kpiBase') && {
+      chave: 'base',
+      icone: Users,
+      rotulo: cursoAtivo ? 'Inscritos neste curso' : 'Profissionais na base',
+      valor: t.cursistas,
+      gradiente: 'azul',
+      comparativo: cursoAtivo
+        ? `${pct(t.cursistas, totalDaBase)}% da base oficial`
+        : `${br(t.confirmados)} confirmaram o cadastro · ${pct(t.confirmados, t.cursistas)}%`,
+    },
+    mostra('kpiBase') && {
+      chave: 'acessos',
+      icone: Eye,
+      rotulo: `Acessaram em ${dias} dias`,
+      valor: t.acessaramNaJanela,
+      gradiente: 'ciano',
+      serie: serie.map((x) => x.login + x.primeiroAcesso),
+      /* O denominador é sempre o MESMO conjunto que o numerador. Já foi "quem
+         tem senha", e o percentual passava de 100%: quem entra com o CPF no
+         primeiro acesso e nunca define senha conta no acesso e não contava no
+         denominador. */
+      comparativo: `${pct(t.acessaramNaJanela, t.cursistas)}% ${cursoAtivo ? 'dos inscritos' : 'da base oficial'}`,
+    },
+  ].filter(Boolean)
+
+  /**
    * Como as inscrições se dividem entre os cursos.
    *
    * Só os cinco maiores viram fatia; o resto soma em "Outros cursos". Uma rosca
@@ -368,63 +491,27 @@ export function BlocoInstitucional({ dados, serie, dias, cursoAtivo, greAtiva, a
       {/* Cada cartão descreve, na linha de baixo, o PRÓPRIO número de cima.
           Antes o primeiro mostrava a base cadastrada e embaixo a variação dos
           acessos -- duas grandezas diferentes no mesmo cartão, e a leitura
-          natural era tomar a variação como sendo da base. */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <CartaoKpi
-          icone={Users}
-          rotulo={cursoAtivo ? 'Inscritos neste curso' : 'Profissionais na base'}
-          valor={t.cursistas}
-          gradiente="azul"
-          comparativo={cursoAtivo
-            ? `${pct(t.cursistas, totalDaBase)}% da base oficial`
-            : `${br(t.confirmados)} confirmaram o cadastro · ${pct(t.confirmados, t.cursistas)}%`}
-        />
+          natural era tomar a variação como sendo da base.
 
-        {/* A taxa e por PESSOA, nao pela linha da planilha: a planilha traz um
-            vinculo por escola, e quem leciona em duas apareceria duas vezes. */}
-        <CartaoKpi
-          icone={CheckCircle2}
-          rotulo="Taxa de conclusão"
-          valor={temConclusao ? R.conclusao.taxa : 0}
-          sufixo="%"
-          decimais={1}
-          gradiente="ciano"
-          comparativo={temConclusao
-            ? `${br(R.conclusao.concluintes)} de ${br(R.conclusao.base)} concluíram · planilha de ${dataCurta(R.conclusao.referencia)}`
-            : 'aguardando a planilha de consolidado'}
-        />
-
-        <CartaoKpi
-          icone={GraduationCap}
-          rotulo={cursoAtivo ? 'Inscrições no curso' : 'Inscrições em cursos'}
-          valor={t.inscricoes}
-          gradiente="roxo"
-          serie={serie.map((x) => x.inscricao)}
-          variacao={variacaoDaSerie(serie, 'inscricao')}
-          comparativo={`${br(inscricoesNoPeriodo)} nos últimos ${dias} dias`}
-        />
-
-        {/* A nota vem sozinha com a proporção de 4 e 5 embaixo porque média
-            esconde a forma: 4,7 pode ser todo mundo dando 5 menos um punhado
-            dando 1, e a decisão de quem lê muda conforme o caso. */}
-        <CartaoKpi
-          icone={Star}
-          rotulo="Avaliação do curso"
-          valor={temAvaliacao ? R.nota.media : 0}
-          sufixo=" / 5"
-          decimais={2}
-          gradiente="rosa"
-          comparativo={temAvaliacao
-            ? `${pct(R.nota.satisfeitos, R.nota.respostas)}% deram 4 ou 5 · ${br(R.nota.respostas)} respostas`
-            : 'aguardando a planilha de avaliação'}
-        />
-      </div>
+          A lista é montada antes de desenhar para a grade acompanhar quantos
+          cartões o painel realmente tem: quatro colunas fixas com dois cartões
+          dentro deixariam metade da linha vazia. */}
+      {indicadores.length > 0 && (
+        <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${
+          indicadores.length >= 4 ? 'xl:grid-cols-4'
+            : indicadores.length === 3 ? 'xl:grid-cols-3' : 'xl:grid-cols-2'}`}>
+          {indicadores.map((k) => <CartaoKpi key={k.chave} {...k} />)}
+        </div>
+      )}
 
       {/* ─── Movimento, jornada e procura ─── */}
       {/* A Jornada recebe mais largura que os vizinhos: os rótulos dos arcos
           ocupam as laterais, e num cartão estreito eles espremeriam o desenho
           justamente onde ele deveria crescer. */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1.45fr_1.2fr_1fr] gap-4 items-stretch">
+      {gradeMovimento && (
+      <div className="grid grid-cols-1 gap-4 items-stretch xl:[grid-template-columns:var(--cols)]"
+        style={gradeMovimento}>
+        {mostra('movimento') && (
         <Cartao className="flex flex-col">
           <TituloDeBloco
             acao={<span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>últimos {dias} dias</span>}
@@ -459,7 +546,9 @@ export function BlocoInstitucional({ dados, serie, dias, cursoAtivo, greAtiva, a
               ]} />
           </div>
         </Cartao>
+        )}
 
+        {mostra('rosca') && (
         <Cartao className="flex flex-col">
           <TituloDeBloco
             acao={
@@ -508,7 +597,9 @@ export function BlocoInstitucional({ dados, serie, dias, cursoAtivo, greAtiva, a
             )}
           </div>
         </Cartao>
+        )}
 
+        {mostra('carrossel') && (
         <Cartao className="flex flex-col">
           <TituloDeBloco
             acao={
@@ -537,13 +628,18 @@ export function BlocoInstitucional({ dados, serie, dias, cursoAtivo, greAtiva, a
             }))}
           />
         </Cartao>
+        )}
       </div>
+      )}
 
       {/* ─── Território ─── */}
       {/* O pirulito precisa de largura: rótulo, haste e valor dividem a linha,
           e num cartão estreito a haste some entre os dois textos. A GRE cede
           espaço porque as barras dela encolhem sem perder a leitura. */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_1fr] gap-4 items-stretch">
+      {gradeRegional && (
+      <div className="grid grid-cols-1 gap-4 items-stretch xl:[grid-template-columns:var(--cols)]"
+        style={gradeRegional}>
+        {mostra('gre') && (
         <Cartao className="flex flex-col">
           <TituloDeBloco
             acao={
@@ -592,7 +688,9 @@ export function BlocoInstitucional({ dados, serie, dias, cursoAtivo, greAtiva, a
             </p>
           )}
         </Cartao>
+        )}
 
+        {mostra('perfil') && (
         <Cartao className="flex flex-col">
           <TituloDeBloco
             acao={
@@ -638,10 +736,12 @@ export function BlocoInstitucional({ dados, serie, dias, cursoAtivo, greAtiva, a
             )}
           />
         </Cartao>
+        )}
       </div>
+      )}
 
       {/* ─── Como o curso foi avaliado ─── */}
-      {temAvaliacao && (
+      {temAvaliacao && mostra('avaliacao') && (
         <div className="grid grid-cols-1 xl:grid-cols-[1.6fr_1fr] gap-4 items-stretch">
           <Cartao className="flex flex-col">
             <TituloDeBloco

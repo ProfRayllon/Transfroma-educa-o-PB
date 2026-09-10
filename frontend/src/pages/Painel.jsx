@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { RefreshCw, Calendar, X, Filter, ChevronDown } from 'lucide-react'
+import { Link, useParams } from 'react-router-dom'
+import { RefreshCw, Calendar, X, Filter, ChevronDown, ArrowLeft } from 'lucide-react'
 import api from '../lib/api'
 import { useTheme } from '../context/ThemeContext'
 import { variaveisDoTema } from '../components/painel/graficos'
@@ -28,6 +29,33 @@ import { BlocoInstitucional } from '../components/painel/blocos'
  * tudo. Trinta dias é a janela que mostra a forma da curva sem virar histórico.
  */
 const DIAS = 30
+
+/**
+ * O que cada painel e, dito na propria tela.
+ *
+ * O titulo nao pode ser "Dashboard" nos tres: quem chega por um link direto,
+ * sem passar pela capa, precisa saber em qual dos tres esta. E `secao` desconhecida
+ * cai no painel inteiro em vez de dar erro -- endereco digitado torto mostra
+ * tudo, que e o comportamento antigo.
+ */
+const PAINEIS = {
+  concluintes: {
+    titulo: 'Docentes Concluintes',
+    subtitulo: 'Quantos concluiram cada curso, e como isso se distribui pelas regionais.',
+  },
+  progresso: {
+    titulo: 'Consolidado do Curso',
+    subtitulo: 'Procura, inscricoes e a avaliacao que os cursistas fizeram de cada curso.',
+  },
+  sistema: {
+    titulo: 'Dados do Sistema',
+    subtitulo: 'O que a propria plataforma registra: base, acessos e perfil da rede.',
+  },
+  tudo: {
+    titulo: 'Dashboard',
+    subtitulo: 'O retrato do Transforma Educacao PB',
+  },
+}
 
 /**
  * Um seletor para os dois filtros.
@@ -64,6 +92,8 @@ function Seletor({ rotulo, valor, opcoes, aoTrocar }) {
 
 export default function Painel() {
   const { dark } = useTheme()
+  const { secao = 'tudo' } = useParams()
+  const painel = PAINEIS[secao] || PAINEIS.tudo
   const [dados, setDados] = useState(null)
   const [erro, setErro] = useState(null)
   const [carregando, setCarregando] = useState(true)
@@ -124,9 +154,20 @@ export default function Painel() {
     <div className="space-y-6 animate-fade-in" style={variaveisDoTema(dark)}>
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
-          <h1 className="page-title">Dashboard</h1>
+          {/* A volta para a capa fica antes do título, e não num botão solto no
+              rodapé: é o caminho de quem entrou no painel errado, e ele precisa
+              estar onde o olho já está. */}
+          <Link
+            to="/painel"
+            className="inline-flex items-center gap-1.5 text-[13px] mb-1 transition-colors hover:underline"
+            style={{ color: 'var(--p-texto3)' }}
+          >
+            <ArrowLeft size={14} />
+            Painéis
+          </Link>
+          <h1 className="page-title">{painel.titulo}</h1>
           <p className="page-subtitle">
-            O retrato do Transforma Educação PB
+            {painel.subtitulo}
             {dados && ` · atualizado às ${new Date(dados.geradoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
           </p>
 
@@ -223,6 +264,7 @@ export default function Painel() {
           dias={DIAS}
           cursoAtivo={cursoAtivo}
           greAtiva={dados.gre}
+          secao={secao}
           aoFiltrarCurso={(id) => setCursoId((atual) => (atual === id ? null : id))}
         />
       ) : null}
