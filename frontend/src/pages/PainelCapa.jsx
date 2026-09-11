@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Settings } from 'lucide-react'
 
 /**
  * A capa do Dashboard.
@@ -118,8 +118,20 @@ export default function PainelCapa() {
       {/* Cabeçalho encostado à esquerda; as artes é que ficam centradas. Os dois
           centrados deixariam a página inteira simétrica e sem entrada -- o olho
           precisa de um canto por onde começar. */}
-      <div className="mb-8 shrink-0">
-        <p className="text-[11.5px] font-semibold tracking-[0.18em] uppercase
+      <div className="mb-8 shrink-0 relative">
+        {/* A engrenagem leva ao envio das planilhas. Discreta, no canto: é
+            ferramenta de quem alimenta o painel, não parte do que o painel mostra. */}
+        <Link
+          to="/painel/planilhas"
+          title="Planilhas dos painéis"
+          aria-label="Planilhas dos painéis"
+          className="absolute right-0 top-0 p-2.5 rounded-xl border border-gray-200 dark:border-gray-700
+                     text-gray-500 hover:text-brand-700 hover:border-brand-300 dark:hover:text-brand-300
+                     transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+        >
+          <Settings size={17} />
+        </Link>
+        <p className="text-[11.5px] font-semibold tracking-[0.18em] uppercase pr-12
                       text-brand-600 dark:text-brand-400">
           Dados que impulsionam a educação
         </p>

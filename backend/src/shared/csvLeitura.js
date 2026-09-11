@@ -1,17 +1,31 @@
 'use strict'
 
 /**
- * Leitor de CSV conforme a RFC 4180.
+ * Leitura de CSV -- o caminho de volta de `csv.js`, que so escreve.
  *
- * Escrito a mao, e nao com uma dependencia, porque o que precisa ser lido tem
- * exatamente um caso dificil -- virgula e aspas dentro do texto das perguntas do
- * formulario -- e um `split(',')` engoliria isso em silencio, deslocando as
- * colunas de uma linha so no meio de dez mil. O erro nao apareceria na
- * importacao; apareceria como um numero levemente errado no painel.
- *
- * As regras que importam: campo entre aspas pode conter virgula e quebra de
- * linha, e aspas dentro de campo entre aspas se escrevem duplicadas ("").
+ * Mora em src/shared, e nao em scripts/, porque tem dois clientes: o importador
+ * de linha de comando e a tela de envio de planilhas do dashboard. Uma copia em
+ * cada lugar seria o comeco de dois leitores que discordam sobre o mesmo
+ * arquivo.
  */
+
+/**
+ * O texto do arquivo, na codificacao em que ele veio.
+ *
+ * O Excel em portugues salva "CSV (separado por virgulas)" em Windows-1252, nao
+ * em UTF-8. Lido como UTF-8, "Língua Portuguesa" vira "L�ngua Portuguesa" -- e
+ * esse texto entra no banco, casa com nada, e o componente aparece duplicado no
+ * grafico. Tenta UTF-8 estrito primeiro; se o arquivo nao for UTF-8 valido, e
+ * Windows-1252 (latin1 cobre os acentos do portugues).
+ */
+function textoDoArquivo(buffer) {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer)
+  } catch {
+    return buffer.toString('latin1')
+  }
+}
+
 /**
  * Descobre se o arquivo usa virgula ou ponto e virgula.
  *
@@ -37,6 +51,18 @@ function descobrirSeparador(texto) {
   return pontos > virgulas ? ';' : ','
 }
 
+/**
+ * Leitor de CSV conforme a RFC 4180.
+ *
+ * Escrito a mao, e nao com uma dependencia, porque o que precisa ser lido tem
+ * exatamente um caso dificil -- virgula e aspas dentro do texto das perguntas do
+ * formulario -- e um `split(',')` engoliria isso em silencio, deslocando as
+ * colunas de uma linha so no meio de dez mil. O erro nao apareceria na
+ * importacao; apareceria como um numero levemente errado no painel.
+ *
+ * As regras que importam: campo entre aspas pode conter separador e quebra de
+ * linha, e aspas dentro de campo entre aspas se escrevem duplicadas ("").
+ */
 function lerCsv(texto, separador) {
   // O BOM que o Excel escreve gruda no nome da primeira coluna e faz a busca
   // pelo cabecalho falhar por um caractere invisivel.
@@ -91,4 +117,4 @@ function lerCsvComCabecalho(texto, separador) {
   return { colunas, registros }
 }
 
-module.exports = { lerCsv, lerCsvComCabecalho, descobrirSeparador }
+module.exports = { textoDoArquivo, descobrirSeparador, lerCsv, lerCsvComCabecalho }

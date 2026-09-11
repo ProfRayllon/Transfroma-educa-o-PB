@@ -1515,6 +1515,7 @@ const criarRotasCursistas = require('./modules/cursistas/cursistas.routes')
 const criarRotasAtribuicoes = require('./modules/atribuicoes/atribuicoes.routes')
 const criarRotasPublicas = require('./modules/publico/publico.routes')
 const criarRotasPainel = require('./modules/painel/painel.routes')
+const criarRotasResultados = require('./modules/resultados/resultados.routes')
 
 app.use('/api/cursistas', criarRotasCursistas({
   authInterna: auth,
@@ -1537,6 +1538,16 @@ app.use('/api/atribuicoes', criarRotasAtribuicoes({
 // nao pertence a nenhum deles, e enfia-lo em qualquer um faria esse modulo
 // depender de todos os outros.
 app.use('/api/painel', criarRotasPainel({ authInterna: auth, requireRole }))
+
+// O envio das planilhas que alimentam o painel: consolidado e avaliacao de cada
+// curso, e o de-para de escolas. Separado do painel porque um le e o outro
+// escreve -- e so o que escreve precisa de corpo cru, limite de tamanho e freio
+// de frequencia.
+app.use('/api/resultados', criarRotasResultados({
+  authInterna: auth,
+  requireRole,
+  getUsuarioInterno: (id) => store.getUserById(id),
+}))
 
 // Unico modulo sem autenticacao, e por isso montado separado dos demais: fica
 // obvio na leitura que tudo abaixo deste prefixo e publico por definicao.

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { RefreshCw, Calendar, X, Filter, ChevronDown, ArrowLeft } from 'lucide-react'
+import { RefreshCw, Calendar, X, Filter, ChevronDown, ArrowLeft, Settings } from 'lucide-react'
 import api from '../lib/api'
 import { useTheme } from '../context/ThemeContext'
 import { variaveisDoTema } from '../components/painel/graficos'
@@ -261,12 +261,25 @@ export default function Painel() {
             />
           )}
 
-          {periodo && (
+          {/* O periodo e a janela do grafico de movimento diario, que so existe
+              no painel do sistema. Mostrado em Concluintes, ele parecia a data
+              da planilha -- e nao tem relacao com ela. */}
+          {periodo && (secao === 'sistema' || secao === 'tudo') && (
             <span className="hidden lg:flex items-center gap-2 px-3.5 py-2 rounded-xl text-[13px] border"
               style={{ borderColor: 'var(--p-cartaoBorda)', color: 'var(--p-texto2)' }}>
               <Calendar size={14} /> {periodo}
             </span>
           )}
+
+          <Link
+            to="/painel/planilhas"
+            title="Planilhas dos painéis"
+            aria-label="Planilhas dos painéis"
+            className="p-2.5 rounded-xl border transition-colors"
+            style={{ borderColor: 'var(--p-cartaoBorda)', color: 'var(--p-texto2)' }}
+          >
+            <Settings size={15} />
+          </Link>
 
           <button
             onClick={carregar}

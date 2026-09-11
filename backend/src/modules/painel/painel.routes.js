@@ -4,6 +4,7 @@ const express = require('express')
 const repo = require('./painel.repo')
 const resultados = require('../resultados/resultados.repo')
 const { montarCsv } = require('../../shared/csv')
+const { doCache, guardar } = require('./painel.cache')
 
 /**
  * O painel institucional, numa chamada so.
@@ -19,29 +20,6 @@ const { montarCsv } = require('../../shared/csv')
  */
 
 const PERFIS_COM_ACESSO = ['administrador', 'gerencia']
-
-// Cache curto em memoria, por combinacao de filtros. O dashboard fica aberto e
-// se atualiza; sem isso, cada atualizacao bateria as onze consultas de novo para
-// devolver numeros que mudam em escala de horas.
-//
-// O limite existe porque a chave inclui o curso: sem ele, uma sessao clicando em
-// curso por curso faria o cache crescer sem fim dentro do processo.
-const CACHE_MS = 60 * 1000
-const CACHE_MAX = 24
-const cache = new Map()
-
-function doCache(chave) {
-  const item = cache.get(chave)
-  if (!item) return null
-  if (Date.now() - item.em > CACHE_MS) { cache.delete(chave); return null }
-  return item.dados
-}
-
-function guardar(chave, dados) {
-  // Map preserva a ordem de insercao: a primeira chave e a mais antiga.
-  if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value)
-  cache.set(chave, { em: Date.now(), dados })
-}
 
 const DIAS_ACEITOS = [7, 15, 30]
 

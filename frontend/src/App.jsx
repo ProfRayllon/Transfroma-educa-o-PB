@@ -10,6 +10,7 @@ import PublicCourses from './pages/PublicCourses'
 import Login from './pages/Login'
 import Painel from './pages/Painel'
 import PainelCapa from './pages/PainelCapa'
+import PainelPlanilhas from './pages/PainelPlanilhas'
 import Cursos from './pages/Cursos'
 import Producao from './pages/Producao'
 import CursoProducao from './pages/CursoProducao'
@@ -86,6 +87,9 @@ export default function App() {
                 Antes era tudo uma tela so, e quem entrava para ver a conclusao
                 passava por dez graficos que nao respondiam a pergunta dele. */}
             <Route path="painel" element={<PainelCapa />} />
+            {/* Rota fixa ao lado da dinamica: o React Router da precedencia ao
+                segmento literal, entao "planilhas" nunca e lido como uma secao. */}
+            <Route path="painel/planilhas" element={<PainelPlanilhas />} />
             <Route path="painel/:secao" element={<Painel />} />
             <Route path="cursos" element={<Cursos />} />
             <Route path="cursos/:courseId/ementa" element={<Ementa />} />

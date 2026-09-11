@@ -757,6 +757,67 @@ async function concluintesPorMunicipio({ cursoId = null, gre = null, limite = 8 
   }
 }
 
+
+/**
+ * O que ja foi enviado, curso por curso.
+ *
+ * Alimenta a tela de envio: quem abre precisa ver, antes de mandar a planilha
+ * da semana, qual foi a ultima de cada curso e de quando ela e. Sem isso a
+ * pergunta "ja mandei a do Google?" so se responde abrindo o painel e
+ * adivinhando pelos numeros.
+ *
+ * Todos os cursos entram, inclusive os que nunca receberam planilha: a lista e
+ * tambem o lembrete do que falta.
+ */
+async function enviosPorCurso() {
+  requireMysql()
+  const pool = getPool()
+
+  const [cursos] = await pool.query('SELECT id, name AS nome FROM courses ORDER BY name')
+  const [envios] = await pool.query(
+    `SELECT course_id, tipo, referencia, arquivo, linhas, importado_por, importado_em
+       FROM resultado_importacoes
+      ORDER BY referencia DESC, importado_em DESC`
+  )
+  const [[escolas]] = await pool.query(
+    `SELECT COUNT(*) AS escolas, COUNT(DISTINCT municipio) AS municipios,
+            MAX(atualizado_em) AS atualizadoEm
+       FROM escola_municipio`
+  )
+
+  const ultimo = (cursoId, tipo) => envios.find((e) => e.course_id === cursoId && e.tipo === tipo) || null
+  const formatar = (e) => (e ? {
+    referencia: dia(e.referencia),
+    arquivo: e.arquivo,
+    linhas: numero(e.linhas),
+    por: e.importado_por,
+    em: momento(e.importado_em),
+  } : null)
+
+  const lista = cursos.map((c) => ({
+    id: c.id,
+    nome: c.nome,
+    consolidado: formatar(ultimo(c.id, 'consolidado')),
+    avaliacao: formatar(ultimo(c.id, 'avaliacao')),
+    // Quantas semanas o curso ja tem de consolidado: e o tamanho da linha do
+    // tempo que o painel consegue desenhar.
+    semanas: envios.filter((e) => e.course_id === c.id && e.tipo === 'consolidado').length,
+  }))
+
+  // Curso com planilha primeiro: e o que a pessoa vem atualizar toda semana.
+  lista.sort((a, b) => Number(!!(b.consolidado || b.avaliacao)) - Number(!!(a.consolidado || a.avaliacao))
+    || a.nome.localeCompare(b.nome, 'pt-BR'))
+
+  return {
+    cursos: lista,
+    escolas: {
+      escolas: numero(escolas.escolas),
+      municipios: numero(escolas.municipios),
+      atualizadoEm: momento(escolas.atualizadoEm),
+    },
+  }
+}
+
 module.exports = {
   conclusao,
   conclusaoPorGre,
@@ -768,6 +829,7 @@ module.exports = {
   avaliacaoParaExportar,
   opcoesDeFiltro,
   evolucaoDaConclusao,
+  enviosPorCurso,
   escolasDoConsolidado,
   concluintesPorFuncao,
   listaDeConcluintes,
