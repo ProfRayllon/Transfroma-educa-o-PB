@@ -42,6 +42,21 @@ const diaCurto = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 const virgula = (n) => String(n).replace('.', ',')
 
 /**
+ * "1ª GRE" -> "1ª", para caber embaixo da barra.
+ *
+ * Antes era replace(' GRE', 'ª'), que supunha a GRE gravada sem o ordinal. A
+ * base grava "1ª GRE", e o eixo mostrava "1ªª". Aqui o ordinal so e posto se
+ * ainda nao estiver la, e o zero a esquerda de "01ª" cai.
+ */
+const rotuloGre = (gre) => {
+  const curto = String(gre || '').replace(/\s*GRE\s*$/i, '').replace(/^0+(?=\d)/, '').trim()
+  // Sem numero nenhum ("Sem GRE") o texto volta inteiro: cortar o "GRE" dele
+  // deixaria so "Sem" embaixo da barra.
+  if (!/\d/.test(curto)) return String(gre || '')
+  return /ª$/.test(curto) ? curto : `${curto}ª`
+}
+
+/**
  * Percentual com uma casa, sempre.
  *
  * 93 e 95,6 na mesma coluna desalinham a leitura: o olho compara a posicao do
@@ -270,9 +285,9 @@ export function BlocoInstitucional({
    * fatia seria repartir um numero que ninguem mediu.
    */
   const fatiasSituacao = [
-    { rotulo: 'Concluiram', valor: R.conclusao.concluintes, cor: 'var(--p-r5)' },
+    { rotulo: 'Concluíram', valor: R.conclusao.concluintes, cor: 'var(--p-r5)' },
     {
-      rotulo: 'Nao concluiram',
+      rotulo: 'Não concluíram',
       valor: Math.max(0, R.conclusao.base - R.conclusao.concluintes),
       cor: 'var(--p-trilhoForte)',
     },
@@ -337,14 +352,14 @@ export function BlocoInstitucional({
       return [...R.porGre]
         .sort((a, b) => b.taxa - a.taxa)
         .map((g) => ({
-          rotulo: g.gre.replace(' GRE', 'ª'),
+          rotulo: rotuloGre(g.gre),
           titulo: g.gre,
           valor: g.taxa,
           nota: `${br(g.concluidos)} de ${br(g.vinculos)}`,
         }))
     }
     return gresOrdenadas.map((g) => ({
-      rotulo: g.gre.replace(' GRE', 'ª'),
+      rotulo: rotuloGre(g.gre),
       titulo: g.gre,
       valor: visaoGre === 'cursistas' ? g.cursistas : g.adesao,
       nota: `${g.escolas} escolas`,

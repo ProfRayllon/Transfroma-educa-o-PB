@@ -966,7 +966,9 @@ export function ListaRanqueada({ itens, sufixo = '', mostrarPosicao = true, aoCl
           className={`flex items-center gap-3 rounded-lg transition-colors ${
             aoClicar ? 'cursor-pointer -mx-2 px-2 py-1' : ''
           }`}
-          style={selecionado === item.id
+          /* Os dois lados podem ser undefined -- ranking sem id e sem selecao --, e
+             undefined === undefined e verdadeiro: toda linha saia destacada. */
+          style={selecionado != null && selecionado === item.id
             ? { background: 'var(--p-trilho)', boxShadow: 'inset 2px 0 0 var(--p-roscaA)' }
             : undefined}
         >
