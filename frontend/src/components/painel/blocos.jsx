@@ -243,11 +243,17 @@ export function BlocoInstitucional({
    * Vai por variável CSS, e não por classe montada em texto: o Tailwind varre o
    * código-fonte à procura das classes que existem, e uma classe formada em
    * tempo de execução nunca chega ao CSS final.
+   *
+   * Cada fração vai dentro de `minmax(0, …)`. Um `1fr` puro não desce abaixo
+   * da largura mínima do conteúdo, e o conteúdo muda com a visão: na GRE, os
+   * dezesseis "65,0%" da Adesão são mais largos que os "2.184" do Volume, e o
+   * cartão engordava ao trocar de botão, empurrando o vizinho. Com o zero, a
+   * largura é só a proporção declarada, qualquer que seja o que está dentro.
    */
   const grade = (colunas) => {
     const vivas = colunas.filter(([bloco]) => mostra(bloco))
     if (!vivas.length) return null
-    return { '--cols': vivas.map(([, largura]) => largura).join(' ') }
+    return { '--cols': vivas.map(([, largura]) => `minmax(0,${largura})`).join(' ') }
   }
 
 
@@ -726,14 +732,17 @@ export function BlocoInstitucional({
             />
           }
         >
-          {visaoGre === 'conclusao' ? 'Conclusão por GRE' : 'Distribuição por GRE'}
+          {visaoGre === 'conclusao' ? 'Conclusão por GRE (%)' : 'Distribuição por GRE'}
         </TituloDeBloco>
 
         {/* A conclusão por GRE conta VÍNCULO, e não pessoa: a pergunta aqui é
             "como está a regional", e quem leciona em duas responde às duas.
             Somar as barras, por isso, não devolve o total do curso -- esse
             está no cartão de cima. */}
-        <div style={{ height: 236 }}>
+        {/* O gráfico ocupa a altura que o cartão tem, e não uma fixa: a frase
+            da Conclusão, embaixo, sai do espaço das barras em vez de esticar a
+            linha -- trocar de visão não mexe no tamanho de nada ao redor. */}
+        <div className="flex-1" style={{ minHeight: 150 }}>
           <BarrasRotuladas
             dados={barrasDaGre.map((g) => ({
               rotulo: g.rotulo,
@@ -741,7 +750,14 @@ export function BlocoInstitucional({
               valor: g.valor,
               nota: g.nota,
             }))}
-            formatarValor={(v) => (visaoGre === 'cursistas' ? br(v) : `${pctBr(v)}%`)}
+            /* Dezesseis barras dividem o cartão, e em tela de notebook cada
+               uma tem uns 30px: "93,6%" não cabe e os rótulos se atropelam.
+               A adesão chega do servidor já arredondada em inteiro -- o ",0"
+               seria casa decimal de enfeite, e sai. Na conclusão o décimo é
+               real (93,6 e 93,3 são GREs diferentes), então fica ele, e o "%"
+               sobe para o título, que vale para as dezesseis. */
+            formatarValor={(v) => (visaoGre === 'cursistas' ? br(v)
+              : visaoGre === 'adesao' ? `${Math.round(v)}%` : pctBr(v))}
           />
         </div>
 

@@ -441,9 +441,19 @@ export function BarrasComLinha({
 
 export function BarrasRotuladas({ dados, altura = '100%', formatarValor, mostrarValor = true }) {
   const maximo = Math.max(1, ...dados.map((d) => d.valor))
+  const formatar = (v) => (formatarValor ? formatarValor(v) : br(v))
+
+  /* O rótulo de cima encolhe com o espaço de cada barra, e não o contrário.
+     A largura do cartão é da grade; se o texto pudesse empurrá-la, trocar
+     "2.184" por "65,0%" mudaria o tamanho do cartão. A conta: cada barra tem
+     100/n da largura (cqw), um algarismo ocupa uns 0,6 do corpo da fonte, e
+     15% fica de folga entre vizinhos. Entre 9,5px e os 12px de sempre. */
+  const maiorTexto = Math.max(3, ...dados.map((d) => String(formatar(d.valor)).length))
+  const fonteDoValor = `clamp(9.5px, ${(142 / (Math.max(1, dados.length) * maiorTexto)).toFixed(2)}cqw, 12px)`
 
   return (
-    <div className="flex items-end gap-2 w-full" style={{ height: altura }}>
+    <div className="flex items-end gap-2 w-full"
+      style={{ height: altura, containerType: 'inline-size' }}>
       {dados.map((d, i) => {
         const alturaPct = (d.valor / maximo) * 100
         return (
@@ -452,8 +462,8 @@ export function BarrasRotuladas({ dados, altura = '100%', formatarValor, mostrar
                 ilegivel: quem chama passa mostrarValor={false} e o valor fica
                 so no balao ao passar o mouse. */}
             {mostrarValor && (
-              <span className="text-[12px] font-semibold tabular-nums shrink-0"
-                style={{ color: 'var(--p-texto2)' }}>
+              <span className="font-semibold tabular-nums shrink-0 whitespace-nowrap"
+                style={{ color: 'var(--p-texto2)', fontSize: fonteDoValor }}>
                 {formatarValor ? formatarValor(d.valor) : br(d.valor)}
               </span>
             )}
