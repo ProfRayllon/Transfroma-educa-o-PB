@@ -165,7 +165,19 @@ function lerPlanilha(buffer) {
 
     for (const linhaXml of xml.split('<row ').slice(1)) {
       const celulas = []
-      for (const m of linhaXml.matchAll(/<c r="([A-Z]+\d+)"([^>]*)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+      /*
+       * Os atributos param antes de uma "/" que feche a tag. Com `[^>]*` a
+       * barra de `<c r="N5" s="3"/>` entrava nos atributos, o `/>` deixava de
+       * casar, e o corpo ia buscar o `</c>` da celula SEGUINTE: a celula vazia
+       * roubava o valor da vizinha, e a vizinha sumia. Se a vizinha fosse
+       * texto, entrava o numero interno dela no lugar do texto.
+       *
+       * Acontece em toda celula vazia que tenha formatacao -- comum em
+       * planilha exportada, onde a coluna inteira tem estilo. Na avaliacao do
+       * Google, as 38 pessoas que pularam uma pergunta tiveram a nota geral
+       * gravada dentro dela.
+       */
+      for (const m of linhaXml.matchAll(/<c r="([A-Z]+\d+)"((?:[^>/]|\/(?!>))*)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
         const [, referencia, atributos, corpo = ''] = m
         const tipo = (atributos.match(/t="([^"]*)"/) || [])[1]
 
