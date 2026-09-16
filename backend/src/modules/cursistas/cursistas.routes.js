@@ -10,6 +10,7 @@ const admin = require('./cursistas.admin')
 const importacao = require('./cursistas.import')
 const {
   exportarInscritos,
+  exportarCadastros,
   inscritosParaCsv,
   inscritosParaXlsx,
   marcarComoExportadas,
@@ -230,6 +231,16 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
 
   router.get('/admin/cursistas-opcoes', ...soAdmin, tratar(async (_req, res) => {
     res.json(await repo.listarOpcoesFormulario())
+  }))
+
+  router.get('/admin/cursistas/exportar', ...soAdmin, tratar(async (req, res) => {
+    const actor = await getUsuarioInterno(req.user.id)
+    const arquivo = await exportarCadastros({ actor, req })
+    const nome = `base-completa-cadastros-${Date.now()}.xlsx`
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="${nome}"`)
+    res.send(arquivo)
   }))
 
   /**

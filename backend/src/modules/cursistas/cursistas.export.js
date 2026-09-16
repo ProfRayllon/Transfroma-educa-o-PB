@@ -74,6 +74,43 @@ const COLUNAS_COMPLETO = [
   { titulo: 'ultimo_acesso', valor: (r) => dataHora(r.last_access_at) },
 ]
 
+const COLUNAS_CADASTROS = [
+  { titulo: 'id', valor: (r) => r.id },
+  { titulo: 'usuario_id', valor: (r) => r.usuario_id || '' },
+  { titulo: 'cpf', valor: (r) => r.cpf },
+  { titulo: 'nome_completo', valor: (r) => r.name },
+  { titulo: 'status', valor: (r) => r.status || '' },
+  { titulo: 'origem', valor: (r) => r.origem || 'importado' },
+  { titulo: 'situacao_cadastro', valor: (r) => {
+    if (!r.password_hash) return 'Nunca acessou'
+    if (!Number(r.cadastro_confirmado)) return 'Cadastro incompleto'
+    return 'Cadastro confirmado'
+  } },
+  { titulo: 'cadastro_confirmado', valor: (r) => sim(r.cadastro_confirmado) },
+  { titulo: 'senha_definida', valor: (r) => r.password_hash ? 'Sim' : 'Nao' },
+  { titulo: 'primeiro_acesso', valor: (r) => dataHora(r.first_access_at) },
+  { titulo: 'ultimo_acesso', valor: (r) => dataHora(r.last_access_at) },
+  { titulo: 'data_confirmacao', valor: (r) => dataHora(r.data_confirmacao) },
+  { titulo: 'data_nascimento', valor: (r) => data(r.birth_date) },
+  { titulo: 'genero', valor: (r) => r.genero || '' },
+  { titulo: 'email_institucional', valor: (r) => r.email_institucional || '' },
+  { titulo: 'email_pessoal', valor: (r) => r.email_pessoal || '' },
+  { titulo: 'telefone', valor: (r) => r.phone || '' },
+  { titulo: 'funcao', valor: (r) => r.funcao || '' },
+  { titulo: 'componente_curricular', valor: (r) => r.componente_curricular || '' },
+  { titulo: 'eixo_tecnologico', valor: (r) => r.eixo_tecnologico || '' },
+  { titulo: 'curso_tecnico', valor: (r) => r.curso_tecnico || '' },
+  { titulo: 'formacao_encontrada', valor: (r) => sim(r.formacao_encontrada) },
+  { titulo: 'data_inicio_rede', valor: (r) => data(r.data_inicio_rede) },
+  { titulo: 'gre', valor: (r) => r.gre || '' },
+  { titulo: 'escola', valor: (r) => r.escola || '' },
+  { titulo: 'inep', valor: (r) => r.inep || '' },
+  { titulo: 'outras_escolas', valor: (r) => r.outras_escolas || '' },
+  { titulo: 'qtde_vinculos', valor: (r) => r.qtde_vinculos ?? '' },
+  { titulo: 'criado_em', valor: (r) => dataHora(r.created_at) },
+  { titulo: 'atualizado_em', valor: (r) => dataHora(r.updated_at) },
+]
+
 const FORMATOS = { ava: COLUNAS_AVA, completo: COLUNAS_COMPLETO }
 
 /**
@@ -170,6 +207,48 @@ function inscritosParaXlsx({ rows, colunas }) {
   })
 }
 
+/**
+ * Exporta a base inteira de cadastros, independente de inscricao em curso.
+ *
+ * Tem CPF e dados de contato, entao segue a mesma regra da exportacao de
+ * inscritos: apenas administrador e sempre com registro na auditoria.
+ */
+async function exportarCadastros({ actor, req }) {
+  requireMysql()
+
+  const [rows] = await getPool().execute(
+    `SELECT c.id, c.usuario_id, c.cpf, c.name, c.status, c.origem,
+            c.password_hash, c.cadastro_confirmado, c.first_access_at,
+            c.last_access_at, c.data_confirmacao,
+            c.email_institucional, c.email_pessoal, c.phone, c.birth_date, c.genero,
+            c.funcao, c.componente_curricular, c.eixo_tecnologico, c.curso_tecnico,
+            c.formacao_encontrada, c.data_inicio_rede, c.qtde_vinculos,
+            c.created_at, c.updated_at,
+            v.gre, v.escola, v.inep,
+            (SELECT GROUP_CONCAT(o.escola ORDER BY o.ordem SEPARATOR ' | ')
+               FROM cursista_vinculos o
+              WHERE o.cursista_id = c.id AND o.ordem > 1) AS outras_escolas
+       FROM cursistas c
+       LEFT JOIN cursista_vinculos v ON v.cursista_id = c.id AND v.ordem = 1
+      ORDER BY c.name`
+  )
+
+  await registrar({
+    actorType: 'admin',
+    actorId: actor?.id || null,
+    actorLabel: actor?.name || null,
+    action: ACOES.BASE_EXPORTADA,
+    req,
+    details: { tipo: 'cadastros', registros: rows.length },
+  })
+
+  return criarPlanilha({
+    nomeAba: 'Cadastros',
+    colunas: COLUNAS_CADASTROS,
+    linhas: rows,
+  })
+}
+
 /** Marca as inscricoes como enviadas ao AVA, para acompanhar o que ja foi carregado. */
 async function marcarComoExportadas({ courseId, edition }) {
   requireMysql()
@@ -190,8 +269,10 @@ module.exports = {
   exportarInscritos,
   inscritosParaCsv,
   inscritosParaXlsx,
+  exportarCadastros,
   marcarComoExportadas,
   COLUNAS_AVA,
   COLUNAS_COMPLETO,
+  COLUNAS_CADASTROS,
   FORMATOS,
 }

@@ -110,10 +110,10 @@ function InscricoesPorCurso({ cursos, edicao, aoExportar, exportando }) {
           onClick={() => aoExportar(null)}
           disabled={Boolean(exportando) || totalInscritos === 0}
           className="btn-secondary text-xs disabled:opacity-40"
-          title={totalInscritos === 0 ? 'Nenhuma inscriÃ§Ã£o para exportar' : 'Baixar base completa de inscritos em XLSX'}
+          title={totalInscritos === 0 ? 'Nenhuma inscriÃ§Ã£o para exportar' : 'Baixar todos os inscritos em XLSX'}
         >
           <Download size={13} />
-          {exportando === 'todos' ? 'Gerando...' : 'Baixar base completa'}
+          {exportando === 'todos' ? 'Gerando...' : 'Baixar inscritos'}
         </button>
       </div>
 
@@ -236,6 +236,7 @@ export default function Cursistas() {
   const [abaPrevia, setAbaPrevia] = useState('novos')
   const [resultadoImport, setResultadoImport] = useState(null)
   const [exportando, setExportando] = useState(false)
+  const [exportandoCadastros, setExportandoCadastros] = useState(false)
   const [confirmarReset, setConfirmarReset] = useState(null)
   const arquivoRef = useRef(null)
 
@@ -427,6 +428,28 @@ export default function Cursistas() {
     }
   }
 
+  const exportarCadastros = async () => {
+    setExportandoCadastros(true)
+    try {
+      const resposta = await api.get('/cursistas/admin/cursistas/exportar', {
+        responseType: 'blob',
+      })
+      const url = URL.createObjectURL(new Blob([resposta.data], { type: TIPO_XLSX }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `base-completa-cadastros-${new Date().toISOString().slice(0, 10)}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+      mostrar('ok', 'Base completa de cadastros gerada. O download foi registrado na trilha de auditoria.')
+    } catch (error) {
+      mostrar('erro', getApiErrorMessage(error, 'Erro ao gerar a base completa de cadastros.'))
+    } finally {
+      setExportandoCadastros(false)
+    }
+  }
+
   const resetar = async () => {
     if (!confirmarReset) return
     try {
@@ -512,7 +535,16 @@ export default function Cursistas() {
               onClick passaria o evento do clique no lugar do curso. */}
           <button onClick={() => exportar(null)} disabled={Boolean(exportando)} className="btn-primary text-sm disabled:opacity-50">
             <Download size={14} />
-            {exportando === 'todos' ? 'Gerando...' : 'Baixar base completa'}
+            {exportando === 'todos' ? 'Gerando...' : 'Baixar inscritos'}
+          </button>
+          <button
+            onClick={exportarCadastros}
+            disabled={exportandoCadastros}
+            className="btn-primary text-sm disabled:opacity-50"
+            title="Baixar todos os cadastros, mesmo sem inscriÃ§Ã£o em curso"
+          >
+            <FileSpreadsheet size={14} />
+            {exportandoCadastros ? 'Gerando...' : 'Baixar base completa'}
           </button>
         </div>
       </div>
