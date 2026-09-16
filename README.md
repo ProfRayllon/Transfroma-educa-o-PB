@@ -324,4 +324,6 @@ Depois, entre no painel com o admin restante e atualize nome, e-mail e senha par
 ##------------------------------
 Pronto, você está de volta na branch e o ambiente subiu. Recarregue: http://127.0.0.1:5173 → Dashboard
 
-Entre como admin@transforma.pb.gov.br, senha Transforma@2026.
+Entre como admin@transforma.pb.gov.br, senha LocalAdmin2026!.
+
+admin@transforma.pb.gov.br Transforma@2026.
