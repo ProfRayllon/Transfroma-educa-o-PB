@@ -23,6 +23,140 @@ const ASSINATURA_FIM_CENTRAL = 0x06054b50
  */
 const MAX_DESCOMPRIMIDO = 300 * 1024 * 1024
 
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
+  let c = n
+  for (let k = 0; k < 8; k += 1) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1)
+  return c >>> 0
+})
+
+function crc32(buffer) {
+  let crc = 0xffffffff
+  for (const byte of buffer) crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8)
+  return (crc ^ 0xffffffff) >>> 0
+}
+
+function escaparXml(valor) {
+  return String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function referenciaCelula(linha, coluna) {
+  let n = coluna + 1
+  let letras = ''
+  while (n > 0) {
+    const resto = (n - 1) % 26
+    letras = String.fromCharCode(65 + resto) + letras
+    n = Math.floor((n - 1) / 26)
+  }
+  return `${letras}${linha + 1}`
+}
+
+function criarZip(entradas) {
+  const partes = []
+  const central = []
+  let offset = 0
+
+  for (const entrada of entradas) {
+    const nome = Buffer.from(entrada.nome, 'utf8')
+    const dados = Buffer.isBuffer(entrada.conteudo) ? entrada.conteudo : Buffer.from(String(entrada.conteudo), 'utf8')
+    const comprimido = zlib.deflateRawSync(dados)
+    const crc = crc32(dados)
+
+    const local = Buffer.alloc(30)
+    local.writeUInt32LE(0x04034b50, 0)
+    local.writeUInt16LE(20, 4)
+    local.writeUInt16LE(0x0800, 6)
+    local.writeUInt16LE(8, 8)
+    local.writeUInt32LE(0, 10)
+    local.writeUInt32LE(crc, 14)
+    local.writeUInt32LE(comprimido.length, 18)
+    local.writeUInt32LE(dados.length, 22)
+    local.writeUInt16LE(nome.length, 26)
+    local.writeUInt16LE(0, 28)
+
+    partes.push(local, nome, comprimido)
+
+    const cabecalho = Buffer.alloc(46)
+    cabecalho.writeUInt32LE(ASSINATURA_CENTRAL, 0)
+    cabecalho.writeUInt16LE(20, 4)
+    cabecalho.writeUInt16LE(20, 6)
+    cabecalho.writeUInt16LE(0x0800, 8)
+    cabecalho.writeUInt16LE(8, 10)
+    cabecalho.writeUInt32LE(0, 12)
+    cabecalho.writeUInt32LE(crc, 16)
+    cabecalho.writeUInt32LE(comprimido.length, 20)
+    cabecalho.writeUInt32LE(dados.length, 24)
+    cabecalho.writeUInt16LE(nome.length, 28)
+    cabecalho.writeUInt16LE(0, 30)
+    cabecalho.writeUInt16LE(0, 32)
+    cabecalho.writeUInt16LE(0, 34)
+    cabecalho.writeUInt16LE(0, 36)
+    cabecalho.writeUInt32LE(0, 38)
+    cabecalho.writeUInt32LE(offset, 42)
+    central.push(cabecalho, nome)
+
+    offset += local.length + nome.length + comprimido.length
+  }
+
+  const centralOffset = offset
+  const centralBuffer = Buffer.concat(central)
+  const fim = Buffer.alloc(22)
+  fim.writeUInt32LE(ASSINATURA_FIM_CENTRAL, 0)
+  fim.writeUInt16LE(0, 4)
+  fim.writeUInt16LE(0, 6)
+  fim.writeUInt16LE(entradas.length, 8)
+  fim.writeUInt16LE(entradas.length, 10)
+  fim.writeUInt32LE(centralBuffer.length, 12)
+  fim.writeUInt32LE(centralOffset, 16)
+  fim.writeUInt16LE(0, 20)
+
+  return Buffer.concat([...partes, centralBuffer, fim])
+}
+
+/**
+ * Escritor minimo de .xlsx.
+ *
+ * Gera uma unica aba com strings inline. E suficiente para relatorios tabulares
+ * e evita puxar uma dependencia grande so para exportar a base.
+ */
+function criarPlanilha({ nomeAba = 'Dados', colunas, linhas }) {
+  const cabecalho = colunas.map((coluna) => coluna.titulo)
+  const dados = [cabecalho, ...linhas.map((linha) => colunas.map((coluna) => coluna.valor(linha)))]
+  const largura = colunas.map((coluna, indice) => {
+    const maior = dados.reduce((max, linha) => Math.max(max, String(linha[indice] ?? '').length), 0)
+    return Math.min(60, Math.max(10, maior + 2))
+  })
+
+  const linhasXml = dados.map((linha, rowIndex) => {
+    const celulas = linha.map((valor, colIndex) => {
+      let texto = String(valor ?? '')
+      if (/^[=+\-@\t\r]/.test(texto)) texto = `'${texto}`
+      return `<c r="${referenciaCelula(rowIndex, colIndex)}" t="inlineStr"><is><t>${escaparXml(texto)}</t></is></c>`
+    }).join('')
+    return `<row r="${rowIndex + 1}">${celulas}</row>`
+  }).join('')
+
+  const cols = largura.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')
+
+  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><cols>${cols}</cols><sheetData>${linhasXml}</sheetData></worksheet>`
+
+  return criarZip([
+    { nome: '[Content_Types].xml', conteudo: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>` },
+    { nome: '_rels/.rels', conteudo: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>` },
+    { nome: 'xl/workbook.xml', conteudo: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${escaparXml(String(nomeAba).slice(0, 31) || 'Dados')}" sheetId="1" r:id="rId1"/></sheets></workbook>` },
+    { nome: 'xl/_rels/workbook.xml.rels', conteudo: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>` },
+    { nome: 'xl/worksheets/sheet1.xml', conteudo: sheet },
+  ])
+}
+
 /** Extrai as entradas do ZIP percorrendo o diretorio central. */
 function lerZip(buffer) {
   // O fim do diretorio central fica no rodape; pode haver comentario depois dele.
@@ -212,4 +346,4 @@ function lerPlanilha(buffer) {
   return resultado
 }
 
-module.exports = { lerPlanilha, normalizarData }
+module.exports = { lerPlanilha, normalizarData, criarPlanilha }

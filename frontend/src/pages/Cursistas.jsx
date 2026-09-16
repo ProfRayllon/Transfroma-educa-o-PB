@@ -110,10 +110,10 @@ function InscricoesPorCurso({ cursos, edicao, aoExportar, exportando }) {
           onClick={() => aoExportar(null)}
           disabled={Boolean(exportando) || totalInscritos === 0}
           className="btn-secondary text-xs disabled:opacity-40"
-          title={totalInscritos === 0 ? 'Nenhuma inscrição para exportar' : 'Baixar todos os cursos num arquivo'}
+          title={totalInscritos === 0 ? 'Nenhuma inscriÃ§Ã£o para exportar' : 'Baixar base completa de inscritos em XLSX'}
         >
           <Download size={13} />
-          {exportando === 'todos' ? 'Gerando...' : 'Baixar tudo'}
+          {exportando === 'todos' ? 'Gerando...' : 'Baixar base completa'}
         </button>
       </div>
 
@@ -400,10 +400,10 @@ export default function Cursistas() {
     setExportando(curso ? curso.id : 'todos')
     try {
       const resposta = await api.get('/cursistas/admin/inscricoes/exportar', {
-        params: curso ? { courseId: curso.id } : {},
+        params: { ...(curso ? { courseId: curso.id } : {}), arquivo: 'xlsx' },
         responseType: 'blob',
       })
-      const url = URL.createObjectURL(new Blob([resposta.data], { type: 'text/csv;charset=utf-8' }))
+      const url = URL.createObjectURL(new Blob([resposta.data], { type: TIPO_XLSX }))
       const link = document.createElement('a')
       link.href = url
       // Nome de arquivo a partir do nome do curso: separa o acento da letra
@@ -414,12 +414,12 @@ export default function Cursistas() {
         ? curso.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
             .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50)
         : 'todos-os-cursos'
-      link.download = `inscritos-${sufixo}-${new Date().toISOString().slice(0, 10)}.csv`
+      link.download = `inscritos-${sufixo}-${new Date().toISOString().slice(0, 10)}.xlsx`
       document.body.appendChild(link)
       link.click()
       link.remove()
       URL.revokeObjectURL(url)
-      mostrar('ok', 'Planilha gerada. O download foi registrado na trilha de auditoria.')
+      mostrar('ok', 'Planilha XLSX gerada. O download foi registrado na trilha de auditoria.')
     } catch (error) {
       mostrar('erro', getApiErrorMessage(error, 'Erro ao gerar a planilha.'))
     } finally {
@@ -512,7 +512,7 @@ export default function Cursistas() {
               onClick passaria o evento do clique no lugar do curso. */}
           <button onClick={() => exportar(null)} disabled={Boolean(exportando)} className="btn-primary text-sm disabled:opacity-50">
             <Download size={14} />
-            {exportando === 'todos' ? 'Gerando...' : 'Exportar inscritos'}
+            {exportando === 'todos' ? 'Gerando...' : 'Baixar base completa'}
           </button>
         </div>
       </div>

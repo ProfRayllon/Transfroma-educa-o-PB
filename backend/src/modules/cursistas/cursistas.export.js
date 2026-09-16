@@ -2,6 +2,7 @@
 
 const { getPool, requireMysql } = require('../../shared/db')
 const { registrar, ACOES } = require('../../shared/audit')
+const { criarPlanilha } = require('../../shared/xlsx')
 
 /**
  * Mapa de colunas da planilha enviada ao AVA.
@@ -149,7 +150,24 @@ async function exportarInscritos({ courseId = null, edition, formato = 'completo
     details: { courseId: courseId ? Number(courseId) : 'todos', edition, formato, registros: rows.length },
   })
 
-  return { csv, total: rows.length }
+  return { csv, rows, colunas, total: rows.length }
+}
+
+function inscritosParaCsv({ csv, rows, colunas }) {
+  if (csv) return csv
+  const linhas = [
+    colunas.map((coluna) => coluna.titulo).join(';'),
+    ...rows.map((row) => colunas.map((coluna) => escaparCsv(coluna.valor(row))).join(';')),
+  ]
+  return `\uFEFF${linhas.join('\r\n')}\r\n`
+}
+
+function inscritosParaXlsx({ rows, colunas }) {
+  return criarPlanilha({
+    nomeAba: 'Inscritos',
+    colunas,
+    linhas: rows,
+  })
 }
 
 /** Marca as inscricoes como enviadas ao AVA, para acompanhar o que ja foi carregado. */
@@ -168,4 +186,12 @@ async function marcarComoExportadas({ courseId, edition }) {
   )
 }
 
-module.exports = { exportarInscritos, marcarComoExportadas, COLUNAS_AVA, COLUNAS_COMPLETO, FORMATOS }
+module.exports = {
+  exportarInscritos,
+  inscritosParaCsv,
+  inscritosParaXlsx,
+  marcarComoExportadas,
+  COLUNAS_AVA,
+  COLUNAS_COMPLETO,
+  FORMATOS,
+}

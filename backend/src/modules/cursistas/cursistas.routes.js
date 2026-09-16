@@ -8,7 +8,12 @@ const repo = require('./cursistas.repo')
 const service = require('./cursistas.service')
 const admin = require('./cursistas.admin')
 const importacao = require('./cursistas.import')
-const { exportarInscritos, marcarComoExportadas } = require('./cursistas.export')
+const {
+  exportarInscritos,
+  inscritosParaCsv,
+  inscritosParaXlsx,
+  marcarComoExportadas,
+} = require('./cursistas.export')
 // Limites declarados como TOTAL pretendido; `porProcesso` divide pelo numero de
 // processos do cluster, senao cada um contaria os seus e o freio valeria o dobro.
 const { porProcesso } = require('../../shared/concorrencia')
@@ -340,7 +345,7 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
 
   router.get('/admin/inscricoes/exportar', ...soAdmin, tratar(async (req, res) => {
     const actor = await getUsuarioInterno(req.user.id)
-    const { csv, total } = await exportarInscritos({
+    const resultado = await exportarInscritos({
       courseId: req.query.courseId ? Number(req.query.courseId) : null,
       edition: req.query.edition || service.EDICAO_ATUAL,
       // 'completo' e o padrao: e o relatorio que a coordenacao usa no dia a dia.
@@ -357,11 +362,14 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
       })
     }
 
-    const nome = `inscritos-${req.query.edition || service.EDICAO_ATUAL}-${Date.now()}.csv`
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    const formatoArquivo = req.query.arquivo === 'xlsx' ? 'xlsx' : 'csv'
+    const nome = `inscritos-${req.query.edition || service.EDICAO_ATUAL}-${Date.now()}.${formatoArquivo}`
+    res.setHeader('Content-Type', formatoArquivo === 'xlsx'
+      ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      : 'text/csv; charset=utf-8')
     res.setHeader('Content-Disposition', `attachment; filename="${nome}"`)
-    res.setHeader('X-Total-Registros', String(total))
-    res.send(csv)
+    res.setHeader('X-Total-Registros', String(resultado.total))
+    res.send(formatoArquivo === 'xlsx' ? inscritosParaXlsx(resultado) : inscritosParaCsv(resultado))
   }))
 
   return router
