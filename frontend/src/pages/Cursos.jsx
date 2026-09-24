@@ -25,6 +25,7 @@ import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 import api, { getApiErrorMessage } from '../lib/api'
 import { mandaEmCursos } from '../lib/perfil'
+import { quandoInscricao } from '../lib/curso'
 
 const PRIMARY_TRAILS = {
   'TRILHAS TRANSVERSAIS': [
@@ -117,6 +118,22 @@ function deadlineBadge(deadline) {
   return null
 }
 
+function situacaoInscricao(curso) {
+  const config = {
+    aberto: { label: 'Inscricoes abertas', dot: 'bg-green-500', cls: 'bg-green-50 text-green-700 border-green-200' },
+    em_breve: { label: 'Inscricoes proximas', dot: 'bg-amber-500', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+    encerrado: { label: 'Inscricoes encerradas', dot: 'bg-gray-400', cls: 'bg-gray-100 text-gray-600 border-gray-200' },
+    fechado: { label: 'Inscricoes fechadas', dot: 'bg-slate-400', cls: 'bg-slate-100 text-slate-600 border-slate-200' },
+  }
+  return config[curso?.situacao] || config.fechado
+}
+
+function ordenarCursosDaGestao(cursos) {
+  const prioridade = { aberto: 0, em_breve: 1, encerrado: 2, fechado: 3 }
+  const peso = (curso) => prioridade[curso?.situacao] ?? 9
+  return [...cursos].sort((a, b) => peso(a) - peso(b) || String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'))
+}
+
 function MultiSelectFilter({ label, placeholder, options, values, onChange }) {
   const [open, setOpen] = useState(false)
 
@@ -198,7 +215,10 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
   const ementaApproved = ementaStatus?.coordinatorStatus === 'valido'
   const alert = deadlineBadge(course.deadline)
   const [statusAvaSaving, setStatusAvaSaving] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const canEditStatusAva = user?.role === 'ti' || mandaEmCursos(user)
+  const inscricao = situacaoInscricao(course)
+  const textoInscricao = quandoInscricao(course)
 
   const handleStatusAvaChange = async (event) => {
     const value = event.target.value
@@ -224,18 +244,27 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
 
   return (
     <div className="card overflow-hidden hover:shadow-lg transition-shadow duration-200 flex flex-col">
-      <div className="relative h-36 overflow-hidden">
+      <div className="relative h-48 overflow-hidden bg-gray-950">
         {course.image ? (
-          <img src={course.image} alt={course.name} className="w-full h-full object-cover" />
+          <img src={course.image} alt={course.name} className="w-full h-full object-contain" />
         ) : (
           <div className={`w-full h-full bg-gradient-to-br ${color.grad} flex items-center justify-center`}>
             <span className="text-white/25 font-black text-6xl select-none">{course.name[0]}</span>
           </div>
         )}
 
-        <div className="absolute left-3 bottom-3">
-          <span className={`inline-flex items-center px-2.5 py-1 rounded-full border text-[10px] font-semibold bg-white/90 backdrop-blur-sm ${color.pill}`}>
+        <div className="absolute inset-x-0 top-0 p-4 bg-gradient-to-b from-black/75 via-black/35 to-transparent">
+          <h3 className="font-bold text-white text-lg leading-tight drop-shadow-sm">{course.name}</h3>
+          <p className="text-xs font-medium text-white/85 mt-1">{course.trail || '--'}</p>
+        </div>
+
+        <div className="absolute left-3 bottom-3 flex flex-wrap gap-2">
+          <span className={`inline-flex items-center px-2.5 py-1 rounded-full border text-[10px] font-semibold bg-white/95 backdrop-blur-sm ${color.pill}`}>
             {course.primaryTrail}
+          </span>
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-semibold bg-white/95 backdrop-blur-sm ${inscricao.cls}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${inscricao.dot}`} />
+            {inscricao.label}
           </span>
         </div>
 
@@ -249,12 +278,12 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
       </div>
 
       <div className="p-4 flex flex-col flex-1 gap-3">
-        <div>
+        <div className="hidden">
           <h3 className="font-semibold text-gray-900 text-sm leading-tight">{course.name}</h3>
           <p className="text-xs font-medium text-gray-600 mt-1">{course.trail || '--'}</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 text-xs text-gray-500">
+        <div className={`order-3 grid grid-cols-2 gap-3 text-xs text-gray-500 ${detailsOpen ? '' : 'hidden'}`}>
           <div className="rounded-xl bg-gray-50 px-3 py-2 border border-gray-100">
             <div className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Coordenador</div>
             <div className="flex items-center gap-2 font-medium text-gray-700">
@@ -306,7 +335,7 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
           </div>
         </div>
 
-        <div>
+        <div className="order-1">
           <div className="flex items-end justify-between mb-2">
             <span className="text-xs font-medium text-gray-500">Progresso</span>
             <span className={`text-2xl font-black leading-none ${color.accent}`}>{progress}%</span>
@@ -322,7 +351,25 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
           </div>
         </div>
 
-        <div className="space-y-1.5 text-xs text-gray-500 pt-0.5">
+        <button
+          type="button"
+          onClick={() => setDetailsOpen((open) => !open)}
+          className="order-2 flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 transition-colors"
+        >
+          <span>{detailsOpen ? 'Recolher informacoes' : 'Mostrar informacoes'}</span>
+          <ChevronDown size={14} className={`transition-transform ${detailsOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {textoInscricao && detailsOpen && (
+          <div className={`order-3 rounded-xl px-3 py-2 border text-xs ${inscricao.cls}`}>
+            <div className="flex items-center gap-2 font-semibold">
+              <span className={`w-2 h-2 rounded-full ${inscricao.dot}`} />
+              {textoInscricao}
+            </div>
+          </div>
+        )}
+
+        <div className={`order-3 space-y-1.5 text-xs text-gray-500 pt-0.5 ${detailsOpen ? '' : 'hidden'}`}>
           <div>
             <div className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Professores/produtores</div>
             {course.producers?.length > 0 ? (
@@ -354,7 +401,7 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
           </div>
         </div>
 
-        <div className="flex items-center gap-2 pt-1 border-t border-gray-100 mt-auto">
+        <div className="order-4 flex items-center gap-2 pt-1 border-t border-gray-100 mt-auto">
           <button
             onClick={() => navigate(`/cursos/${course.id}/producao`)}
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold text-white transition-opacity hover:opacity-90"
@@ -380,7 +427,7 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
           >
             Editar
           </button>
-          {canDeleteThis && (
+          {canDeleteThis && detailsOpen && (
             <button
               onClick={() => onDelete(course)}
               title="Excluir curso"
@@ -855,7 +902,7 @@ export default function Cursos() {
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase()
 
-    return courses.filter((course) => {
+    return ordenarCursosDaGestao(courses.filter((course) => {
       if (filters.primaryTrails.length > 0 && !filters.primaryTrails.includes(course.primaryTrail)) return false
       if (filters.trails.length > 0 && !filters.trails.includes(course.trail)) return false
       if (filters.courses.length > 0 && !filters.courses.includes(course.name)) return false
@@ -871,7 +918,7 @@ export default function Cursos() {
         course.supervisorName,
         course.coordinatorName,
       ].some((value) => (value || '').toLowerCase().includes(query))
-    })
+    }))
   }, [courses, filters, search])
 
   const handleSave = async (form) => {
