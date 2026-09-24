@@ -8,9 +8,10 @@ import {
   Camera,
   CheckCircle,
   ChevronDown,
-  ChevronRight,
   Clock,
   FileText,
+  Eye,
+  Pencil,
   Plus,
   Search,
   SlidersHorizontal,
@@ -243,6 +244,7 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
   const progress = totalContents > 0 ? Math.round((completedSessions / totalContents) * 100) : 0
 
   return (
+    <>
     <div className="card overflow-hidden hover:shadow-lg transition-shadow duration-200 flex flex-col">
       <div className="relative h-48 overflow-hidden bg-gray-950">
         {course.image ? (
@@ -283,7 +285,7 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
           <p className="text-xs font-medium text-gray-600 mt-1">{course.trail || '--'}</p>
         </div>
 
-        <div className={`order-3 grid grid-cols-2 gap-3 text-xs text-gray-500 ${detailsOpen ? '' : 'hidden'}`}>
+        <div className="hidden">
           <div className="rounded-xl bg-gray-50 px-3 py-2 border border-gray-100">
             <div className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Coordenador</div>
             <div className="flex items-center gap-2 font-medium text-gray-700">
@@ -351,16 +353,8 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setDetailsOpen((open) => !open)}
-          className="order-2 flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 transition-colors"
-        >
-          <span>{detailsOpen ? 'Recolher informacoes' : 'Mostrar informacoes'}</span>
-          <ChevronDown size={14} className={`transition-transform ${detailsOpen ? 'rotate-180' : ''}`} />
-        </button>
 
-        {textoInscricao && detailsOpen && (
+        {false && textoInscricao && (
           <div className={`order-3 rounded-xl px-3 py-2 border text-xs ${inscricao.cls}`}>
             <div className="flex items-center gap-2 font-semibold">
               <span className={`w-2 h-2 rounded-full ${inscricao.dot}`} />
@@ -369,7 +363,7 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
           </div>
         )}
 
-        <div className={`order-3 space-y-1.5 text-xs text-gray-500 pt-0.5 ${detailsOpen ? '' : 'hidden'}`}>
+        <div className="hidden">
           <div>
             <div className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Professores/produtores</div>
             {course.producers?.length > 0 ? (
@@ -401,44 +395,134 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
           </div>
         </div>
 
-        <div className="order-4 flex items-center gap-2 pt-1 border-t border-gray-100 mt-auto">
+        <div className="order-4 flex items-center gap-1.5 pt-1 border-t border-gray-100 mt-auto">
           <button
             onClick={() => navigate(`/cursos/${course.id}/producao`)}
+            title="Producao"
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold text-white transition-opacity hover:opacity-90"
             style={{ backgroundColor: color.bar }}
           >
-            Produção
-            <ChevronRight size={13} />
+            <BookOpen size={14} />
+            <span className="hidden sm:inline">Producao</span>
           </button>
           <button
             onClick={() => navigate(`/cursos/${course.id}/ementa`)}
-            className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors border
+            className={`flex items-center justify-center w-9 h-9 rounded-lg text-xs font-medium transition-colors border
               ${ementaApproved
                 ? 'text-green-700 bg-green-50 hover:bg-green-100 border-green-200'
                 : 'text-brand-700 bg-brand-50 hover:bg-brand-100 border-brand-100'}`}
             title={ementaApproved ? 'Ementa aprovada' : 'Ementa do curso'}
           >
             {ementaApproved ? <CheckCircle size={13} /> : <FileText size={13} />}
-            Ementa
           </button>
           <button
             onClick={() => onEdit(course)}
-            className="px-3 py-2 rounded-lg text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
+            title="Editar curso"
+            className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
           >
-            Editar
+            <Pencil size={14} />
           </button>
-          {canDeleteThis && detailsOpen && (
-            <button
-              onClick={() => onDelete(course)}
-              title="Excluir curso"
-              className="p-2 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-            >
-              <Trash2 size={14} />
-            </button>
-          )}
+          <button
+            onClick={() => setDetailsOpen(true)}
+            title="Visualizar dados do curso"
+            className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
+          >
+            <Eye size={15} />
+          </button>
         </div>
       </div>
     </div>
+    <Modal
+      open={detailsOpen}
+      onClose={() => setDetailsOpen(false)}
+      title={course.name}
+      size="lg"
+      footer={(
+        <>
+          {canDeleteThis && (
+            <button onClick={() => { setDetailsOpen(false); onDelete(course) }} className="btn-secondary text-red-600 hover:text-red-700">
+              <Trash2 size={14} /> Excluir
+            </button>
+          )}
+          <button onClick={() => setDetailsOpen(false)} className="btn-secondary">Fechar</button>
+          <button onClick={() => { setDetailsOpen(false); onEdit(course) }} className="btn-primary">
+            <Pencil size={14} /> Editar
+          </button>
+        </>
+      )}
+    >
+      <div className="space-y-4">
+        {textoInscricao && (
+          <div className={`rounded-xl px-3 py-2 border text-xs ${inscricao.cls}`}>
+            <div className="flex items-center gap-2 font-semibold">
+              <span className={`w-2 h-2 rounded-full ${inscricao.dot}`} />
+              {textoInscricao}
+            </div>
+          </div>
+        )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-gray-500">
+          <div className="rounded-xl bg-gray-50 px-3 py-2 border border-gray-100">
+            <div className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Coordenador</div>
+            <div className="flex items-center gap-2 font-medium text-gray-700">
+              <PersonAvatar name={course.coordinatorName} avatar={course.coordinatorAvatar} size="sm" />
+              <span className="truncate">{course.coordinatorName || '--'}</span>
+            </div>
+          </div>
+          <div className="rounded-xl bg-gray-50 px-3 py-2 border border-gray-100">
+            <div className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Supervisor</div>
+            <div className="flex items-center gap-2 font-medium text-gray-700">
+              <PersonAvatar name={course.supervisorName} avatar={course.supervisorAvatar} size="sm" />
+              <span className="truncate">{course.supervisorName || '--'}</span>
+            </div>
+          </div>
+          <div className="rounded-xl bg-gray-50 px-3 py-2 border border-gray-100 sm:col-span-2">
+            <div className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Professores/produtores</div>
+            {course.producers?.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {course.producers.map((producer) => (
+                  <div key={producer.id} className="flex items-center gap-1.5 min-w-0">
+                    <PersonAvatar name={producer.name} avatar={producer.avatar} size="sm" />
+                    <span className="truncate max-w-[160px]">{producer.name}</span>
+                  </div>
+                ))}
+              </div>
+            ) : <span className="text-xs text-gray-400">Nenhum produtor vinculado</span>}
+          </div>
+          <div className="rounded-xl bg-gray-50 px-3 py-2 border border-gray-100 sm:col-span-2">
+            <div className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Revisor(a)(es)</div>
+            {course.revisors?.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {course.revisors.map((revisor) => (
+                  <div key={revisor.id} className="flex items-center gap-1.5 min-w-0 font-medium text-gray-700">
+                    <PersonAvatar name={revisor.name} avatar={revisor.avatar} size="sm" />
+                    <span className="truncate max-w-[160px]">{revisor.name}</span>
+                  </div>
+                ))}
+              </div>
+            ) : <span className="text-gray-400">Nenhum revisor(a) vinculado</span>}
+          </div>
+          <div className="rounded-xl bg-gray-50 px-3 py-2 border border-gray-100">
+            <div className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Conteudos / Modulos</div>
+            <div className="font-medium text-gray-700">{totalContents} conteudos - {totalModules} modulo{totalModules !== 1 ? 's' : ''}</div>
+          </div>
+          <div className="rounded-xl bg-gray-50 px-3 py-2 border border-gray-100">
+            <div className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Status no AVA</div>
+            {canEditStatusAva ? (
+              <select
+                value={course.statusAva || 'nao_publicado'}
+                onChange={handleStatusAvaChange}
+                disabled={statusAvaSaving}
+                className="text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+              >
+                <option value="nao_publicado">Nao publicado</option>
+                <option value="publicado">Publicado</option>
+              </select>
+            ) : <Badge status={course.statusAva || 'nao_publicado'} />}
+          </div>
+        </div>
+      </div>
+    </Modal>
+    </>
   )
 }
 
@@ -1137,7 +1221,7 @@ export default function Cursos() {
           <p className="text-sm">Nenhum curso encontrado.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
           {filtered.map((course) => (
             <CourseCard
               key={course.id}
