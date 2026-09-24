@@ -246,19 +246,14 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
   return (
     <>
     <div className="card overflow-hidden hover:shadow-lg transition-shadow duration-200 flex flex-col">
-      <div className="relative h-48 overflow-hidden bg-gray-950">
+      <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
         {course.image ? (
-          <img src={course.image} alt={course.name} className="w-full h-full object-contain" />
+          <img src={course.image} alt={course.name} className="w-full h-full object-cover" />
         ) : (
           <div className={`w-full h-full bg-gradient-to-br ${color.grad} flex items-center justify-center`}>
             <span className="text-white/25 font-black text-6xl select-none">{course.name[0]}</span>
           </div>
         )}
-
-        <div className="absolute inset-x-0 top-0 p-4 bg-gradient-to-b from-black/75 via-black/35 to-transparent">
-          <h3 className="font-bold text-white text-lg leading-tight drop-shadow-sm">{course.name}</h3>
-          <p className="text-xs font-medium text-white/85 mt-1">{course.trail || '--'}</p>
-        </div>
 
         <div className="absolute left-3 bottom-3 flex flex-wrap gap-2">
           <span className={`inline-flex items-center px-2.5 py-1 rounded-full border text-[10px] font-semibold bg-white/95 backdrop-blur-sm ${color.pill}`}>
@@ -280,7 +275,7 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
       </div>
 
       <div className="p-4 flex flex-col flex-1 gap-3">
-        <div className="hidden">
+        <div>
           <h3 className="font-semibold text-gray-900 text-sm leading-tight">{course.name}</h3>
           <p className="text-xs font-medium text-gray-600 mt-1">{course.trail || '--'}</p>
         </div>
