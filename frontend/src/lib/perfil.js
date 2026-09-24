@@ -72,7 +72,7 @@ const TELAS_POR_PERFIL = {
   // producao, '/painel' veio do dashboard. Perder qualquer um aqui tira um
   // acesso que o backend concede -- o item apareceria no menu e o clique
   // cairia de volta em Cursos.
-  gerencia: ['/cursos', '/painel', '/frequencia', '/acessos', '/perfil', '/notificacoes'],
+  gerencia: ['/cursos', '/painel', '/acessos', '/perfil', '/notificacoes'],
 }
 
 export function telasPermitidas(user) {

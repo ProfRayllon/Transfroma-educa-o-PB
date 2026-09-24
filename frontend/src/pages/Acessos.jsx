@@ -95,9 +95,9 @@ const TECH_AREAS = [
 
 const PERMISSIONS_MAP = {
   administrador: ['Acessa tudo', 'Cria usuarios', 'Edita permissoes', 'Visualiza todas as telas', 'Edita todos os registros'],
-  gerencia: ['Acessa somente a tela de Cursos', 'Ve todos os cursos', 'Cria, edita e exclui qualquer curso', 'Edita ementa e status no AVA', 'Nao acessa Acessos, Cursistas, Frequencia nem Producao'],
+  gerencia: ['Acessa Cursos e Colaboradores', 'Ve todos os cursos', 'Cria, edita e exclui qualquer curso', 'Edita ementa e status no AVA', 'Nao acessa Cursistas nem Producao'],
   coordenador: ['Acessa cursos vinculados', 'Cria e edita cursos vinculados', 'Atribui atividades', 'Acompanha producao dos seus cursos'],
-  supervisor: ['Acessa Producao', 'Aprova materiais', 'Edita ocorrencias', 'Registra frequencia', 'Visualiza relatorios'],
+  supervisor: ['Acessa Producao', 'Aprova materiais', 'Edita ocorrencias', 'Visualiza relatorios'],
   professor: ['Acessa Producao', 'Cadastra materiais', 'Edita os proprios materiais', 'Visualiza status da revisao'],
   tecnico: ['Acesso somente leitura aos dados vinculados'],
   revisor: ['Acessa Producao dos cursos vinculados', 'Aprova ou pede ajuste nos conteudos atribuidos', 'Nao pode excluir conteudos ou modulos'],
@@ -547,7 +547,7 @@ export default function Acessos() {
   if (!canViewUsers) {
     return (
       <div className="card p-8 text-center text-gray-500">
-        Voce nao tem permissao para visualizar os acessos do sistema.
+        Voce nao tem permissao para visualizar os colaboradores do sistema.
       </div>
     )
   }
@@ -556,8 +556,8 @@ export default function Acessos() {
     <div className="space-y-5 animate-fade-in">
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
-          <h1 className="page-title">Acessos</h1>
-          <p className="page-subtitle">Gerencie usuarios, perfis e permissoes do sistema Transforma.</p>
+          <h1 className="page-title">Colaboradores</h1>
+          <p className="page-subtitle">Gerencie usuarios, perfis e permissoes da equipe Transforma.</p>
         </div>
         {isAdmin && (
           <button onClick={() => { setEditUser(null); setFormError(''); setEditOpen(true) }} className="btn-primary">

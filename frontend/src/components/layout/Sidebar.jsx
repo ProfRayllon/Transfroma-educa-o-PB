@@ -5,8 +5,8 @@ import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import { useAvatar } from '../../context/AvatarContext'
 import {
-  LayoutDashboard, BookOpen, ShieldCheck, CalendarCheck, ClipboardList,
-  ClipboardCheck, LogOut, ChevronLeft, ChevronRight, Camera, Sun, Moon, Globe, Users,
+  LayoutDashboard, BookOpen, ShieldCheck, ClipboardList,
+  ClipboardCheck, LogOut, ChevronLeft, ChevronRight, Camera, Sun, Moon, Users,
 } from 'lucide-react'
 
 // Menu reduzido ao que cada perfil realmente usa no dia a dia. Cursos e a porta
@@ -37,10 +37,9 @@ const navItems = [
     // HIERARQUIA no backend -- aqui so decide o que desenhar, e o servidor e
     // quem garante a permissao em cada rota.
     to: '/frequencia',
-    icon: CalendarCheck,
+    icon: ShieldCheck,
     label: 'Frequência',
-    visible: (user) => ['administrador', 'gerencia', 'supervisor', 'supervisor_tutoria'].includes(user?.role)
-      || isCoordinatorRole(user),
+    visible: () => false,
   },
   {
     // A lista da propria pessoa: identica para todo mundo que recebe atividade,
@@ -72,9 +71,8 @@ const navItems = [
     contador: (resumo) => resumo?.pendentesParaAvaliar || 0,
   },
   { to: '/cursistas', icon: Users, label: 'Cursistas', visible: (user) => user?.role === 'administrador' },
-  { to: '/acessos', icon: ShieldCheck, label: 'Acessos', visible: (user) => ['administrador', 'gerencia'].includes(user?.role) },
-  { to: '/', icon: Globe, label: 'Site', adminOnly: true },
-]
+  { to: '/acessos', icon: ShieldCheck, label: 'Colaboradores', visible: (user) => ['administrador', 'gerencia'].includes(user?.role) },
+].filter((item) => item.to !== '/frequencia')
 
 const roleLabels = {
   administrador: 'Administrador',

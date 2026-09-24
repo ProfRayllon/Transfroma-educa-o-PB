@@ -120,11 +120,11 @@ const PERMISSIONS = {
     'view_cursos', 'edit_cursos', 'edit_status_ava',
     'view_producao', 'edit_producao', 'approve_material', 'view_review_status',
     'create_material', 'edit_own_material',
-    'view_acessos', 'view_frequencia', 'edit_frequencia',
+    'view_acessos',
   ],
   supervisor: [
     'view_producao', 'edit_producao', 'approve_material',
-    'view_pessoas', 'edit_frequencia', 'edit_ocorrencias',
+    'view_pessoas', 'edit_ocorrencias',
     'view_relatorios', 'view_acessos',
   ],
   coordenador: [
@@ -138,10 +138,10 @@ const PERMISSIONS = {
     'view_pessoas', 'update_atividades', 'view_ocorrencias',
   ],
   tecnico: [
-    'view_pessoas', 'view_frequencia', 'view_atividades', 'view_ocorrencias', 'view_producao', 'view_cursos',
+    'view_pessoas', 'view_atividades', 'view_ocorrencias', 'view_producao', 'view_cursos',
   ],
   gestao: [
-    'view_pessoas', 'edit_frequencia', 'update_funcional', 'view_ocorrencias',
+    'view_pessoas', 'update_funcional', 'view_ocorrencias',
   ],
   revisor: [
     'view_producao', 'view_review_status',

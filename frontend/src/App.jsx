@@ -15,7 +15,6 @@ import Cursos from './pages/Cursos'
 import Producao from './pages/Producao'
 import CursoProducao from './pages/CursoProducao'
 import Ementa from './pages/Ementa'
-import Frequencia from './pages/Frequencia'
 import MinhasAtividades from './pages/MinhasAtividades'
 import MinhasAvaliacoes from './pages/MinhasAvaliacoes'
 import Acessos from './pages/Acessos'
@@ -102,10 +101,7 @@ export default function App() {
               regras de permissao da propria tela seguem valendo.
             */}
             <Route path="producao" element={<Producao />} />
-            <Route path="frequencia" element={<Frequencia />} />
-            {/* A tela de quem executa e de quem avalia. Separada de /frequencia
-                de proposito: aquela e a visao de gestao do mes inteiro, esta e
-                a lista curta da propria pessoa. */}
+            {/* A tela de quem executa as atividades do mes. */}
             <Route path="minhas-atividades" element={<MinhasAtividades />} />
             {/* Avaliar virou tela propria, e nao mais uma aba de
                 minhas-atividades: executar e avaliar sao dois papeis, e quem
