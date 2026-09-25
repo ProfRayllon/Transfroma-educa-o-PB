@@ -34,6 +34,13 @@ transforma/
 
 ## Desenvolvimento local
 
+Existem dois modos de rodar localmente:
+
+- `DATA_MODE=mock`: sobe rapido e serve para conferir coisas simples, mas usa dados em memoria. Hoje o mock nao tem a base completa de cursos.
+- `DATA_MODE=mysql`: ambiente homologado/local com banco. Use este modo para desenvolver novas funcoes, validar cursos, cursistas, inscricoes, ementas, producao, exportacoes e qualquer fluxo que dependa de dados reais.
+
+Recomendacao: para desenvolvimento de novas funcionalidades, use `DATA_MODE=mysql` com um banco de homologacao. Evite testar regra nova direto em producao.
+
 ### Backend
 
 ```bash
@@ -53,6 +60,143 @@ npm run dev
 
 Frontend local: `http://localhost:5173`  
 Backend local: `http://localhost:3001`
+
+### Ambiente local mock
+
+Use quando precisar apenas abrir a aplicacao rapidamente.
+
+No arquivo `backend/.env`, deixe:
+
+```env
+DATA_MODE=mock
+```
+
+Suba o backend:
+
+```bash
+cd backend
+npm run dev
+```
+
+Em outro terminal, suba o frontend:
+
+```bash
+cd frontend
+npm run dev
+```
+
+Acesse:
+
+```text
+http://127.0.0.1:5173/login
+```
+
+Credenciais do mock local:
+
+```text
+admin@transforma.pb.gov.br
+LocalAdmin2026!
+```
+
+Confira o modo ativo:
+
+```powershell
+Invoke-RestMethod -Uri "http://localhost:3001/api/health"
+```
+
+A resposta deve indicar:
+
+```json
+{
+  "dataMode": "mock"
+}
+```
+
+### Ambiente homologado local com MySQL
+
+Use este ambiente para desenvolver novas funcoes. Ele precisa apontar para um
+banco MySQL de homologacao, com schema e dados de teste. Pode ser um banco local,
+por exemplo `transforma_homolog`, ou um banco remoto de homologacao.
+
+No arquivo `backend/.env`, ajuste:
+
+```env
+DATA_MODE=mysql
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=transforma_app
+DB_PASSWORD=sua_senha_do_banco
+DB_NAME=transforma_homolog
+MYSQL_AUTO_SEED=false
+```
+
+Se for usar o banco local atual do projeto, mantenha o nome existente:
+
+```env
+DB_NAME=transforma_db
+```
+
+Depois reinicie o backend:
+
+```bash
+cd backend
+npm run dev
+```
+
+Em outro terminal:
+
+```bash
+cd frontend
+npm run dev
+```
+
+Acesse:
+
+```text
+http://127.0.0.1:5173/login
+```
+
+Confira se entrou no modo homologado:
+
+```powershell
+Invoke-RestMethod -Uri "http://localhost:3001/api/health"
+```
+
+A resposta deve indicar:
+
+```json
+{
+  "dataMode": "mysql"
+}
+```
+
+As credenciais neste modo sao as que estiverem gravadas no banco de homologacao.
+Se o banco foi criado vazio e populado por seed, use a senha definida em
+`SEED_ADMIN_PASSWORD`. Se o banco veio de copia, use a senha do usuario existente
+ou redefina a senha no proprio ambiente de homologacao.
+
+### Fluxo recomendado para desenvolver e subir
+
+1. Desenvolva localmente usando `DATA_MODE=mysql`.
+2. Valide a tela no navegador em `http://127.0.0.1:5173`.
+3. Teste leitura, gravacao, login e qualquer fluxo afetado pela mudanca.
+4. Rode build antes de subir:
+
+```bash
+cd frontend
+npm run build
+```
+
+5. Depois de validar:
+
+```bash
+git status
+git add .
+git commit -m "descricao da alteracao"
+git push origin main
+```
+
+O push na branch `main` aciona o deploy automatico da producao.
 
 ## Variaveis do backend
 
