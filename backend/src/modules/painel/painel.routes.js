@@ -5,6 +5,7 @@ const repo = require('./painel.repo')
 const resultados = require('../resultados/resultados.repo')
 const { montarCsv } = require('../../shared/csv')
 const { criarPlanilha } = require('../../shared/xlsx')
+const { padronizarGre, ehGrePadrao } = require('../../shared/gre')
 const planilha = require('./painel.planilha')
 const { doCache, guardar } = require('./painel.cache')
 
@@ -85,9 +86,27 @@ const formatarCpf = (cpf) => {
   return d.length === 11 ? `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}` : d
 }
 
+/**
+ * A GRE que chega da tela, convertida antes de ser aceita.
+ *
+ * Antes isto so VALIDAVA contra "1ª GRE": qualquer outra coisa virava null e o
+ * filtro sumia sem aviso. Dois valores reais caiam nessa peneira -- as linhas
+ * que a base guardou como "1ª GRE - João Pessoa", e "Sem GRE", que e o rotulo
+ * de quem nao tem regional. Escolher um deles no seletor mostrava a rede
+ * inteira como se fosse o recorte pedido, que e o pior desfecho possivel para
+ * um filtro.
+ *
+ * Agora converte para o padrao e, se nao for uma das dezesseis, aceita o texto
+ * como veio -- ele e comparado com `=` contra a coluna, entao ou casa com algo
+ * que existe, ou devolve lista vazia, que e uma resposta honesta. O limite de
+ * 60 caracteres e o tamanho da coluna, e impede que texto longo entre na chave
+ * do cache e a encha.
+ */
 function normalizarGre(valor) {
-  const texto = String(valor || '').trim()
-  return /^\d{1,2}ª GRE$/.test(texto) ? texto : null
+  const padrao = padronizarGre(valor)
+  if (!padrao) return null
+  if (ehGrePadrao(padrao)) return padrao
+  return String(padrao).slice(0, 60)
 }
 
 module.exports = function criarRotasPainel({ authInterna, requireRole }) {

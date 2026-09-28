@@ -1,6 +1,7 @@
 'use strict'
 
 const { getPool, isMysqlMode } = require('../../shared/db')
+const { padronizarGresGravadas } = require('../../shared/gre')
 
 /**
  * Ajustes de esquema do modulo, aplicados no boot.
@@ -50,6 +51,8 @@ async function garantirEsquema() {
       "ALTER TABLE cursistas ADD COLUMN origem ENUM('importado','manual') NOT NULL DEFAULT 'importado' AFTER status"
     )
   }
+
+  await padronizarGresGravadas(pool, 'cursista_vinculos')
 }
 
 module.exports = { garantirEsquema }

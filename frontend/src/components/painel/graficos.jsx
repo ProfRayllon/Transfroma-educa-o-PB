@@ -52,6 +52,11 @@ export const TEMA = {
     trilho: 'rgba(88,28,135,0.08)',
     trilhoForte: 'rgba(88,28,135,0.20)',
     cartaoBorda: 'rgba(88,28,135,0.12)',
+    /* A superficie de um controle dentro do cartao: campo de busca, seletor,
+       lista de colunas. Tres componentes ja pediam `--p-cartao` e a variavel
+       nunca existiu -- `var()` sem valor nao pinta nada, e as caixas ficavam
+       transparentes, com a tabela aparecendo por baixo. */
+    cartao: '#FFFFFF',
     balao: '#FFFFFF',
     pontoBorda: '#FFFFFF',
     barra: '#A855F7',
@@ -69,6 +74,7 @@ export const TEMA = {
     trilho: 'rgba(196,181,253,0.12)',
     trilhoForte: 'rgba(196,181,253,0.26)',
     cartaoBorda: 'rgba(196,181,253,0.14)',
+    cartao: '#241C3D',
     balao: '#241C3D',
     pontoBorda: '#241C3D',
     barra: '#A855F7',

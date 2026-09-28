@@ -97,6 +97,13 @@ export default function PlanilhaDaBase({ gres = [] }) {
     return () => document.removeEventListener('mousedown', fora)
   }, [abrirColunas])
 
+  /* Em ordem numérica, e não pelo tamanho da regional: aqui a pessoa procura
+     "a 7ª", e achar uma entre dezesseis fora de ordem custa mais do que vale
+     ter a maior no topo. */
+  const gresOrdenadas = useMemo(
+    () => [...gres].sort((a, b) => (parseInt(a, 10) || 99) - (parseInt(b, 10) || 99)),
+    [gres])
+
   const catalogo = dados?.opcoes?.colunas || []
   const situacoes = dados?.opcoes?.situacoes || []
   const visiveis = dados?.colunas || []
@@ -214,7 +221,7 @@ export default function PlanilhaDaBase({ gres = [] }) {
             className="px-3 py-2 rounded-lg text-[13px] border" style={estiloDeCampo}
           >
             <option value="">Todas</option>
-            {gres.map((g) => <option key={g} value={g}>{g}</option>)}
+            {gresOrdenadas.map((g) => <option key={g} value={g}>{g}</option>)}
           </select>
         </Campo>
 

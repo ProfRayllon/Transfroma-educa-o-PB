@@ -1,6 +1,7 @@
 'use strict'
 
 const repo = require('./cursistas.repo')
+const { padronizarGre } = require('../../shared/gre')
 const { getPool, requireMysql } = require('../../shared/db')
 const { normalizeCpf, isValidCpf } = require('../../shared/cpf')
 const { lerPlanilha, normalizarData } = require('../../shared/xlsx')
@@ -92,7 +93,10 @@ function lerRegistros(arquivo) {
     const vinculos = []
     for (let ordem = 1; ordem <= MAX_VINCULOS; ordem += 1) {
       const inep = texto(perfil[`INEP_${ordem}`], 12)
-      const gre = texto(perfil[`GRE_${ordem}`], 60)
+      // Padronizada na entrada: a planilha traz "1ª GRE - João Pessoa",
+      // "16° GRE" e "12ª" para tres regionais que o painel precisa somar
+      // juntas. Ver shared/gre.js.
+      const gre = padronizarGre(texto(perfil[`GRE_${ordem}`], 60))
       const escola = texto(perfil[`ESCOLA_${ordem}`], 200)
       if (inep || gre || escola) vinculos.push({ ordem, inep, gre, escola })
     }

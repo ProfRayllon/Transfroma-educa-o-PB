@@ -1,6 +1,7 @@
 'use strict'
 
 const { getPool, isMysqlMode } = require('../../shared/db')
+const { padronizarGresGravadas } = require('../../shared/gre')
 
 /**
  * Tabelas dos resultados de curso que chegam por planilha.
@@ -299,6 +300,11 @@ async function aplicar(pool) {
   if (!existentes.has('longitude')) {
     await pool.execute('ALTER TABLE escola_municipio ADD COLUMN longitude DECIMAL(10,7) DEFAULT NULL AFTER latitude')
   }
+
+  /* As GREs que ja estao gravadas aqui passam pelo mesmo acerto do cadastro:
+     as duas tabelas alimentam o mesmo filtro da tela, e uma padronizada com a
+     outra torta deixaria o filtro certo em metade dos numeros. */
+  await padronizarGresGravadas(pool, 'consolidado_vinculos')
 }
 
 module.exports = { garantirEsquema, aplicar }

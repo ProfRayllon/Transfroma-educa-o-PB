@@ -2,6 +2,7 @@
 
 const { lerPlanilha } = require('../../shared/xlsx')
 const { textoDoArquivo, lerCsvComCabecalho } = require('../../shared/csvLeitura')
+const { padronizarGre } = require('../../shared/gre')
 
 /**
  * Importacao das planilhas de resultado de curso.
@@ -89,17 +90,11 @@ const semAcento = (v) => String(v || '')
 /**
  * A GRE, no formato que o sistema ja usa.
  *
- * A base oficial gravou "1ª GRE" e a planilha de resultado traz "01ª GRE" -- as
- * mesmas dezesseis regionais, com rotulos diferentes. Sem esta conversao o
- * filtro por regional devolveria zero sem erro nenhum.
- *
- * O que nao for reconhecido passa intacto -- "Sem GRE" nao deve virar "NaNª GRE".
+ * A regra mora em shared/gre.js, junto com a da importacao de cursistas: as
+ * duas leem as mesmas dezesseis regionais escritas de jeitos diferentes, e duas
+ * copias da conversao divergiriam na primeira variacao nova que aparecesse.
  */
-function normalizarGre(valor) {
-  const texto = String(valor || '').trim()
-  const m = texto.match(/^0*(\d{1,2})\s*ª?\s*GRE$/i)
-  return m ? `${Number(m[1])}ª GRE` : (texto || null)
-}
+const normalizarGre = padronizarGre
 
 const STATUS = {
   'CONCLUIDO': 'concluido',
