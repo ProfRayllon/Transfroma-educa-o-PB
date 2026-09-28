@@ -30,6 +30,9 @@ import { BlocoInstitucional } from '../components/painel/blocos'
  */
 const DIAS = 30
 
+/** As janelas que o gráfico de inscrições por dia oferece. */
+const PERIODOS = [['7', '7 dias'], ['30', '30 dias'], ['tudo', 'Tudo']]
+
 /**
  * O que cada painel e, dito na propria tela.
  *
@@ -141,6 +144,7 @@ export default function Painel() {
   const [cursoId, setCursoId] = useState(null)
   const [gre, setGre] = useState(null)
   const [componente, setComponente] = useState(null)
+  const [janela, setJanela] = useState(String(DIAS))
 
   /**
    * Os filtros vão para o servidor, não são recorte de tela.
@@ -153,7 +157,7 @@ export default function Painel() {
     setCarregando(true)
     api.get('/painel', {
       params: {
-        dias: DIAS,
+        dias: janela,
         ...(cursoId ? { curso: cursoId } : {}),
         ...(gre ? { gre } : {}),
         ...(componente ? { componente } : {}),
@@ -162,7 +166,7 @@ export default function Painel() {
       .then(({ data }) => { setDados(data); setErro(null) })
       .catch((e) => setErro(e?.response?.data?.message || 'Não foi possível carregar o dashboard.'))
       .finally(() => setCarregando(false))
-  }, [cursoId, gre, componente])
+  }, [cursoId, gre, componente, janela])
 
   useEffect(carregar, [carregar])
 
@@ -344,7 +348,10 @@ export default function Painel() {
         <BlocoInstitucional
           dados={dados}
           serie={serie}
-          dias={DIAS}
+          dias={dados.dias || DIAS}
+          janela={janela}
+          janelas={PERIODOS}
+          aoTrocarJanela={setJanela}
           cursoAtivo={cursoAtivo}
           greAtiva={dados.gre}
           secao={secao}

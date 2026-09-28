@@ -232,6 +232,7 @@ const BLOCOS_POR_SECAO = {
 
 export function BlocoInstitucional({
   dados, serie, dias, cursoAtivo, greAtiva, aoFiltrarCurso, secao = 'tudo',
+  janela, janelas = [], aoTrocarJanela,
 }) {
   const mostra = (bloco) => (BLOCOS_POR_SECAO[secao] || BLOCOS_POR_SECAO.tudo).includes(bloco)
 
@@ -803,7 +804,11 @@ export function BlocoInstitucional({
   const cartaoMovimento = mostra('movimento') ? (
         <Cartao className="flex flex-col">
           <TituloDeBloco
-            acao={<span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>últimos {dias} dias</span>}
+            acao={aoTrocarJanela && janelas.length ? (
+              <TrocaDeVisao opcoes={janelas} valor={janela} aoTrocar={aoTrocarJanela} />
+            ) : (
+              <span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>últimos {dias} dias</span>
+            )}
           >
             {cursoAtivo ? `Inscrições por dia · ${cursoAtivo.curso}` : 'Inscrições por dia'}
           </TituloDeBloco>
@@ -824,8 +829,14 @@ export function BlocoInstitucional({
             altura={268}
           />
 
-          <p className="text-[11px] mt-3" style={{ color: 'var(--p-texto3)' }}>
-            {br(inscricoesNoPeriodo)} inscrições no período
+          {/* Os dois números lado a lado, porque são duas contas diferentes e
+              as duas aparecem na tela: o gráfico soma INSCRIÇÕES (uma pessoa em
+              dois cursos são duas), e o cartão do topo conta PESSOAS. Sem dizer
+              isso aqui, quem compara os dois acha que um deles está errado. */}
+          <p className="text-[11px] mt-3 leading-relaxed" style={{ color: 'var(--p-texto3)' }}>
+            {br(t.inscricoesNaJanela ?? inscricoesNoPeriodo)} inscrições
+            {' de '}{br(t.pessoasQueSeInscreveramNaJanela ?? 0)} pessoas
+            {janela === 'tudo' ? ' — todo o período' : ` — últimos ${dias} dias`}
             {!cursoAtivo && ' · todos os cursos'}
           </p>
         </Cartao>

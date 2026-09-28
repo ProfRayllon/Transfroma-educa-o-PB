@@ -24,7 +24,16 @@ const { doCache, guardar } = require('./painel.cache')
 
 const PERFIS_COM_ACESSO = ['administrador', 'gerencia']
 
-const DIAS_ACEITOS = [7, 15, 30]
+/**
+ * As janelas que a tela oferece, mais "tudo".
+ *
+ * "tudo" nao e um numero: ele vira a distancia ate a inscricao mais antiga, e
+ * por isso so se resolve com uma consulta. Fica como texto ate la, inclusive na
+ * chave do cache -- guardar o resultado sob o numero resolvido faria a entrada
+ * apontar para outra janela no dia em que a base ganhasse um registro mais
+ * antigo.
+ */
+const DIAS_ACEITOS = [7, 15, 30, 60, 90]
 
 function mesAtual() {
   const agora = new Date()
@@ -36,6 +45,7 @@ function normalizarMes(valor) {
 }
 
 function normalizarDias(valor) {
+  if (String(valor) === 'tudo') return 'tudo'
   const n = Number(valor)
   return DIAS_ACEITOS.includes(n) ? n : 30
 }
@@ -116,14 +126,18 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
   router.get('/', requireRole(...PERFIS_COM_ACESSO), async (req, res) => {
     try {
       const mes = normalizarMes(req.query.mes)
-      const dias = normalizarDias(req.query.dias)
+      const periodo = normalizarDias(req.query.dias)
       const cursoId = normalizarCurso(req.query.curso)
       const gre = normalizarGre(req.query.gre)
       const componente = normalizarComponente(req.query.componente)
-      const chave = `${mes}|${dias}|${cursoId || 0}|${gre || '-'}|${componente || '-'}`
+      const chave = `${mes}|${periodo}|${cursoId || 0}|${gre || '-'}|${componente || '-'}`
 
       const guardado = doCache(chave)
       if (guardado) return res.json({ ...guardado, doCache: true })
+
+      // "tudo" so vira numero aqui, depois do cache: e uma consulta a mais, e
+      // ela nao precisa rodar quando a resposta ja esta guardada.
+      const dias = periodo === 'tudo' ? await repo.diasDeTudo() : periodo
 
       /* Tres listas sairam daqui e continuam no repo, testadas: `acessosPorHora`,
          `escolasComMaisCursistas` e o bloco operacional (`equipe`, `producao`,
@@ -184,6 +198,9 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
         geradoEm: new Date().toISOString(),
         mes,
         dias,
+        // O que a tela pediu, para ela marcar o botao certo sem adivinhar a
+        // partir do numero de dias resolvido.
+        periodo,
         // Devolvido de volta para a tela nao precisar confiar no proprio estado:
         // se o servidor recusou o filtro, o rotulo mostra o que ele realmente usou.
         cursoId,

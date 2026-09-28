@@ -122,6 +122,23 @@ async function totais({ cursoId = null, dias = 30, gre = null } = {}) {
     cursoId ? [cursoId] : []
   )
 
+  /**
+   * As inscricoes da janela, em linhas e em gente.
+   *
+   * O grafico diario soma LINHAS -- uma inscricao por dia por curso -- e o
+   * cartao do topo conta PESSOAS. Sao numeros diferentes e os dois estao
+   * certos; o que faltava era a tela mostrar os dois juntos, no mesmo lugar,
+   * para ninguem tentar casar um com o outro e achar que ha erro.
+   */
+  const [[naJanela]] = await pool.query(
+    `SELECT COUNT(*) AS inscricoes, COUNT(DISTINCT cursista_id) AS pessoas
+       FROM inscricoes
+      WHERE status = 'inscrito'
+        AND enrolled_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+        ${cursoId ? 'AND course_id = ?' : ''}`,
+    cursoId ? [dias, cursoId] : [dias]
+  )
+
   const escolasTotal = numero(escolas.total)
   const escolasAlcancadas = numero(alcance.alcancadas)
 
@@ -142,7 +159,25 @@ async function totais({ cursoId = null, dias = 30, gre = null } = {}) {
     equipeAtiva: numero(equipe.ativos),
     inscricoes: numero(inscricoes.total),
     inscritos: numero(inscricoes.pessoas),
+    inscricoesNaJanela: numero(naJanela.inscricoes),
+    pessoasQueSeInscreveramNaJanela: numero(naJanela.pessoas),
   }
+}
+
+/**
+ * Quantos dias cobrem a base inteira, para o botao "todo o periodo".
+ *
+ * Sai da inscricao mais antiga, com teto de dois anos: sem o teto, uma data
+ * digitada errada em 1999 faria a serie montar nove mil pontos e travar a tela
+ * por causa de uma linha torta.
+ */
+async function diasDeTudo() {
+  requireMysql()
+  const [[r]] = await getPool().query(
+    `SELECT COALESCE(DATEDIFF(CURDATE(), MIN(enrolled_at)), 30) AS dias
+       FROM inscricoes WHERE status = 'inscrito'`
+  )
+  return Math.min(730, Math.max(7, numero(r.dias)))
 }
 
 /* ─── Territorio ─── */
@@ -553,6 +588,7 @@ async function frequenciaDaEquipe(mes) {
 
 module.exports = {
   totais,
+  diasDeTudo,
   porGre,
   escolasComMaisCursistas,
   funil,

@@ -464,8 +464,30 @@ export function AreaDeSerie({
   dados, chaveX, chaveY, rotulo, altura = 260, formatarX, cor = 'var(--p-r4)',
 }) {
   const [ativo, setAtivo] = useState(null)
+
+  /**
+   * O desenho usa a largura REAL do cartão, medida, e não um viewBox fixo.
+   *
+   * Com `viewBox="0 0 1000 H"` e `preserveAspectRatio="none"`, o navegador
+   * estica o desenho até a largura disponível -- e estica junto tudo o que está
+   * dentro: os números dos eixos ficavam alongados, e o ponto redondo virava um
+   * ovo deitado. Medindo a largura, uma unidade do desenho é um pixel da tela,
+   * e círculo é círculo.
+   */
+  const caixa = useRef(null)
+  const [largura, setLargura] = useState(720)
+  useEffect(() => {
+    if (!caixa.current) return undefined
+    const observador = new ResizeObserver(([entrada]) => {
+      const l = Math.round(entrada.contentRect.width)
+      if (l > 0) setLargura(l)
+    })
+    observador.observe(caixa.current)
+    return () => observador.disconnect()
+  }, [])
+
   const L = 48, R = 14, T = 16, B = 28
-  const W = 1000
+  const W = largura
   const H = altura
   const alturaUtil = H - T - B
 
@@ -492,9 +514,21 @@ export function AreaDeSerie({
   }).join(' ')
 
   const compacto = (v) => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1).replace('.0', '').replace('.', ',')}K` : String(v))
-  const niveis = [0, 0.5, 1]
+
+  /* Tres linhas de referencia, sem repetir rotulo: com o maior valor em 1, as
+     tres arredondariam para 0, 1 e 1, e a mesma marca apareceria duas vezes em
+     alturas diferentes. */
+  const niveis = [...new Map([0, 0.5, 1].map((f) => [Math.round(maximo * f), f])).values()]
+
+  /* A ultima data entra sempre -- ela fecha o periodo --, mas sai a marca
+     anterior quando as duas cairiam coladas: "26/09" e "28/09" sobrepostos nao
+     informam nenhuma das duas. */
   const salto = Math.max(1, Math.ceil(dados.length / 8))
-  const marcas = dados.map((d, i) => ({ d, i })).filter(({ i }) => i % salto === 0 || i === dados.length - 1)
+  const indices = dados.map((_, i) => i).filter((i) => i % salto === 0)
+  const ultimo = dados.length - 1
+  if (indices[indices.length - 1] > ultimo - salto * 0.6) indices.pop()
+  if (ultimo >= 0) indices.push(ultimo)
+  const marcas = indices.map((i) => ({ d: dados[i], i }))
 
   const aoMover = (evento) => {
     const caixa = evento.currentTarget.getBoundingClientRect()
@@ -504,8 +538,8 @@ export function AreaDeSerie({
   }
 
   return (
-    <div className="relative w-full" style={{ height: altura }}>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="none"
+    <div ref={caixa} className="relative w-full" style={{ height: altura }}>
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="block"
         onMouseMove={aoMover} onMouseLeave={() => setAtivo(null)}>
         <defs>
           <linearGradient id="grad-area-serie" x1="0" y1="0" x2="0" y2="1">
@@ -554,7 +588,7 @@ export function AreaDeSerie({
         <div
           className="absolute pointer-events-none rounded-xl px-3 py-2 text-[12px] whitespace-nowrap z-10"
           style={{
-            left: `${(cx(ativo) / W) * 100}%`,
+            left: cx(ativo),
             top: 6,
             transform: `translateX(${ativo > dados.length * 0.68 ? '-105%' : '12px'})`,
             background: 'var(--p-balao)',
