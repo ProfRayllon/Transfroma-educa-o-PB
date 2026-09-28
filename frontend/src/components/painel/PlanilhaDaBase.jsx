@@ -27,6 +27,7 @@ const comoParametros = (filtros, colunas) => ({
   ...(filtros.inep ? { inep: filtros.inep } : {}),
   ...(filtros.nome ? { nome: filtros.nome } : {}),
   ...(filtros.situacao ? { situacao: filtros.situacao } : {}),
+  ...(filtros.inscricao ? { inscricao: filtros.inscricao } : {}),
   colunas: colunas.join(','),
 })
 
@@ -48,7 +49,7 @@ const estiloDeCampo = {
 }
 
 export default function PlanilhaDaBase({ gres = [] }) {
-  const [filtros, setFiltros] = useState({ gre: '', inep: '', nome: '', situacao: '' })
+  const [filtros, setFiltros] = useState({ gre: '', inep: '', nome: '', situacao: '', inscricao: '' })
   const [colunas, setColunas] = useState(null)
   const [dados, setDados] = useState(null)
   const [pagina, setPagina] = useState(1)
@@ -106,8 +107,9 @@ export default function PlanilhaDaBase({ gres = [] }) {
 
   const catalogo = dados?.opcoes?.colunas || []
   const situacoes = dados?.opcoes?.situacoes || []
+  const inscricoes = dados?.opcoes?.inscricoes || []
   const visiveis = dados?.colunas || []
-  const temFiltro = Boolean(filtros.gre || filtros.inep || filtros.nome || filtros.situacao)
+  const temFiltro = Boolean(filtros.gre || filtros.inep || filtros.nome || filtros.situacao || filtros.inscricao)
 
   const paginas = useMemo(
     () => Math.max(1, Math.ceil((dados?.total || 0) / (dados?.porPagina || 25))),
@@ -131,7 +133,7 @@ export default function PlanilhaDaBase({ gres = [] }) {
   }
 
   const limpar = () => {
-    setFiltros({ gre: '', inep: '', nome: '', situacao: '' })
+    setFiltros({ gre: '', inep: '', nome: '', situacao: '', inscricao: '' })
     setNomeDigitado('')
     setPagina(1)
   }
@@ -213,7 +215,7 @@ export default function PlanilhaDaBase({ gres = [] }) {
       </TituloDeBloco>
 
       {/* ─── Filtros ─── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
         <Campo rotulo="GRE">
           <select
             value={filtros.gre}
@@ -244,7 +246,7 @@ export default function PlanilhaDaBase({ gres = [] }) {
           />
         </Campo>
 
-        <Campo rotulo="Situação">
+        <Campo rotulo="Situação do cadastro">
           <select
             value={filtros.situacao}
             onChange={(e) => { setFiltros((f) => ({ ...f, situacao: e.target.value })); setPagina(1) }}
@@ -252,6 +254,20 @@ export default function PlanilhaDaBase({ gres = [] }) {
           >
             <option value="">Todas</option>
             {situacoes.map((s) => <option key={s.chave} value={s.chave}>{s.rotulo}</option>)}
+          </select>
+        </Campo>
+
+        {/* Inscrição é outra pergunta que situação do cadastro: dá para ter
+            cadastro confirmado sem estar em curso nenhum, e o contrário
+            também. Dois seletores, e não um só com as opções misturadas. */}
+        <Campo rotulo="Inscrição">
+          <select
+            value={filtros.inscricao}
+            onChange={(e) => { setFiltros((f) => ({ ...f, inscricao: e.target.value })); setPagina(1) }}
+            className="px-3 py-2 rounded-lg text-[13px] border" style={estiloDeCampo}
+          >
+            <option value="">Todas</option>
+            {inscricoes.map((i) => <option key={i.chave} value={i.chave}>{i.rotulo}</option>)}
           </select>
         </Campo>
       </div>

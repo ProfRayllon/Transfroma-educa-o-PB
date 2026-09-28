@@ -80,6 +80,23 @@ const COLUNAS = {
                ELSE 'Nunca acessou' END`,
   },
   ultimoAcesso: { titulo: 'Último acesso', sql: 'c.last_access_at', data: true },
+  /**
+   * Inscrito e outra coisa que cadastro confirmado.
+   *
+   * Confirmar o cadastro e dizer "sou eu, criei minha senha"; inscrever-se e
+   * entrar num curso. Da para ter um sem o outro nos dois sentidos, e as duas
+   * perguntas que a coordenacao faz -- "quem ainda nao confirmou?" e "quem
+   * confirmou mas nao se inscreveu em nada?" -- precisam das duas colunas
+   * separadas para serem respondidas.
+   *
+   * Inscricao cancelada nao conta como inscrito: quem desistiu esta na mesma
+   * situacao de quem nunca entrou, do ponto de vista de quem vai atras.
+   */
+  inscrito: {
+    titulo: 'Inscrito em curso',
+    sql: `IF(EXISTS (SELECT 1 FROM inscricoes i
+                      WHERE i.cursista_id = c.id AND i.status = 'inscrito'), 'Sim', 'Não')`,
+  },
   inscricoes: {
     titulo: 'Cursos inscritos',
     sql: '(SELECT COUNT(*) FROM inscricoes i WHERE i.cursista_id = c.id AND i.status = "inscrito")',
@@ -96,7 +113,13 @@ const COLUNAS = {
 }
 
 /** As colunas que a tela mostra quando ninguem escolheu nada. */
-const PADRAO = ['nome', 'cpf', 'gre', 'escola', 'inep', 'situacao']
+const PADRAO = ['nome', 'cpf', 'gre', 'escola', 'inep', 'situacao', 'inscrito']
+
+/** O recorte por inscricao, que convive com o da situacao do cadastro. */
+const INSCRICAO = {
+  inscrito: " AND EXISTS (SELECT 1 FROM inscricoes i WHERE i.cursista_id = c.id AND i.status = 'inscrito')",
+  nao_inscrito: " AND NOT EXISTS (SELECT 1 FROM inscricoes i WHERE i.cursista_id = c.id AND i.status = 'inscrito')",
+}
 
 const SITUACOES = {
   confirmado: " AND c.status = 'ativo' AND c.password_hash IS NOT NULL AND c.cadastro_confirmado = 1",
@@ -145,7 +168,7 @@ function normalizarColunas(pedidas) {
  * varredura na tabela, e por isso a busca so entra com tres caracteres -- uma
  * letra so varreria a base inteira a cada tecla.
  */
-function montarFiltro({ gre, inep, nome, situacao }) {
+function montarFiltro({ gre, inep, nome, situacao, inscricao }) {
   const onde = []
   const params = []
 
@@ -174,6 +197,7 @@ function montarFiltro({ gre, inep, nome, situacao }) {
   }
 
   if (SITUACOES[situacao]) onde.push(SITUACOES[situacao])
+  if (INSCRICAO[inscricao]) onde.push(INSCRICAO[inscricao])
 
   return { sql: onde.join(''), params }
 }
@@ -184,12 +208,12 @@ const DE = 'FROM cursistas c'
 
 /** A planilha na tela: uma pagina de linhas mais o total do recorte. */
 async function consultar({
-  gre = null, inep = null, nome = '', situacao = null,
+  gre = null, inep = null, nome = '', situacao = null, inscricao = null,
   colunas = null, pagina = 1, porPagina = 25,
 } = {}) {
   requireMysql()
   const escolhidas = normalizarColunas(colunas)
-  const f = montarFiltro({ gre, inep, nome, situacao })
+  const f = montarFiltro({ gre, inep, nome, situacao, inscricao })
   const limite = Math.min(200, Math.max(5, Number(porPagina) || 25))
   const salto = Math.max(0, ((Number(pagina) || 1) - 1) * limite)
 
@@ -234,10 +258,12 @@ async function consultar({
  * hoje, e o limite existe para o dia em que alguem pedir a base inteira de um
  * sistema tres vezes maior numa VPS de 957 MB.
  */
-async function paraExportar({ gre = null, inep = null, nome = '', situacao = null, colunas = null } = {}) {
+async function paraExportar({
+  gre = null, inep = null, nome = '', situacao = null, inscricao = null, colunas = null,
+} = {}) {
   requireMysql()
   const escolhidas = normalizarColunas(colunas)
-  const f = montarFiltro({ gre, inep, nome, situacao })
+  const f = montarFiltro({ gre, inep, nome, situacao, inscricao })
 
   const selecao = escolhidas.map((c) => `${COLUNAS[c].sql} AS \`${c}\``).join(', ')
   const [linhas] = await getPool().query(
@@ -273,6 +299,10 @@ function opcoes() {
       { chave: 'senha_criada', rotulo: 'Criou senha, não confirmou' },
       { chave: 'nunca_acessou', rotulo: 'Nunca acessou' },
       { chave: 'inativo', rotulo: 'Inativo' },
+    ],
+    inscricoes: [
+      { chave: 'inscrito', rotulo: 'Inscrito em algum curso' },
+      { chave: 'nao_inscrito', rotulo: 'Sem inscrição' },
     ],
   }
 }

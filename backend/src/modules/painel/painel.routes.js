@@ -371,6 +371,7 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
         inep: String(req.query.inep || '').replace(/\D/g, '').slice(0, 12) || null,
         nome: String(req.query.nome || '').slice(0, 80),
         situacao: String(req.query.situacao || '') || null,
+        inscricao: String(req.query.inscricao || '') || null,
         colunas: req.query.colunas,
         pagina: Number(req.query.pagina) || 1,
         porPagina: Number(req.query.porPagina) || 25,
@@ -398,6 +399,7 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
         inep: String(req.query.inep || '').replace(/\D/g, '').slice(0, 12) || null,
         nome: String(req.query.nome || '').slice(0, 80),
         situacao: String(req.query.situacao || '') || null,
+        inscricao: String(req.query.inscricao || '') || null,
         colunas: req.query.colunas,
       })
 
