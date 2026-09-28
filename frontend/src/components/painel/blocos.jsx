@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import {
-  Users, School, GraduationCap, Eye, AlertTriangle, CheckCircle2,
+  Users, School, GraduationCap, Eye, AlertTriangle, CheckCircle2, ShieldCheck, UserX,
   FileText, Layers, Star, Info, Target, BookOpen, Compass, PlayCircle,
   Share2, ClipboardCheck, Signpost, Zap, ThumbsUp, MessageSquare,
 } from 'lucide-react'
@@ -258,7 +258,10 @@ export function BlocoInstitucional({
   }
 
 
-  const [ordemGre, setOrdemGre] = useState('cursistas')
+  /* No painel do sistema a GRE abre pela INSCRICAO: a pergunta de la e como as
+     inscricoes se espalham pelas regionais. Nos outros paineis a leitura
+     continua sendo o tamanho da base. */
+  const [ordemGre, setOrdemGre] = useState(secao === 'sistema' ? 'inscritos' : 'cursistas')
   // Duas leituras no mesmo cartao: como as inscricoes se dividem entre os
   // cursos, e quem e a rede que se inscreve. Sao perguntas vizinhas e cada uma
   // pede a tela inteira do cartao -- alternar custa um clique e nao tira nada
@@ -271,6 +274,12 @@ export function BlocoInstitucional({
   const perfil = dados.institucional.perfil
   const gres = dados.institucional.porGre
   const cursos = dados.institucional.inscricoes.filter((c) => c.publicado)
+
+  /* A rosca e o carrossel mostram o que esta no ar, porque sao vitrine do que
+     a rede pode fazer agora. O ranking de inscricoes conta TODOS os cursos:
+     curso encerrado ou ainda nao publicado tem inscricao que aconteceu, e
+     esconde-la faria o total do cartao nao fechar com o do topo da tela. */
+  const cursosTodos = dados.institucional.inscricoes
 
   /* Curso sem material nenhum fica de fora do ranking de produção: ele entraria
      com 0% e ocuparia o lugar de um curso que está de fato atrasado. O total de
@@ -339,8 +348,10 @@ export function BlocoInstitucional({
   // denominador honesto para "que fatia da rede este curso alcançou".
   const totalDaBase = funil[0].total
 
-  const gresOrdenadas = useMemo(() => [...gres].sort((a, b) =>
-    ordemGre === 'cursistas' ? b.cursistas - a.cursistas : b.adesao - a.adesao), [gres, ordemGre])
+  const gresOrdenadas = useMemo(() => [...gres].sort((a, b) => (
+    ordemGre === 'cursistas' ? b.cursistas - a.cursistas
+      : ordemGre === 'inscritos' ? b.inscritos - a.inscritos
+        : b.adesao - a.adesao)), [gres, ordemGre])
 
   /**
    * As barras da GRE nas três visões.
@@ -373,8 +384,13 @@ export function BlocoInstitucional({
     return gresOrdenadas.map((g) => ({
       rotulo: rotuloGre(g.gre),
       titulo: g.gre,
-      valor: visaoGre === 'cursistas' ? g.cursistas : g.adesao,
-      nota: `${g.escolas} escolas`,
+      valor: visaoGre === 'cursistas' ? g.cursistas
+        : visaoGre === 'inscritos' ? g.inscritos : g.adesao,
+      // Na visão de inscrições a nota compara com a base da própria regional:
+      // "412 de 980 cadastrados" diz mais do que o número solto.
+      nota: visaoGre === 'inscritos'
+        ? `de ${br(g.cursistas)} na base`
+        : `${g.escolas} escolas`,
     }))
   }, [visaoGre, gresOrdenadas, R.porGre])
 
@@ -595,12 +611,46 @@ export function BlocoInstitucional({
         ? `${pct(t.cursistas, totalDaBase)}% da base oficial`
         : `${br(t.confirmados)} confirmaram o cadastro · ${pct(t.confirmados, t.cursistas)}%`,
     },
+    /* Confirmado, nunca acessou e inscrito respondem coisas diferentes, e por
+       isso viraram três cartões: confirmar o cadastro é dizer "sou eu"; nunca
+       ter acessado é o oposto disso; inscrever-se é entrar num curso, e dá para
+       ter um sem o outro nos dois sentidos. */
+    mostra('kpiBase') && {
+      chave: 'confirmados',
+      icone: ShieldCheck,
+      rotulo: 'Cadastros confirmados',
+      valor: t.confirmados,
+      gradiente: 'roxo',
+      comparativo: `${pct(t.confirmados, t.cursistas)}% da base`,
+    },
+    mostra('kpiBase') && {
+      chave: 'semAcesso',
+      icone: UserX,
+      rotulo: 'Nunca acessaram',
+      // Quem não tem senha nunca entrou: é o mesmo critério da coluna
+      // "Situação do cadastro" da planilha, para os dois números baterem.
+      valor: Math.max(0, t.cursistas - t.comSenha),
+      gradiente: 'rosa',
+      comparativo: `${pct(t.cursistas - t.comSenha, t.cursistas)}% da base`,
+    },
+    mostra('kpiBase') && {
+      chave: 'inscritos',
+      icone: GraduationCap,
+      rotulo: cursoAtivo ? 'Inscritos neste curso' : 'Cursistas inscritos',
+      // Pessoas, e não inscrições: sem curso escolhido, quem fez dois cursos
+      // continua sendo uma pessoa. O total de inscrições vai na linha de baixo.
+      valor: t.inscritos,
+      gradiente: 'ciano',
+      comparativo: cursoAtivo
+        ? `${pct(t.inscritos, t.cursistas)}% da base`
+        : `${br(t.inscricoes)} inscrições em ${br(t.cursos)} cursos`,
+    },
     mostra('kpiBase') && {
       chave: 'acessos',
       icone: Eye,
       rotulo: `Acessaram em ${dias} dias`,
       valor: t.acessaramNaJanela,
-      gradiente: 'ciano',
+      gradiente: 'azul',
       serie: serie.map((x) => x.login + x.primeiroAcesso),
       /* O denominador é sempre o MESMO conjunto que o numerador. Já foi "quem
          tem senha", e o percentual passava de 100%: quem entra com o CPF no
@@ -644,6 +694,7 @@ export function BlocoInstitucional({
   }, [cursos])
 
   const totalInscricoes = fatiasCursos.reduce((s, f) => s + f.valor, 0)
+  const totalDeTodosOsCursos = cursosTodos.reduce((s, c) => s + c.inscritos, 0)
 
   const totalGenero = perfil.genero.reduce((s, g) => s + g.total, 0)
   const feminino = perfil.genero.find((g) => /^f/i.test(g.chave))
@@ -709,8 +760,21 @@ export function BlocoInstitucional({
     ...(greComSituacao ? [['gre', '1.35fr']] : []),
     ...(temFuncao ? [['funcao', '1fr']] : []),
   ])
+  /**
+   * Em Dados do Sistema a GRE sobe para o lugar de destaque.
+   *
+   * A pergunta que se faz ao abrir aquele painel é "como as inscrições estão
+   * distribuídas pelas regionais", e não "como foi o dia de ontem". A GRE passa
+   * a abrir a tela, larga, com o movimento diário na coluna estreita ao lado --
+   * ele continua sendo útil, só não é o primeiro gráfico que alguém lê.
+   */
+  const destaqueDoSistema = secao === 'sistema' && mostra('gre')
+  const gradeDestaque = destaqueDoSistema
+    ? grade([['gre', '1.55fr'], ['movimento', '1fr']])
+    : null
+
   const gradeRegional = grade([
-    ...(greComSituacao ? [] : [['gre', '1.3fr']]),
+    ...(greComSituacao || destaqueDoSistema ? [] : [['gre', '1.3fr']]),
     ['perfil', '1fr'],
   ])
 
@@ -723,6 +787,51 @@ export function BlocoInstitucional({
    * curricular. Escrito uma vez só: duas cópias do mesmo cartão seriam duas
    * versões dele no primeiro ajuste.
    */
+  /**
+   * O movimento diário, montado fora do JSX das linhas.
+   *
+   * Ele muda de lugar conforme o painel: em Dados do Sistema vai para a coluna
+   * estreita ao lado da GRE, que é o gráfico que a coordenação lê primeiro;
+   * nos demais continua ocupando a linha larga. Escrito uma vez só -- duas
+   * cópias do mesmo cartão seriam duas versões dele no primeiro ajuste.
+   */
+  const cartaoMovimento = mostra('movimento') ? (
+        <Cartao className="flex flex-col">
+          <TituloDeBloco
+            acao={<span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>últimos {dias} dias</span>}
+          >
+            {cursoAtivo ? 'Inscrições por dia' : 'Movimento diário'}
+          </TituloDeBloco>
+
+          {/* Com curso filtrado a linha de acessos desaparece: um login não
+              pertence a curso nenhum, e mantê-la aqui sugeriria que aqueles
+              acessos são daquele curso. Sobram as inscrições, que a tabela de
+              inscrições sabe recortar por curso. */}
+          <BarrasComLinha
+            dados={serie}
+            chaveX="dia"
+            formatarX={diaCurto}
+            barra={cursoAtivo
+              ? { chave: 'inscricao', rotulo: 'Inscrições no curso' }
+              : { chave: 'login', rotulo: 'Acessos' }}
+            linha={cursoAtivo ? null : { chave: 'inscricao', rotulo: 'Inscrições' }}
+            altura={268}
+          />
+
+          {/* A legenda diz de qual lado cada série lê a escala: são dois eixos,
+              e sem isso o cruzamento das duas viraria uma conclusão inventada
+              pelo desenho, e não pelo dado. */}
+          <div className="mt-3">
+            <Legenda itens={cursoAtivo
+              ? [{ rotulo: `Inscrições em ${cursoAtivo.curso}`, cor: 'var(--p-barra)' }]
+              : [
+                { rotulo: 'Acessos (escala à esquerda)', cor: 'var(--p-barra)' },
+                { rotulo: 'Inscrições (escala à direita)', cor: 'var(--p-linha)' },
+              ]} />
+          </div>
+        </Cartao>
+  ) : null
+
   const cartaoGre = mostra('gre') ? (
       <Cartao className="flex flex-col">
         <TituloDeBloco
@@ -730,15 +839,23 @@ export function BlocoInstitucional({
             /* Reordenar responde a pergunta que sempre aparece: "a maior
                regional é também a que mais aderiu?" */
             <TrocaDeVisao
-              opcoes={temConclusao
-                ? [['cursistas', 'Volume'], ['adesao', 'Adesão'], ['conclusao', 'Conclusão']]
-                : [['cursistas', 'Volume'], ['adesao', 'Adesão']]}
+              /* Conclusão só no painel de Concluintes, e só quando há planilha:
+                 em Dados do Sistema não há como aferir conclusão hoje, e um
+                 botão que mostra número de outra fonte no meio da leitura de
+                 inscrições confunde as duas coisas. */
+              opcoes={secao === 'sistema'
+                ? [['inscritos', 'Inscrições'], ['cursistas', 'Base'], ['adesao', 'Adesão']]
+                : temConclusao
+                  ? [['cursistas', 'Volume'], ['adesao', 'Adesão'], ['conclusao', 'Conclusão']]
+                  : [['cursistas', 'Volume'], ['adesao', 'Adesão']]}
               valor={visaoGre}
               aoTrocar={setOrdemGre}
             />
           }
         >
-          {visaoGre === 'conclusao' ? 'Conclusão por GRE (%)' : 'Distribuição por GRE'}
+          {visaoGre === 'conclusao' ? 'Conclusão por GRE (%)'
+            : visaoGre === 'inscritos' ? 'Inscrições por GRE'
+              : visaoGre === 'adesao' ? 'Adesão por GRE (%)' : 'Distribuição por GRE'}
         </TituloDeBloco>
 
         {/* A conclusão por GRE conta VÍNCULO, e não pessoa: a pergunta aqui é
@@ -762,7 +879,7 @@ export function BlocoInstitucional({
                seria casa decimal de enfeite, e sai. Na conclusão o décimo é
                real (93,6 e 93,3 são GREs diferentes), então fica ele, e o "%"
                sobe para o título, que vale para as dezesseis. */
-            formatarValor={(v) => (visaoGre === 'cursistas' ? br(v)
+            formatarValor={(v) => (visaoGre === 'cursistas' || visaoGre === 'inscritos' ? br(v)
               : visaoGre === 'adesao' ? `${Math.round(v)}%` : pctBr(v))}
           />
         </div>
@@ -801,9 +918,19 @@ export function BlocoInstitucional({
           dentro deixariam metade da linha vazia. */}
       {indicadores.length > 0 && (
         <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${
-          indicadores.length >= 4 ? 'xl:grid-cols-4'
-            : indicadores.length === 3 ? 'xl:grid-cols-3' : 'xl:grid-cols-2'}`}>
+          indicadores.length >= 5 ? 'xl:grid-cols-5'
+            : indicadores.length === 4 ? 'xl:grid-cols-4'
+              : indicadores.length === 3 ? 'xl:grid-cols-3' : 'xl:grid-cols-2'}`}>
           {indicadores.map((k) => <CartaoKpi key={k.chave} {...k} />)}
+        </div>
+      )}
+
+      {/* ─── Destaque de Dados do Sistema: a GRE, com o movimento ao lado ─── */}
+      {gradeDestaque && (
+        <div className="grid grid-cols-1 gap-4 items-stretch xl:[grid-template-columns:var(--cols)]"
+          style={gradeDestaque}>
+          {cartaoGre}
+          {cartaoMovimento}
         </div>
       )}
 
@@ -872,42 +999,7 @@ export function BlocoInstitucional({
       {gradeMovimento && (
       <div className="grid grid-cols-1 gap-4 items-stretch xl:[grid-template-columns:var(--cols)]"
         style={gradeMovimento}>
-        {mostra('movimento') && (
-        <Cartao className="flex flex-col">
-          <TituloDeBloco
-            acao={<span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>últimos {dias} dias</span>}
-          >
-            {cursoAtivo ? 'Inscrições por dia' : 'Movimento diário'}
-          </TituloDeBloco>
-
-          {/* Com curso filtrado a linha de acessos desaparece: um login não
-              pertence a curso nenhum, e mantê-la aqui sugeriria que aqueles
-              acessos são daquele curso. Sobram as inscrições, que a tabela de
-              inscrições sabe recortar por curso. */}
-          <BarrasComLinha
-            dados={serie}
-            chaveX="dia"
-            formatarX={diaCurto}
-            barra={cursoAtivo
-              ? { chave: 'inscricao', rotulo: 'Inscrições no curso' }
-              : { chave: 'login', rotulo: 'Acessos' }}
-            linha={cursoAtivo ? null : { chave: 'inscricao', rotulo: 'Inscrições' }}
-            altura={268}
-          />
-
-          {/* A legenda diz de qual lado cada série lê a escala: são dois eixos,
-              e sem isso o cruzamento das duas viraria uma conclusão inventada
-              pelo desenho, e não pelo dado. */}
-          <div className="mt-3">
-            <Legenda itens={cursoAtivo
-              ? [{ rotulo: `Inscrições em ${cursoAtivo.curso}`, cor: 'var(--p-barra)' }]
-              : [
-                { rotulo: 'Acessos (escala à esquerda)', cor: 'var(--p-barra)' },
-                { rotulo: 'Inscrições (escala à direita)', cor: 'var(--p-linha)' },
-              ]} />
-          </div>
-        </Cartao>
-        )}
+        {!destaqueDoSistema && cartaoMovimento}
 
         {mostra('rosca') && (
         <Cartao className="flex flex-col">
@@ -999,21 +1091,21 @@ export function BlocoInstitucional({
         <Cartao className="flex flex-col">
           <TituloDeBloco
             acao={<span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>
-              {br(totalInscricoes)} no total
+              {br(totalDeTodosOsCursos)} no total
             </span>}
           >
             Inscrições por curso
           </TituloDeBloco>
-          {cursos.length ? (
+          {cursosTodos.length ? (
             <ListaRanqueada
               selecionado={cursoAtivo?.id}
               aoClicar={(item) => aoFiltrarCurso(item.id)}
-              itens={cursos.slice(0, 10).map((c) => ({
+              itens={cursosTodos.slice(0, 10).map((c) => ({
                 id: c.id,
-                rotulo: c.curso,
+                rotulo: c.publicado ? c.curso : `${c.curso} (fora do ar)`,
                 valor: c.inscritos,
-                nota: totalInscricoes
-                  ? `${pctBr((c.inscritos / totalInscricoes) * 100)}% das inscrições`
+                nota: totalDeTodosOsCursos
+                  ? `${pctBr((c.inscritos / totalDeTodosOsCursos) * 100)}% das inscrições`
                   : null,
               }))}
             />
@@ -1064,7 +1156,7 @@ export function BlocoInstitucional({
       {gradeRegional && (
       <div className="grid grid-cols-1 gap-4 items-stretch xl:[grid-template-columns:var(--cols)]"
         style={gradeRegional}>
-        {!greComSituacao && cartaoGre}
+        {!greComSituacao && !destaqueDoSistema && cartaoGre}
 
         {mostra('perfil') && (
         <Cartao className="flex flex-col">

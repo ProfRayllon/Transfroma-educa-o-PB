@@ -157,7 +157,14 @@ async function porGre({ cursoId = null } = {}) {
        COUNT(DISTINCT v.cursista_id) AS cursistas,
        COUNT(DISTINCT v.escola) AS escolas,
        COUNT(DISTINCT CASE WHEN c.password_hash IS NOT NULL AND c.cadastro_confirmado = 1
-                           THEN v.cursista_id END) AS confirmados
+                           THEN v.cursista_id END) AS confirmados,
+       /* Quem, na regional, esta inscrito em ALGUM curso -- ou no curso
+          escolhido, quando ha filtro, porque ai o proprio WHERE ja deixou so
+          quem esta nele. Conta pessoa, e nao inscricao: quem faz dois cursos
+          continua sendo um docente da regional. */
+       COUNT(DISTINCT CASE WHEN EXISTS (SELECT 1 FROM inscricoes i
+                                         WHERE i.cursista_id = c.id AND i.status = 'inscrito')
+                           THEN v.cursista_id END) AS inscritos
      FROM cursista_vinculos v
      JOIN cursistas c ON c.id = v.cursista_id
      WHERE v.gre IS NOT NULL${curso.sql}
@@ -171,6 +178,7 @@ async function porGre({ cursoId = null } = {}) {
     cursistas: numero(l.cursistas),
     escolas: numero(l.escolas),
     confirmados: numero(l.confirmados),
+    inscritos: numero(l.inscritos),
     adesao: numero(l.cursistas) ? Math.round((numero(l.confirmados) / numero(l.cursistas)) * 100) : 0,
   }))
 }
