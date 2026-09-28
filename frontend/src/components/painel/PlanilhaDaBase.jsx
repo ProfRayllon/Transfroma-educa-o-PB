@@ -312,10 +312,12 @@ export default function PlanilhaDaBase({ gres = [] }) {
               <X size={11} /> limpar filtros
             </button>
           )}
-          {/* Quem tem duas escolas aparece duas vezes: sem esta linha, a contagem
-              da tabela não fecharia com o total de pessoas dos cartões de cima. */}
+          {/* O total daqui fecha com o cartão "Profissionais na base" do topo --
+              é a mesma contagem de cadastros, e foi por isso que a tabela deixou
+              de trazer uma linha por vínculo. */}
           <span className="block mt-0.5">
-            Uma linha por vínculo com escola. O CPF sai completo só no arquivo baixado.
+            Uma linha por cadastro; quem tem duas escolas traz as duas na mesma
+            linha. O CPF sai completo só no arquivo baixado.
           </span>
         </p>
 

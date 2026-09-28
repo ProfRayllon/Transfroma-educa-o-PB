@@ -11,11 +11,18 @@ const { getPool, requireMysql } = require('../../shared/db')
  * consulta deixa a propria pessoa escolher as colunas e os filtros, ver o
  * resultado na tela e baixar exatamente o que esta vendo.
  *
- * ─── Uma linha por VINCULO ───
+ * ─── Uma linha por CADASTRO ───
  *
- * Quem leciona em duas escolas aparece duas vezes, uma por escola, porque GRE,
- * INEP e escola sao da escola e nao da pessoa. Esconder a segunda linha faria a
- * contagem por regional nao fechar. A tela diz isso no rodape.
+ * O total desta tabela e o mesmo numero de cadastros que o cartao do topo
+ * mostra. Na primeira versao era uma linha por vinculo, e os 15.155 cadastros
+ * viravam 16.072 linhas -- os 917 docentes que lecionam em duas escolas
+ * apareciam duas vezes. Como planilha da BASE, o numero que tem de fechar e o
+ * de gente cadastrada, e nao o de vinculos.
+ *
+ * GRE, escola, INEP e municipio sao da escola, e quem tem duas leva as duas na
+ * mesma celula, separadas por " | ". O filtro de GRE e o de INEP procuram em
+ * QUALQUER um dos vinculos da pessoa: quem leciona na 1ª e na 3ª aparece na
+ * busca das duas, uma vez em cada.
  */
 
 /**
@@ -35,10 +42,36 @@ const COLUNAS = {
   telefone: { titulo: 'Telefone', sql: 'c.phone' },
   funcao: { titulo: 'Função', sql: 'c.funcao' },
   componente: { titulo: 'Componente curricular', sql: 'c.componente_curricular' },
-  gre: { titulo: 'GRE', sql: 'v.gre', ordenavel: true },
-  escola: { titulo: 'Escola', sql: 'v.escola', ordenavel: true },
-  inep: { titulo: 'INEP', sql: 'v.inep' },
-  municipio: { titulo: 'Município', sql: 'em.municipio' },
+  /* Os quatro campos da escola vem agregados, um por vinculo. DISTINCT na GRE e
+     no municipio porque duas escolas da mesma regional repetiriam o rotulo; na
+     escola e no INEP nao, porque ali a repeticao seria erro de cadastro e deve
+     aparecer. */
+  gre: {
+    titulo: 'GRE',
+    sql: `(SELECT GROUP_CONCAT(DISTINCT v.gre ORDER BY v.gre SEPARATOR ' | ')
+             FROM cursista_vinculos v WHERE v.cursista_id = c.id AND v.gre IS NOT NULL AND v.gre <> '')`,
+  },
+  escola: {
+    titulo: 'Escola',
+    sql: `(SELECT GROUP_CONCAT(v.escola ORDER BY v.ordem SEPARATOR ' | ')
+             FROM cursista_vinculos v WHERE v.cursista_id = c.id AND v.escola IS NOT NULL AND v.escola <> '')`,
+  },
+  inep: {
+    titulo: 'INEP',
+    sql: `(SELECT GROUP_CONCAT(v.inep ORDER BY v.ordem SEPARATOR ' | ')
+             FROM cursista_vinculos v WHERE v.cursista_id = c.id AND v.inep IS NOT NULL AND v.inep <> '')`,
+  },
+  municipio: {
+    titulo: 'Município',
+    sql: `(SELECT GROUP_CONCAT(DISTINCT em.municipio ORDER BY em.municipio SEPARATOR ' | ')
+             FROM cursista_vinculos v
+             JOIN escola_municipio em ON em.inep = v.inep
+            WHERE v.cursista_id = c.id)`,
+  },
+  vinculos: {
+    titulo: 'Vínculos',
+    sql: '(SELECT COUNT(*) FROM cursista_vinculos v WHERE v.cursista_id = c.id)',
+  },
   situacao: {
     titulo: 'Situação do cadastro',
     sql: `CASE WHEN c.status = 'inativo' THEN 'Inativo'
@@ -116,8 +149,17 @@ function montarFiltro({ gre, inep, nome, situacao }) {
   const onde = []
   const params = []
 
-  if (gre) { onde.push(' AND v.gre = ?'); params.push(gre) }
-  if (inep) { onde.push(' AND v.inep = ?'); params.push(String(inep).replace(/\D/g, '')) }
+  /* EXISTS, e nao JOIN: com JOIN, quem tem duas escolas na regional procurada
+     voltaria duas vezes, e o total da tela deixaria de ser o de cadastros --
+     que e justamente o que esta tabela precisa fechar. */
+  if (gre) {
+    onde.push(' AND EXISTS (SELECT 1 FROM cursista_vinculos v WHERE v.cursista_id = c.id AND v.gre = ?)')
+    params.push(gre)
+  }
+  if (inep) {
+    onde.push(' AND EXISTS (SELECT 1 FROM cursista_vinculos v WHERE v.cursista_id = c.id AND v.inep = ?)')
+    params.push(String(inep).replace(/\D/g, ''))
+  }
 
   const termo = String(nome || '').trim()
   if (termo.length >= 3) {
@@ -136,9 +178,9 @@ function montarFiltro({ gre, inep, nome, situacao }) {
   return { sql: onde.join(''), params }
 }
 
-const DE = `FROM cursistas c
-            LEFT JOIN cursista_vinculos v ON v.cursista_id = c.id
-            LEFT JOIN escola_municipio em ON em.inep = v.inep`
+/* Sem JOIN com os vinculos: eles entram por subconsulta, coluna a coluna. O
+   JOIN multiplicava a linha da pessoa pelo numero de escolas dela. */
+const DE = 'FROM cursistas c'
 
 /** A planilha na tela: uma pagina de linhas mais o total do recorte. */
 async function consultar({
@@ -159,7 +201,7 @@ async function consultar({
   const [linhas] = await getPool().query(
     `SELECT ${selecao} ${DE}
       WHERE 1 = 1${f.sql}
-      ORDER BY c.name, v.ordem
+      ORDER BY c.name, c.id
       LIMIT ${limite} OFFSET ${salto}`, f.params
   )
 
@@ -201,7 +243,7 @@ async function paraExportar({ gre = null, inep = null, nome = '', situacao = nul
   const [linhas] = await getPool().query(
     `SELECT ${selecao} ${DE}
       WHERE 1 = 1${f.sql}
-      ORDER BY c.name, v.ordem
+      ORDER BY c.name, c.id
       LIMIT 50000`, f.params
   )
 
