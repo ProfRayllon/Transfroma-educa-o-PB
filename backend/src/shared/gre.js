@@ -43,8 +43,16 @@ function padronizarGre(valor) {
   return `${numero}ª GRE`
 }
 
-/** O formato canonico, para quem precisa validar em vez de converter. */
-const ehGrePadrao = (valor) => /^\d{1,2}ª GRE$/.test(String(valor ?? ''))
+/**
+ * O formato canonico, para quem precisa validar em vez de converter.
+ *
+ * Sem zero a esquerda: `\d{1,2}` aceitava "01ª GRE" como se ja estivesse
+ * certo, e por isso a correcao nunca o tocava -- a regional aparecia duas
+ * vezes no filtro, uma como "01ª GRE" e outra como "1ª GRE", cada uma com um
+ * pedaco das pessoas. Quem converte sempre soube resolver isso; quem validava
+ * e que dizia que nao precisava.
+ */
+const ehGrePadrao = (valor) => /^[1-9][0-9]?ª GRE$/.test(String(valor ?? ''))
 
 /**
  * Poe as GREs ja gravadas no formato unico -- uma vez, e nunca mais.
@@ -70,7 +78,7 @@ async function padronizarGresGravadas(pool, tabela) {
 
   const [fora] = await pool.query(
     `SELECT DISTINCT gre FROM ${tabela}
-      WHERE gre IS NOT NULL AND gre <> '' AND gre NOT REGEXP '^[0-9]{1,2}ª GRE$'`
+      WHERE gre IS NOT NULL AND gre <> '' AND gre NOT REGEXP '^[1-9][0-9]?ª GRE$'`
   )
 
   for (const linha of fora) {
