@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { RefreshCw, Calendar, X, Filter, ChevronDown, ArrowLeft, Settings } from 'lucide-react'
+import { RefreshCw, Calendar, X, Filter, ChevronDown, Settings, GraduationCap, Star, Database } from 'lucide-react'
 import api from '../lib/api'
 import { useTheme } from '../context/ThemeContext'
 import { variaveisDoTema } from '../components/painel/graficos'
@@ -33,10 +33,10 @@ const DIAS = 30
 /**
  * O que cada painel e, dito na propria tela.
  *
- * O titulo nao pode ser "Dashboard" nos tres: quem chega por um link direto,
- * sem passar pela capa, precisa saber em qual dos tres esta. E `secao` desconhecida
- * cai no painel inteiro em vez de dar erro -- endereco digitado torto mostra
- * tudo, que e o comportamento antigo.
+ * O titulo nao pode ser "Dashboard" nos tres: quem chega por um link direto
+ * precisa saber em qual dos tres esta. E `secao` desconhecida cai no painel
+ * inteiro em vez de dar erro -- endereco digitado torto mostra tudo, que e o
+ * comportamento antigo.
  */
 const PAINEIS = {
   concluintes: {
@@ -55,6 +55,46 @@ const PAINEIS = {
     titulo: 'Dashboard',
     subtitulo: 'O retrato do Transforma Educacao PB',
   },
+}
+
+/**
+ * Os tres paineis, em botoes no alto da tela.
+ *
+ * Substituem a capa que existia antes em /painel. Ela mostrava tres artes e
+ * nenhum numero: custava um clique para chegar em qualquer dado, e outro para
+ * trocar de painel depois. Aqui a troca e um clique so, de dentro do painel em
+ * que a pessoa ja esta, e o painel aberto fica marcado.
+ */
+const PAINEIS_NA_BARRA = [
+  { chave: 'concluintes', para: '/painel/concluintes', rotulo: 'Concluintes', icone: GraduationCap },
+  { chave: 'progresso', para: '/painel/progresso', rotulo: 'Avaliação', icone: Star },
+  { chave: 'sistema', para: '/painel/sistema', rotulo: 'Sistema', icone: Database },
+]
+
+function BarraDePaineis({ secao }) {
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {PAINEIS_NA_BARRA.map(({ chave, para, rotulo, icone: Icone }) => {
+        const ativo = chave === secao
+        return (
+          <Link
+            key={chave}
+            to={para}
+            aria-current={ativo ? 'page' : undefined}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-[13px] font-medium border transition-colors"
+            style={{
+              borderColor: ativo ? 'transparent' : 'var(--p-cartaoBorda)',
+              background: ativo ? 'var(--p-r4)' : 'transparent',
+              color: ativo ? '#FFFFFF' : 'var(--p-texto2)',
+            }}
+          >
+            <Icone size={14} />
+            {rotulo}
+          </Link>
+        )
+      })}
+    </div>
+  )
 }
 
 /**
@@ -92,7 +132,8 @@ function Seletor({ rotulo, valor, opcoes, aoTrocar }) {
 
 export default function Painel() {
   const { dark } = useTheme()
-  const { secao = 'tudo' } = useParams()
+  // Sem seção no endereço é /painel: abre no primeiro dos três.
+  const { secao = 'concluintes' } = useParams()
   const painel = PAINEIS[secao] || PAINEIS.tudo
   const [dados, setDados] = useState(null)
   const [erro, setErro] = useState(null)
@@ -157,22 +198,18 @@ export default function Painel() {
     <div className="space-y-6 animate-fade-in" style={variaveisDoTema(dark)}>
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
-          {/* A volta para a capa fica antes do título, e não num botão solto no
-              rodapé: é o caminho de quem entrou no painel errado, e ele precisa
-              estar onde o olho já está. */}
-          <Link
-            to="/painel"
-            className="inline-flex items-center gap-1.5 text-[13px] mb-1 transition-colors hover:underline"
-            style={{ color: 'var(--p-texto3)' }}
-          >
-            <ArrowLeft size={14} />
-            Painéis
-          </Link>
           <h1 className="page-title">{painel.titulo}</h1>
           <p className="page-subtitle">
             {painel.subtitulo}
             {dados && ` · atualizado às ${new Date(dados.geradoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
           </p>
+
+          {/* Os botões ficam sob o título e não ao lado dos filtros: trocar de
+              painel muda a tela inteira, filtrar muda os números dela. Misturar
+              os dois na mesma fileira daria o mesmo peso a coisas diferentes. */}
+          <div className="mt-3">
+            <BarraDePaineis secao={secao} />
+          </div>
 
           {/* O filtro ativo fica escrito, e não só selecionado na caixa: sem
               isso, quem chega na tela já filtrada leria os números como se

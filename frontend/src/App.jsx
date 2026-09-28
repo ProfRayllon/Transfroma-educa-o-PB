@@ -9,7 +9,6 @@ import Home from './pages/Home'
 import PublicCourses from './pages/PublicCourses'
 import Login from './pages/Login'
 import Painel from './pages/Painel'
-import PainelCapa from './pages/PainelCapa'
 import PainelPlanilhas from './pages/PainelPlanilhas'
 import Cursos from './pages/Cursos'
 import Producao from './pages/Producao'
@@ -82,10 +81,11 @@ export default function App() {
               equipe interna -- cursista nao e usuario do sistema administrativo. */}
           <Route path="/area-do-cursista/*" element={<CursistaRoutes />} />
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            {/* A capa lista os paineis; cada um vive no proprio endereco.
-                Antes era tudo uma tela so, e quem entrava para ver a conclusao
-                passava por dez graficos que nao respondiam a pergunta dele. */}
-            <Route path="painel" element={<PainelCapa />} />
+            {/* /painel abre direto no primeiro painel, e a troca entre os tres
+                e feita pelos botoes no topo da propria tela. Antes havia uma capa
+                aqui: ela custava um clique a mais para chegar em qualquer numero
+                e nao mostrava nenhum. */}
+            <Route path="painel" element={<Painel />} />
             {/* Rota fixa ao lado da dinamica: o React Router da precedencia ao
                 segmento literal, entao "planilhas" nunca e lido como uma secao. */}
             <Route path="painel/planilhas" element={<PainelPlanilhas />} />

@@ -222,7 +222,7 @@ export default function PainelPlanilhas() {
         <Link to="/painel"
           className="inline-flex items-center gap-1.5 text-[13px] mb-1 text-gray-500 hover:underline">
           <ArrowLeft size={14} />
-          Painéis
+          Voltar ao painel
         </Link>
         <h1 className="page-title">Planilhas dos painéis</h1>
         <p className="page-subtitle max-w-3xl">
