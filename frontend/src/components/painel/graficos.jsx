@@ -443,6 +443,141 @@ export function BarrasComLinha({
   )
 }
 
+/* ═══ Área ondulada de uma série ═══ */
+
+/**
+ * Uma série só, em área com a curva suavizada.
+ *
+ * Substituiu o gráfico de duas escalas no movimento diário. Ali, acessos liam
+ * a escala da esquerda e inscrições a da direita: com quarenta acessos e três
+ * inscrições no mesmo dia, a linha das inscrições passava POR CIMA das barras
+ * de acesso, e a leitura natural -- "teve mais inscrição que acesso" -- era o
+ * contrário do que os números diziam. Duas escalas num gráfico só é sempre um
+ * convite a esse engano; a saída foi mostrar uma coisa de cada vez.
+ *
+ * A curva é Catmull-Rom convertida para Bézier, com tensão baixa: ela passa
+ * EXATAMENTE por cada ponto -- o desenho suaviza o caminho entre eles, e não
+ * os valores. Uma suavização que muda o ponto contaria uma história que o dado
+ * não tem.
+ */
+export function AreaDeSerie({
+  dados, chaveX, chaveY, rotulo, altura = 260, formatarX, cor = 'var(--p-r4)',
+}) {
+  const [ativo, setAtivo] = useState(null)
+  const L = 48, R = 14, T = 16, B = 28
+  const W = 1000
+  const H = altura
+  const alturaUtil = H - T - B
+
+  const maximo = Math.max(1, ...dados.map((d) => d[chaveY]))
+  const passo = dados.length > 1 ? (W - L - R) / (dados.length - 1) : 0
+  const cx = (i) => L + passo * i
+  const cy = (v) => T + alturaUtil * (1 - v / maximo)
+
+  /* Catmull-Rom -> Bézier cúbica. O ponto de controle sai da direção entre o
+     vizinho anterior e o seguinte, dividida por seis: é o fator que mantém a
+     curva sem laços nem estouros acima do maior valor. */
+  const curva = dados.map((d, i) => {
+    const x = cx(i)
+    const y = cy(d[chaveY])
+    if (!i) return `M${x.toFixed(1)},${y.toFixed(1)}`
+    const anterior = dados[i - 1]
+    const doisAtras = dados[i - 2] || anterior
+    const proximo = dados[i + 1] || d
+    const x1 = cx(i - 1) + (x - cx(i - 2 < 0 ? 0 : i - 2)) / 6
+    const y1 = cy(anterior[chaveY]) + (y - cy(doisAtras[chaveY])) / 6
+    const x2 = x - (cx(i + 1 >= dados.length ? i : i + 1) - cx(i - 1)) / 6
+    const y2 = y - (cy(proximo[chaveY]) - cy(anterior[chaveY])) / 6
+    return `C${x1.toFixed(1)},${y1.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)} ${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+
+  const compacto = (v) => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1).replace('.0', '').replace('.', ',')}K` : String(v))
+  const niveis = [0, 0.5, 1]
+  const salto = Math.max(1, Math.ceil(dados.length / 8))
+  const marcas = dados.map((d, i) => ({ d, i })).filter(({ i }) => i % salto === 0 || i === dados.length - 1)
+
+  const aoMover = (evento) => {
+    const caixa = evento.currentTarget.getBoundingClientRect()
+    const x = ((evento.clientX - caixa.left) / caixa.width) * W
+    const i = passo ? Math.round((x - L) / passo) : 0
+    setAtivo(i >= 0 && i < dados.length ? i : null)
+  }
+
+  return (
+    <div className="relative w-full" style={{ height: altura }}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="none"
+        onMouseMove={aoMover} onMouseLeave={() => setAtivo(null)}>
+        <defs>
+          <linearGradient id="grad-area-serie" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={cor} stopOpacity="0.30" />
+            <stop offset="100%" stopColor={cor} stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+
+        {niveis.map((f) => (
+          <line key={`g${f}`} x1={L} y1={T + alturaUtil * (1 - f)} x2={W - R} y2={T + alturaUtil * (1 - f)}
+            stroke="var(--p-grade)" strokeWidth="1" />
+        ))}
+        {niveis.map((f) => (
+          <text key={`e${f}`} x={L - 10} y={T + alturaUtil * (1 - f) + 4} textAnchor="end"
+            style={{ fontSize: 12, fill: 'var(--p-texto3)' }}>
+            {compacto(Math.round(maximo * f))}
+          </text>
+        ))}
+
+        <path d={`${curva} L${cx(dados.length - 1)},${T + alturaUtil} L${cx(0)},${T + alturaUtil} Z`}
+          fill="url(#grad-area-serie)" />
+        <path d={curva} fill="none" stroke={cor} strokeWidth="2.5"
+          strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"
+          className="animate-traco" />
+
+        {/* Ponto só no dia apontado: um marcador por dia em sessenta dias vira
+            uma fileira de bolinhas que esconde a própria curva. */}
+        {ativo != null && (
+          <>
+            <line x1={cx(ativo)} y1={T} x2={cx(ativo)} y2={T + alturaUtil}
+              stroke="var(--p-texto3)" strokeWidth="1" strokeDasharray="3 3" />
+            <circle cx={cx(ativo)} cy={cy(dados[ativo][chaveY])} r="5"
+              fill={cor} stroke="var(--p-pontoBorda)" strokeWidth="1.5" />
+          </>
+        )}
+
+        {marcas.map(({ d, i }) => (
+          <text key={`x${i}`} x={cx(i)} y={H - 8} textAnchor="middle"
+            style={{ fontSize: 12, fill: 'var(--p-texto3)' }}>
+            {formatarX ? formatarX(d[chaveX]) : d[chaveX]}
+          </text>
+        ))}
+      </svg>
+
+      {ativo != null && (
+        <div
+          className="absolute pointer-events-none rounded-xl px-3 py-2 text-[12px] whitespace-nowrap z-10"
+          style={{
+            left: `${(cx(ativo) / W) * 100}%`,
+            top: 6,
+            transform: `translateX(${ativo > dados.length * 0.68 ? '-105%' : '12px'})`,
+            background: 'var(--p-balao)',
+            border: '1px solid var(--p-cartaoBorda)',
+            boxShadow: '0 10px 30px rgba(15,23,42,0.18)',
+          }}
+        >
+          <p className="font-semibold mb-1" style={{ color: 'var(--p-texto)' }}>
+            {formatarX ? formatarX(dados[ativo][chaveX]) : dados[ativo][chaveX]}
+          </p>
+          <p className="flex items-center gap-2" style={{ color: 'var(--p-texto2)' }}>
+            <span className="w-2 h-2 rounded-full" style={{ background: cor }} />
+            {rotulo}
+            <b className="ml-3 tabular-nums" style={{ color: 'var(--p-texto)' }}>
+              {br(dados[ativo][chaveY])}
+            </b>
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ═══ Barras verticais com rótulo em cima ═══ */
 
 export function BarrasRotuladas({ dados, altura = '100%', formatarValor, mostrarValor = true }) {
@@ -972,7 +1107,12 @@ export function ListaRanqueada({ itens, sufixo = '', mostrarPosicao = true, aoCl
   const maximo = Math.max(1, ...itens.map((i) => i.valor))
 
   return (
-    <div className="grid gap-2.5">
+    /* `minmax(0,1fr)` e nao `grid` puro: um item de grade nao encolhe abaixo da
+       largura minima do seu conteudo, e nome de curso longo -- "Leitura,
+       producao textual e recomposicao em Linguagens (fora do ar)" -- esticava a
+       linha para fora do cartao, levando o numero junto, que aparecia cortado
+       na borda. Com o zero, a linha cabe e o nome e que corta com reticencias. */
+    <div className="grid gap-2.5 [grid-template-columns:minmax(0,1fr)]">
       {itens.map((item, i) => (
         /* Clicar filtra o dashboard inteiro. Vira <button> so quando ha o que
            fazer: um item clicavel que nao faz nada e pior do que texto. */
@@ -982,7 +1122,7 @@ export function ListaRanqueada({ itens, sufixo = '', mostrarPosicao = true, aoCl
           role={aoClicar ? 'button' : undefined}
           tabIndex={aoClicar ? 0 : undefined}
           onKeyDown={aoClicar ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); aoClicar(item) } } : undefined}
-          className={`flex items-center gap-3 rounded-lg transition-colors ${
+          className={`flex items-center gap-3 rounded-lg transition-colors min-w-0 ${
             aoClicar ? 'cursor-pointer -mx-2 px-2 py-1' : ''
           }`}
           /* Os dois lados podem ser undefined -- ranking sem id e sem selecao --, e

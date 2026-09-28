@@ -5,7 +5,7 @@ import {
   Share2, ClipboardCheck, Signpost, Zap, ThumbsUp, MessageSquare,
 } from 'lucide-react'
 import {
-  Cartao, TituloDeBloco, CartaoKpi, BarrasComLinha, BarrasRotuladas,
+  Cartao, TituloDeBloco, CartaoKpi, BarrasComLinha, BarrasRotuladas, AreaDeSerie,
   Rosca, RoscaRotulada, LegendaDeRosca, ListaRanqueada, CarrosselDeCursos,
   RankingPirulito, ResumoDoRanking, MosaicoDeIndicadores,
 } from './graficos'
@@ -800,35 +800,29 @@ export function BlocoInstitucional({
           <TituloDeBloco
             acao={<span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>últimos {dias} dias</span>}
           >
-            {cursoAtivo ? 'Inscrições por dia' : 'Movimento diário'}
+            {cursoAtivo ? `Inscrições por dia · ${cursoAtivo.curso}` : 'Inscrições por dia'}
           </TituloDeBloco>
 
-          {/* Com curso filtrado a linha de acessos desaparece: um login não
-              pertence a curso nenhum, e mantê-la aqui sugeriria que aqueles
-              acessos são daquele curso. Sobram as inscrições, que a tabela de
-              inscrições sabe recortar por curso. */}
-          <BarrasComLinha
+          {/* Uma série só, de propósito.
+              Antes o cartão trazia acessos em barra e inscrições em linha, cada
+              um lendo a sua própria escala. Num dia de quarenta acessos e três
+              inscrições, a linha das inscrições passava acima das barras -- e
+              quem olhava lia "teve mais inscrição que acesso", que é o oposto
+              do que os números diziam. Os acessos continuam no cartão do topo,
+              onde são o próprio número, e não um desenho ao lado de outro. */}
+          <AreaDeSerie
             dados={serie}
             chaveX="dia"
+            chaveY="inscricao"
+            rotulo="Inscrições"
             formatarX={diaCurto}
-            barra={cursoAtivo
-              ? { chave: 'inscricao', rotulo: 'Inscrições no curso' }
-              : { chave: 'login', rotulo: 'Acessos' }}
-            linha={cursoAtivo ? null : { chave: 'inscricao', rotulo: 'Inscrições' }}
             altura={268}
           />
 
-          {/* A legenda diz de qual lado cada série lê a escala: são dois eixos,
-              e sem isso o cruzamento das duas viraria uma conclusão inventada
-              pelo desenho, e não pelo dado. */}
-          <div className="mt-3">
-            <Legenda itens={cursoAtivo
-              ? [{ rotulo: `Inscrições em ${cursoAtivo.curso}`, cor: 'var(--p-barra)' }]
-              : [
-                { rotulo: 'Acessos (escala à esquerda)', cor: 'var(--p-barra)' },
-                { rotulo: 'Inscrições (escala à direita)', cor: 'var(--p-linha)' },
-              ]} />
-          </div>
+          <p className="text-[11px] mt-3" style={{ color: 'var(--p-texto3)' }}>
+            {br(inscricoesNoPeriodo)} inscrições no período
+            {!cursoAtivo && ' · todos os cursos'}
+          </p>
         </Cartao>
   ) : null
 
