@@ -4,6 +4,8 @@ const express = require('express')
 const repo = require('./painel.repo')
 const resultados = require('../resultados/resultados.repo')
 const { montarCsv } = require('../../shared/csv')
+const { criarPlanilha } = require('../../shared/xlsx')
+const planilha = require('./painel.planilha')
 const { doCache, guardar } = require('./painel.cache')
 
 /**
@@ -114,7 +116,7 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
         totais, porGre, funil, perfil, inscricoes, serie,
         conclusao, conclusaoPorGre, avaliacao, nota, evolucao, opcoes,
         escolasConcluintes, porFuncao, porComponente, porMunicipio,
-        evolucaoRespostas, componentes,
+        evolucaoRespostas, componentes, producaoPorCurso,
       ] = await Promise.all([
         repo.totais({ cursoId, dias, gre }),
         repo.porGre({ cursoId }),
@@ -151,6 +153,12 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
 
         resultados.avaliacaoEvolucao({ cursoId, componente }),
         resultados.componentesAvaliadores({ cursoId }),
+
+        /* A producao nao aceita filtro nenhum: ela e do CURSO, nao de quem se
+           inscreveu nele. Recortar por regional daria o mesmo percentual em
+           todas as dezesseis, e a tela pareceria estar respondendo a um filtro
+           que nao muda nada. */
+        repo.producaoPorCurso(),
       ])
 
       const dados = {
@@ -168,7 +176,7 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
         // que a planilha ainda nao chegou.
         opcoes,
         institucional: {
-          totais, porGre, funil, perfil, inscricoes, serie,
+          totais, porGre, funil, perfil, inscricoes, serie, producaoPorCurso,
           resultados: {
             conclusao, porGre: conclusaoPorGre, avaliacao, nota, evolucao,
             escolas: escolasConcluintes, porFuncao, porComponente, porMunicipio,
@@ -325,6 +333,64 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
       const status = erro.statusCode || 500
       res.status(status).json({
         message: status === 503 ? erro.message : 'Nao foi possivel exportar a avaliacao.',
+      })
+    }
+  })
+
+  /**
+   * A planilha da base, com as colunas e os filtros escolhidos na tela.
+   *
+   * Fica fora do payload do painel de proposito: aquele e um punhado de
+   * agregados com cache de um minuto, e esta resposta muda a cada tecla digitada
+   * na busca e a cada pagina virada. Guardar isso encheria o cache de dado
+   * pessoal que ninguem releria.
+   */
+  router.get('/base', requireRole(...PERFIS_COM_ACESSO), async (req, res) => {
+    try {
+      const dados = await planilha.consultar({
+        gre: normalizarGre(req.query.gre),
+        inep: String(req.query.inep || '').replace(/\D/g, '').slice(0, 12) || null,
+        nome: String(req.query.nome || '').slice(0, 80),
+        situacao: String(req.query.situacao || '') || null,
+        colunas: req.query.colunas,
+        pagina: Number(req.query.pagina) || 1,
+        porPagina: Number(req.query.porPagina) || 25,
+      })
+      res.json({ ...dados, opcoes: planilha.opcoes() })
+    } catch (erro) {
+      const status = erro.statusCode || 500
+      res.status(status).json({
+        message: status === 503 ? erro.message : 'Nao foi possivel montar a planilha.',
+      })
+    }
+  })
+
+  /**
+   * O mesmo recorte em .xlsx, com o CPF completo.
+   *
+   * Vai em planilha e nao em CSV porque este arquivo e montado pela pessoa,
+   * coluna a coluna, para abrir e trabalhar -- e CSV com acento e ponto e virgula
+   * ainda e a origem mais comum de "abriu tudo numa coluna so" no Excel.
+   */
+  router.get('/base/exportar', requireRole(...PERFIS_COM_ACESSO), async (req, res) => {
+    try {
+      const { colunas, linhas } = await planilha.paraExportar({
+        gre: normalizarGre(req.query.gre),
+        inep: String(req.query.inep || '').replace(/\D/g, '').slice(0, 12) || null,
+        nome: String(req.query.nome || '').slice(0, 80),
+        situacao: String(req.query.situacao || '') || null,
+        colunas: req.query.colunas,
+      })
+
+      const arquivo = criarPlanilha({ nomeAba: 'Base', colunas, linhas })
+      const hoje = new Date().toISOString().slice(0, 10)
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      res.setHeader('Content-Disposition', `attachment; filename="base-transforma-${hoje}.xlsx"`)
+      res.send(arquivo)
+    } catch (erro) {
+      const status = erro.statusCode || 500
+      res.status(status).json({
+        message: status === 503 ? erro.message : 'Nao foi possivel exportar a planilha.',
       })
     }
   })

@@ -11,6 +11,7 @@ import {
 } from './graficos'
 import ListaDeConcluintes from './listaConcluintes'
 import DetalheDaAvaliacao from './detalheAvaliacao'
+import PlanilhaDaBase from './PlanilhaDaBase'
 
 /**
  * Os blocos do dashboard.
@@ -221,7 +222,7 @@ function variacaoDaSerie(serie, chave) {
 const BLOCOS_POR_SECAO = {
   concluintes: ['kpiConclusao', 'situacao', 'funcao', 'gre', 'escolas', 'lista'],
   progresso: ['kpiAvaliacao', 'evolucao', 'notaRosca', 'positivas', 'indicadores', 'detalhe'],
-  sistema: ['kpiBase', 'movimento', 'perfil', 'gre'],
+  sistema: ['kpiBase', 'movimento', 'porCurso', 'perfil', 'gre', 'planilha'],
   tudo: [
     'kpiConclusao', 'kpiCurso', 'kpiBase', 'movimento', 'rosca', 'carrossel',
     'gre', 'perfil', 'avaliacao', 'situacao', 'funcao', 'escolas', 'lista',
@@ -270,6 +271,11 @@ export function BlocoInstitucional({
   const perfil = dados.institucional.perfil
   const gres = dados.institucional.porGre
   const cursos = dados.institucional.inscricoes.filter((c) => c.publicado)
+
+  /* Curso sem material nenhum fica de fora do ranking de produção: ele entraria
+     com 0% e ocuparia o lugar de um curso que está de fato atrasado. O total de
+     cursos continua nos cartões do topo. */
+  const producao = (dados.institucional.producaoPorCurso || []).filter((c) => c.materiais > 0)
 
   /**
    * O que veio de planilha.
@@ -987,6 +993,70 @@ export function BlocoInstitucional({
       </div>
       )}
 
+      {/* ─── Por curso: a procura de um lado, o que está pronto do outro ─── */}
+      {mostra('porCurso') && (
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-stretch">
+        <Cartao className="flex flex-col">
+          <TituloDeBloco
+            acao={<span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>
+              {br(totalInscricoes)} no total
+            </span>}
+          >
+            Inscrições por curso
+          </TituloDeBloco>
+          {cursos.length ? (
+            <ListaRanqueada
+              selecionado={cursoAtivo?.id}
+              aoClicar={(item) => aoFiltrarCurso(item.id)}
+              itens={cursos.slice(0, 10).map((c) => ({
+                id: c.id,
+                rotulo: c.curso,
+                valor: c.inscritos,
+                nota: totalInscricoes
+                  ? `${pctBr((c.inscritos / totalInscricoes) * 100)}% das inscrições`
+                  : null,
+              }))}
+            />
+          ) : (
+            <p className="flex-1 flex items-center justify-center text-[13px]"
+              style={{ color: 'var(--p-texto3)' }}>Nenhum curso publicado ainda.</p>
+          )}
+        </Cartao>
+
+        <Cartao className="flex flex-col">
+          <TituloDeBloco
+            acao={<span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>
+              material aprovado
+            </span>}
+          >
+            Produção por curso
+          </TituloDeBloco>
+          {producao.length ? (
+            <>
+              <ListaRanqueada
+                sufixo="%"
+                itens={producao.slice(0, 10).map((c) => ({
+                  id: c.id,
+                  rotulo: c.curso,
+                  valor: c.pct,
+                  nota: `${br(c.prontos)} de ${br(c.materiais)} materiais`,
+                }))}
+              />
+              {/* A mesma regra da tela de Cursos, dita aqui: sem isso, os dois
+                  percentuais parecem discordar quando alguém compara. */}
+              <p className="text-[11px] mt-3 leading-relaxed" style={{ color: 'var(--p-texto3)' }}>
+                Conta como pronto o material concluído e aprovado pela supervisão
+                e pela coordenação — a mesma regra da tela de Cursos.
+              </p>
+            </>
+          ) : (
+            <p className="flex-1 flex items-center justify-center text-[13px]"
+              style={{ color: 'var(--p-texto3)' }}>Nenhum material cadastrado ainda.</p>
+          )}
+        </Cartao>
+      </div>
+      )}
+
       {/* ─── Território ─── */}
       {/* O pirulito precisa de largura: rótulo, haste e valor dividem a linha,
           e num cartão estreito a haste some entre os dois textos. A GRE cede
@@ -1374,6 +1444,17 @@ export function BlocoInstitucional({
       {/* ─── Lista ─── */}
       {mostra('lista') && temConclusao && (
         <ListaDeConcluintes cursoId={dados.cursoId} gre={dados.gre} />
+      )}
+
+      {/* ─── A planilha que quem olha monta ─── */}
+      {/* Fica no fim da tela de propósito: é a ferramenta de quem já leu os
+          gráficos e quer o recorte que nenhum deles responde. */}
+      {/* As GREs saem do CADASTRO (porGre), e não da lista de filtros do painel,
+          que vem do consolidado importado: a tabela é da base, e oferecer
+          regionais que só existem na planilha de um curso daria um filtro que
+          não devolve ninguém. */}
+      {mostra('planilha') && (
+        <PlanilhaDaBase gres={gres.map((g) => g.gre)} />
       )}
 
     </section>

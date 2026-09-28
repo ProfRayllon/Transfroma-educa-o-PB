@@ -272,6 +272,50 @@ async function perfilDaRede({ cursoId = null, gre = null } = {}) {
   }
 }
 
+/* ─── Producao ─── */
+
+/**
+ * Quanto da producao de cada curso ja esta pronta.
+ *
+ * A regra e a MESMA da tela de Cursos: um material so conta como pronto quando
+ * esta concluido E aprovado pela supervisao E aprovado pela coordenacao. Duas
+ * definicoes de "pronto" no mesmo sistema dariam dois percentuais para o mesmo
+ * curso, e a pergunta "qual dos dois vale" nao tem resposta boa.
+ *
+ * O material se liga ao curso pelo id ou pelo NOME. O nome existe porque os
+ * materiais antigos foram cadastrados antes de haver id de curso, e continuam
+ * validos -- ignorar esse caminho zeraria a producao dos cursos mais antigos,
+ * que sao justamente os que tem mais material feito.
+ */
+async function producaoPorCurso() {
+  requireMysql()
+
+  const [linhas] = await getPool().query(
+    `SELECT c.id, c.name AS curso, c.status_ava,
+            COUNT(m.id) AS materiais,
+            SUM(m.status = 'concluido'
+                AND m.supervisor_status = 'aprovado'
+                AND m.coordinator_status = 'aprovado') AS prontos,
+            SUM(m.published = 1) AS publicados
+       FROM courses c
+       LEFT JOIN materials m ON m.course_id = c.id OR m.course = c.name
+      GROUP BY c.id, c.name, c.status_ava
+      ORDER BY materiais DESC, c.name`
+  )
+
+  return linhas.map((l) => ({
+    id: l.id,
+    curso: l.curso,
+    publicado: l.status_ava === 'publicado',
+    materiais: numero(l.materiais),
+    prontos: numero(l.prontos),
+    publicados: numero(l.publicados),
+    // Curso sem material nenhum fica em 0% e nao em 100%: nada pronto de nada a
+    // fazer ainda e comeco, nao conclusao.
+    pct: numero(l.materiais) ? Math.round((numero(l.prontos) / numero(l.materiais)) * 1000) / 10 : 0,
+  }))
+}
+
 /* ─── Inscricoes ─── */
 
 async function inscricoesPorCurso({ gre = null } = {}) {
@@ -506,6 +550,7 @@ module.exports = {
   funil,
   perfilDaRede,
   inscricoesPorCurso,
+  producaoPorCurso,
   serie,
   acessosPorHora,
   equipe,

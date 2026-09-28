@@ -801,9 +801,12 @@ export function RankingPirulito({
                 dia forem calculados em lugares diferentes, um vai encostar no
                 outro errado na primeira mudança de escala. */}
             <span className="relative flex-1 min-w-0 h-full flex items-center">
-              {marcas.map((m) => (
+              {/* A chave e a POSICAO da marca, e nao o valor dela: quando o
+                  maior valor do ranking e pequeno, duas marcas arredondam para
+                  o mesmo numero e o React reclama de chave repetida. */}
+              {marcas.map((m, indice) => (
                 <span
-                  key={m}
+                  key={indice}
                   className="absolute inset-y-0 w-px"
                   style={{ left: `${(m / topo) * 100}%`, background: 'var(--p-grade)' }}
                 />
@@ -847,9 +850,9 @@ export function RankingPirulito({
         <span className="shrink-0 w-[38%] max-w-[210px]" />
         <span className="relative flex-1 min-w-0 h-4">
           <span className="absolute inset-x-0 top-0 h-px" style={{ background: 'var(--p-grade)' }} />
-          {marcas.map((m) => (
+          {marcas.map((m, indice) => (
             <span
-              key={m}
+              key={indice}
               className="absolute top-1 text-[11px] tabular-nums whitespace-nowrap"
               style={{
                 left: `${(m / topo) * 100}%`,
