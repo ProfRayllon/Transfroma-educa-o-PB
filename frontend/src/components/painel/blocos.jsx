@@ -281,10 +281,15 @@ export function BlocoInstitucional({
      esconde-la faria o total do cartao nao fechar com o do topo da tela. */
   const cursosTodos = dados.institucional.inscricoes
 
-  /* Curso sem material nenhum fica de fora do ranking de produção: ele entraria
-     com 0% e ocuparia o lugar de um curso que está de fato atrasado. O total de
-     cursos continua nos cartões do topo. */
-  const producao = (dados.institucional.producaoPorCurso || []).filter((c) => c.materiais > 0)
+  /* Todos os cursos, do mais pronto ao menos pronto -- inclusive os que ainda
+     não têm material nenhum. Eles entram em 0%, e é justamente essa a
+     informação: curso que não começou some de um ranking filtrado, e quem lê a
+     tela conclui que ele não existe. O desempate é pelo tamanho da produção,
+     para que 30 de 30 venha antes de 2 de 2. */
+  const producao = useMemo(
+    () => [...(dados.institucional.producaoPorCurso || [])]
+      .sort((a, b) => b.pct - a.pct || b.materiais - a.materiais),
+    [dados.institucional.producaoPorCurso])
 
   /**
    * O que veio de planilha.
@@ -1094,7 +1099,7 @@ export function BlocoInstitucional({
             <ListaRanqueada
               selecionado={cursoAtivo?.id}
               aoClicar={(item) => aoFiltrarCurso(item.id)}
-              itens={cursosTodos.slice(0, 10).map((c) => ({
+              itens={cursosTodos.map((c) => ({
                 id: c.id,
                 rotulo: c.publicado ? c.curso : `${c.curso} (fora do ar)`,
                 valor: c.inscritos,
@@ -1121,11 +1126,13 @@ export function BlocoInstitucional({
             <>
               <ListaRanqueada
                 sufixo="%"
-                itens={producao.slice(0, 10).map((c) => ({
+                itens={producao.map((c) => ({
                   id: c.id,
                   rotulo: c.curso,
                   valor: c.pct,
-                  nota: `${br(c.prontos)} de ${br(c.materiais)} materiais`,
+                  nota: c.materiais
+                    ? `${br(c.prontos)} de ${br(c.materiais)} materiais`
+                    : 'sem material cadastrado',
                 }))}
               />
               {/* A mesma regra da tela de Cursos, dita aqui: sem isso, os dois
