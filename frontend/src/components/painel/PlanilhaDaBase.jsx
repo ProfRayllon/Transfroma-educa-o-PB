@@ -22,7 +22,11 @@ import { Cartao, TituloDeBloco } from './graficos'
 const ESPERA_DIGITACAO = 400
 
 /** Junta os filtros num objeto de query, omitindo o que está vazio. */
-const comoParametros = (filtros, colunas) => ({
+const comoParametros = (filtros, colunas, cursoId) => ({
+  // O curso vem do filtro do painel, e nao de um campo daqui: a tabela e a
+  // continuacao da mesma tela, e mostrar a base inteira embaixo de cartoes ja
+  // recortados faz os dois numeros parecerem brigar.
+  ...(cursoId ? { curso: cursoId } : {}),
   ...(filtros.gre ? { gre: filtros.gre } : {}),
   ...(filtros.inep ? { inep: filtros.inep } : {}),
   ...(filtros.nome ? { nome: filtros.nome } : {}),
@@ -48,7 +52,7 @@ const estiloDeCampo = {
   color: 'var(--p-texto)',
 }
 
-export default function PlanilhaDaBase({ gres = [] }) {
+export default function PlanilhaDaBase({ gres = [], cursoId = null, cursoNome = '' }) {
   const [filtros, setFiltros] = useState({ gre: '', inep: '', nome: '', situacao: '', inscricao: '' })
   const [colunas, setColunas] = useState(null)
   const [dados, setDados] = useState(null)
@@ -73,7 +77,7 @@ export default function PlanilhaDaBase({ gres = [] }) {
 
   const carregar = useCallback(() => {
     setCarregando(true)
-    api.get('/painel/base', { params: { ...comoParametros(filtros, colunas || []), pagina, porPagina: 25 } })
+    api.get('/painel/base', { params: { ...comoParametros(filtros, colunas || [], cursoId), pagina, porPagina: 25 } })
       .then(({ data }) => {
         setDados(data)
         setErro(null)
@@ -83,9 +87,14 @@ export default function PlanilhaDaBase({ gres = [] }) {
       })
       .catch((e) => setErro(e?.response?.data?.message || 'Não foi possível carregar a planilha.'))
       .finally(() => setCarregando(false))
-  }, [filtros, colunas, pagina])
+  }, [filtros, colunas, pagina, cursoId])
 
   useEffect(carregar, [carregar])
+
+  /* Trocar o curso la em cima volta para a primeira pagina: a pagina 7 do
+     recorte anterior quase nunca existe no novo, e a tabela voltaria vazia
+     como se o curso nao tivesse ninguem. */
+  useEffect(() => { setPagina(1) }, [cursoId])
 
   /* Clicar fora fecha a lista de colunas. Ela cobre parte da tabela, e deixá-la
      aberta obrigaria a voltar ao botão para ver o que mudou. */
@@ -142,7 +151,7 @@ export default function PlanilhaDaBase({ gres = [] }) {
     setBaixando(true)
     try {
       const resposta = await api.get('/painel/base/exportar', {
-        params: comoParametros(filtros, colunas || []),
+        params: comoParametros(filtros, colunas || [], cursoId),
         responseType: 'blob',
       })
       const url = URL.createObjectURL(new Blob([resposta.data], {
@@ -213,6 +222,16 @@ export default function PlanilhaDaBase({ gres = [] }) {
       >
         Planilha da base
       </TituloDeBloco>
+
+      {/* Um filtro que a tabela obedece sem dizer parece tabela errada. Como
+          este veio de outro controle da tela, ele fica escrito aqui. */}
+      {cursoId && (
+        <p className="text-[12px] mb-3 -mt-1" style={{ color: 'var(--p-texto3)' }}>
+          Mostrando apenas quem está inscrito em
+          <span style={{ color: 'var(--p-texto2)' }}> {cursoNome || 'no curso selecionado'}</span>.
+          Para ver a base inteira, remova o filtro de curso no topo da página.
+        </p>
+      )}
 
       {/* ─── Filtros ─── */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">

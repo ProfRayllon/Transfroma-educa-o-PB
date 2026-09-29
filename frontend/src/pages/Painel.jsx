@@ -186,16 +186,23 @@ export default function Painel() {
     [opcoes.cursos])
 
   /**
-   * Os cursos que o seletor oferece: publicados OU com planilha importada.
+   * Os cursos que o seletor oferece: os que têm gente dentro.
    *
-   * A união importa porque as duas listas não se contêm. Um curso encerrado
-   * pode sair do ar e continuar tendo resultado -- e ele é justamente o que
-   * mais interessa nesta tela. Filtrar só por publicado o esconderia do único
-   * lugar onde os números dele existem.
+   * Antes a regra era "publicado OU com planilha importada", e ela errava dos
+   * dois lados ao mesmo tempo. Oferecia todo curso no ar mesmo sem uma única
+   * inscrição -- e escolher um desses zerava a tela inteira, o que se lê como
+   * defeito do painel e não como curso vazio. E escondia os cursos que saíram
+   * do ar depois de acontecer, que são justamente os que têm história.
+   *
+   * O critério agora é movimento: quem tem inscrição, quem tem resultado
+   * importado, e o curso que está selecionado neste momento. O último item é
+   * o que impede a lista de se fechar sobre si mesma -- com uma GRE também
+   * filtrada, um curso sem ninguém naquela regional sumiria do seletor
+   * enquanto ainda estivesse aplicado, e não haveria como trocar de escolha.
    */
   const cursosDoSeletor = useMemo(() => {
     const todos = dados?.institucional.inscricoes || []
-    return todos.filter((c) => c.publicado || comResultado.has(c.id))
+    return todos.filter((c) => c.inscritos > 0 || comResultado.has(c.id) || c.id === dados?.cursoId)
   }, [dados, comResultado])
 
   return (
@@ -259,11 +266,10 @@ export default function Painel() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* A lista traz TODOS os cursos publicados, e não só os que têm
-              planilha: o filtro também recorta base e inscrições, que existem
-              para qualquer curso. O ponto marca quais já têm resultado, para
-              que ver os cartões de conclusão vazios seja uma escolha
-              informada, e não uma surpresa. */}
+          {/* Só os cursos com movimento -- ver `cursosDoSeletor`. O ponto
+              marca quais já têm planilha de resultado importada, para que
+              abrir os cartões de conclusão vazios seja escolha informada e
+              não surpresa. */}
           <Seletor
             rotulo="Todos os cursos"
             valor={cursoId}

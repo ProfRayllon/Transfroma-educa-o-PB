@@ -642,13 +642,19 @@ export function BlocoInstitucional({
     mostra('kpiBase') && {
       chave: 'inscritos',
       icone: GraduationCap,
-      rotulo: cursoAtivo ? 'Inscritos neste curso' : 'Cursistas inscritos',
-      // Pessoas, e não inscrições: sem curso escolhido, quem fez dois cursos
-      // continua sendo uma pessoa. O total de inscrições vai na linha de baixo.
-      valor: t.inscritos,
+      /* Sem curso escolhido: PESSOAS, e não inscrições -- quem fez dois cursos
+         continua sendo uma pessoa, e o total de inscrições vai na linha de
+         baixo.
+
+         Com um curso escolhido, o primeiro cartão já conta essas mesmas
+         pessoas, e repetir o número aqui daria dois cartões idênticos lado a
+         lado. Então este passa a contar LINHAS de inscrição, que é a outra
+         metade do par -- o mesmo par que o rodapé do gráfico mostra. */
+      rotulo: cursoAtivo ? 'Inscrições no curso' : 'Cursistas inscritos',
+      valor: cursoAtivo ? t.inscricoes : t.inscritos,
       gradiente: 'ciano',
       comparativo: cursoAtivo
-        ? `${pct(t.inscritos, t.cursistas)}% da base`
+        ? `${br(t.inscritos)} ${t.inscritos === 1 ? 'pessoa' : 'pessoas'} · ${pct(t.cursistas, totalDaBase)}% da base`
         : `${br(t.inscricoes)} inscrições em ${br(t.cursos)} cursos`,
     },
     mostra('kpiBase') && {
@@ -1101,7 +1107,7 @@ export function BlocoInstitucional({
         <Cartao className="flex flex-col">
           <TituloDeBloco
             acao={<span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>
-              {br(totalDeTodosOsCursos)} no total
+              {cursoAtivo ? 'comparação entre todos' : `${br(totalDeTodosOsCursos)} no total`}
             </span>}
           >
             Inscrições por curso
@@ -1128,7 +1134,7 @@ export function BlocoInstitucional({
         <Cartao className="flex flex-col">
           <TituloDeBloco
             acao={<span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>
-              material aprovado
+              {cursoAtivo ? 'comparação entre todos' : 'material aprovado'}
             </span>}
           >
             Produção por curso
@@ -1137,6 +1143,7 @@ export function BlocoInstitucional({
             <>
               <ListaRanqueada
                 sufixo="%"
+                selecionado={cursoAtivo?.id}
                 itens={producao.map((c) => ({
                   id: c.id,
                   rotulo: c.curso,
@@ -1558,7 +1565,11 @@ export function BlocoInstitucional({
           regionais que só existem na planilha de um curso daria um filtro que
           não devolve ninguém. */}
       {mostra('planilha') && (
-        <PlanilhaDaBase gres={gres.map((g) => g.gre)} />
+        <PlanilhaDaBase
+          gres={gres.map((g) => g.gre)}
+          cursoId={cursoAtivo?.id || null}
+          cursoNome={cursoAtivo?.curso || ''}
+        />
       )}
 
     </section>

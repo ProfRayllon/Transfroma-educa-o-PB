@@ -168,7 +168,7 @@ function normalizarColunas(pedidas) {
  * varredura na tabela, e por isso a busca so entra com tres caracteres -- uma
  * letra so varreria a base inteira a cada tecla.
  */
-function montarFiltro({ gre, inep, nome, situacao, inscricao }) {
+function montarFiltro({ gre, inep, nome, situacao, inscricao, curso }) {
   const onde = []
   const params = []
 
@@ -199,6 +199,18 @@ function montarFiltro({ gre, inep, nome, situacao, inscricao }) {
   if (SITUACOES[situacao]) onde.push(SITUACOES[situacao])
   if (INSCRICAO[inscricao]) onde.push(INSCRICAO[inscricao])
 
+  /* O curso escolhido la em cima, no filtro do painel.
+     Sem isto a tabela continuava mostrando a base inteira enquanto o resto da
+     tela ja estava recortado -- e quem lia as duas coisas juntas concluia que
+     os cartoes estavam errados. Mesmo EXISTS das demais consultas: quem tem
+     dois vinculos de escola nao vira duas linhas. */
+  if (curso) {
+    onde.push(` AND EXISTS (SELECT 1 FROM inscricoes i
+                             WHERE i.cursista_id = c.id AND i.course_id = ?
+                               AND i.status = 'inscrito')`)
+    params.push(curso)
+  }
+
   return { sql: onde.join(''), params }
 }
 
@@ -208,12 +220,12 @@ const DE = 'FROM cursistas c'
 
 /** A planilha na tela: uma pagina de linhas mais o total do recorte. */
 async function consultar({
-  gre = null, inep = null, nome = '', situacao = null, inscricao = null,
+  gre = null, inep = null, nome = '', situacao = null, inscricao = null, curso = null,
   colunas = null, pagina = 1, porPagina = 25,
 } = {}) {
   requireMysql()
   const escolhidas = normalizarColunas(colunas)
-  const f = montarFiltro({ gre, inep, nome, situacao, inscricao })
+  const f = montarFiltro({ gre, inep, nome, situacao, inscricao, curso })
   const limite = Math.min(200, Math.max(5, Number(porPagina) || 25))
   const salto = Math.max(0, ((Number(pagina) || 1) - 1) * limite)
 
@@ -259,11 +271,12 @@ async function consultar({
  * sistema tres vezes maior numa VPS de 957 MB.
  */
 async function paraExportar({
-  gre = null, inep = null, nome = '', situacao = null, inscricao = null, colunas = null,
+  gre = null, inep = null, nome = '', situacao = null, inscricao = null, curso = null,
+  colunas = null,
 } = {}) {
   requireMysql()
   const escolhidas = normalizarColunas(colunas)
-  const f = montarFiltro({ gre, inep, nome, situacao, inscricao })
+  const f = montarFiltro({ gre, inep, nome, situacao, inscricao, curso })
 
   const selecao = escolhidas.map((c) => `${COLUNAS[c].sql} AS \`${c}\``).join(', ')
   const [linhas] = await getPool().query(

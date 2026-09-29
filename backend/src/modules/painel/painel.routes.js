@@ -389,6 +389,7 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
         nome: String(req.query.nome || '').slice(0, 80),
         situacao: String(req.query.situacao || '') || null,
         inscricao: String(req.query.inscricao || '') || null,
+        curso: normalizarCurso(req.query.curso),
         colunas: req.query.colunas,
         pagina: Number(req.query.pagina) || 1,
         porPagina: Number(req.query.porPagina) || 25,
@@ -417,6 +418,7 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
         nome: String(req.query.nome || '').slice(0, 80),
         situacao: String(req.query.situacao || '') || null,
         inscricao: String(req.query.inscricao || '') || null,
+        curso: normalizarCurso(req.query.curso),
         colunas: req.query.colunas,
       })
 
