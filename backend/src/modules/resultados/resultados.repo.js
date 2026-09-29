@@ -551,112 +551,6 @@ async function concluintesPorFuncao({ cursoId = null, gre = null } = {}) {
 }
 
 /**
- * O CPF que sai para a tela vai mascarado.
- *
- * Sao oito mil nomes, e a tela nao precisa do numero inteiro para alguem
- * conferir uma linha. O CPF completo existe na exportacao, que e um ato
- * deliberado. Mascarar no SERVIDOR e o que faz diferenca: mascara aplicada no
- * navegador ainda entrega o dado inteiro pela rede, e qualquer um o le no
- * inspetor do proprio browser.
- */
-const mascarar = (cpf) => {
-  const d = String(cpf || '')
-  return d.length === 11 ? `${d.slice(0, 3)}.***.**${d.slice(9)}` : '—'
-}
-
-/**
- * A lista de docentes do consolidado, paginada.
- *
- * Fica fora do payload do dashboard de proposito: aquele e um punhado de
- * agregados de 10 KB com cache de um minuto em memoria, e enfiar oito mil linhas
- * de gente dentro dele encheria o cache de dado pessoal e faria toda abertura do
- * painel carregar uma tabela que quase ninguem rola.
- */
-async function listaDeConcluintes({
-  cursoId = null, gre = null, status = null, busca = '', pagina = 1, porPagina = 25,
-} = {}) {
-  requireMysql()
-
-  const f = filtros({ cursoId, gre, alias: 'v' })
-  const onde = [f.sql]
-  const params = [...f.params]
-  if (status) { onde.push(' AND v.status = ?'); params.push(status) }
-
-  /**
-   * A busca aceita o CPF com ou sem pontuacao, entao compara so os digitos. O
-   * nome usa curinga apenas no fim: curinga nos dois lados descarta o indice e
-   * varre doze mil linhas a cada tecla digitada.
-   */
-  const termo = String(busca || '').trim()
-  if (termo) {
-    const digitos = termo.replace(/\D/g, '')
-    if (digitos.length >= 3) {
-      onde.push(' AND (v.docente LIKE ? OR v.cpf LIKE ?)')
-      params.push(`%${termo}%`, `${digitos}%`)
-    } else {
-      onde.push(' AND v.docente LIKE ?')
-      params.push(`%${termo}%`)
-    }
-  }
-
-  const filtro = onde.join('')
-  const limite = Math.min(100, Math.max(5, Number(porPagina) || 25))
-  const salto = Math.max(0, ((Number(pagina) || 1) - 1) * limite)
-
-  const [[cont]] = await getPool().query(
-    `SELECT COUNT(*) AS total FROM consolidado_vinculos v WHERE 1 = 1${filtro}`, params
-  )
-
-  const [linhas] = await getPool().query(
-    `SELECT v.cpf, v.docente, v.gre, v.escola, v.status,
-            c.name AS curso,
-            v.cursista_id IS NOT NULL AS naBase
-       FROM consolidado_vinculos v
-       JOIN courses c ON c.id = v.course_id
-      WHERE 1 = 1${filtro}
-      ORDER BY v.docente, v.escola
-      LIMIT ${limite} OFFSET ${salto}`, params
-  )
-
-  return {
-    total: numero(cont.total),
-    pagina: Number(pagina) || 1,
-    porPagina: limite,
-    // Uma linha por VINCULO: quem leciona em duas escolas aparece duas vezes,
-    // com a escola de cada uma. E o que a planilha diz, e esconder a segunda
-    // faria a soma da tela nao fechar com o total mostrado em cima.
-    itens: linhas.map((l) => ({
-      cpf: mascarar(l.cpf),
-      docente: l.docente,
-      gre: l.gre,
-      escola: l.escola,
-      curso: l.curso,
-      status: l.status,
-      naBase: !!Number(l.naBase),
-    })),
-  }
-}
-
-/** A mesma lista, inteira e com o CPF completo, para a exportacao. */
-async function listaParaExportar({ cursoId = null, gre = null, status = null } = {}) {
-  requireMysql()
-  const f = filtros({ cursoId, gre, alias: 'v' })
-  const params = [...f.params]
-  let extra = ''
-  if (status) { extra = ' AND v.status = ?'; params.push(status) }
-
-  const [linhas] = await getPool().query(
-    `SELECT v.cpf, v.docente, v.gre, v.inep, v.escola, v.status, c.name AS curso
-       FROM consolidado_vinculos v
-       JOIN courses c ON c.id = v.course_id
-      WHERE 1 = 1${f.sql}${extra}
-      ORDER BY v.gre, v.escola, v.docente`, params
-  )
-  return linhas
-}
-
-
-/**
  * Quem concluiu, por componente curricular.
  *
  * Igual a `concluintesPorFuncao`: o componente vive no CADASTRO, e chega aqui
@@ -832,8 +726,6 @@ module.exports = {
   enviosPorCurso,
   escolasDoConsolidado,
   concluintesPorFuncao,
-  listaDeConcluintes,
-  listaParaExportar,
   concluintesPorComponente,
   concluintesPorMunicipio,
 }

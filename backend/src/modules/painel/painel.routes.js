@@ -7,6 +7,7 @@ const { montarCsv } = require('../../shared/csv')
 const { criarPlanilha } = require('../../shared/xlsx')
 const { padronizarGre, ehGrePadrao } = require('../../shared/gre')
 const planilha = require('./painel.planilha')
+const docentes = require('./painel.docentes')
 const { doCache, guardar } = require('./painel.cache')
 
 /**
@@ -89,11 +90,6 @@ function normalizarComponente(valor) {
 
 function normalizarStatus(valor) {
   return Object.keys(ROTULOS_STATUS).includes(String(valor)) ? String(valor) : null
-}
-
-const formatarCpf = (cpf) => {
-  const d = String(cpf || '')
-  return d.length === 11 ? `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}` : d
 }
 
 /**
@@ -234,72 +230,64 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
   })
 
   /**
-   * A lista de docentes do consolidado.
+   * A lista de docentes, uma linha por pessoa.
    *
    * Rota separada, e sem o cache de um minuto que o dashboard usa: aqui a
    * resposta muda a cada busca digitada e a cada pagina virada, e guardar isso
    * encheria o cache de combinacoes que ninguem repete -- alem de deixar dado
    * pessoal parado na memoria do processo.
    *
-   * O CPF sai mascarado do repositorio. Quem precisa do numero inteiro usa a
-   * exportacao, que e um ato deliberado.
+   * O CPF sai mascarado do repositorio, e nem vem por padrao. Quem precisa do
+   * numero inteiro marca a coluna e baixa o arquivo, que e um ato deliberado.
    */
-  router.get('/concluintes/lista', requireRole(...PERFIS_COM_ACESSO), async (req, res) => {
+  router.get('/docentes', requireRole(...PERFIS_COM_ACESSO), async (req, res) => {
     try {
-      const dados = await resultados.listaDeConcluintes({
-        cursoId: normalizarCurso(req.query.curso),
+      const dados = await docentes.consultar({
         gre: normalizarGre(req.query.gre),
-        status: normalizarStatus(req.query.status),
+        inep: String(req.query.inep || '').replace(/\D/g, '').slice(0, 12) || null,
         busca: String(req.query.busca || '').slice(0, 80),
+        cursoId: normalizarCurso(req.query.curso),
+        situacao: normalizarStatus(req.query.situacao),
+        colunas: req.query.colunas,
         pagina: Number(req.query.pagina) || 1,
         porPagina: Number(req.query.porPagina) || 25,
       })
-      res.json(dados)
+      res.json({ ...dados, opcoes: await docentes.opcoes() })
     } catch (erro) {
       const status = erro.statusCode || 500
       res.status(status).json({
-        message: status === 503 ? erro.message : 'Nao foi possivel carregar a lista.',
+        message: status === 503 ? erro.message : 'Nao foi possivel carregar a lista de docentes.',
       })
     }
   })
 
   /**
-   * A mesma lista em CSV, com o CPF completo.
+   * A mesma lista em .xlsx, com o CPF completo quando a coluna foi escolhida.
    *
-   * Aqui o numero inteiro sai, porque a planilha existe para cruzar com outros
-   * sistemas e CPF pela metade nao cruza com nada. O que separa isto da tela e
-   * que baixar um arquivo e uma acao deliberada, feita por alguem que ja passou
-   * pelo login e pelo perfil.
+   * Vai em planilha e nao em CSV porque o arquivo e montado pela propria pessoa,
+   * coluna a coluna, para abrir e trabalhar -- e CSV com acento e ponto e virgula
+   * ainda e a origem mais comum de "abriu tudo numa coluna so" no Excel.
    */
-  router.get('/concluintes/exportar', requireRole(...PERFIS_COM_ACESSO), async (req, res) => {
+  router.get('/docentes/exportar', requireRole(...PERFIS_COM_ACESSO), async (req, res) => {
     try {
-      const linhas = await resultados.listaParaExportar({
-        cursoId: normalizarCurso(req.query.curso),
+      const { colunas, linhas } = await docentes.paraExportar({
         gre: normalizarGre(req.query.gre),
-        status: normalizarStatus(req.query.status),
+        inep: String(req.query.inep || '').replace(/\D/g, '').slice(0, 12) || null,
+        busca: String(req.query.busca || '').slice(0, 80),
+        cursoId: normalizarCurso(req.query.curso),
+        situacao: normalizarStatus(req.query.situacao),
+        colunas: req.query.colunas,
       })
 
-      const csv = montarCsv([
-        { titulo: 'Docente', valor: (l) => l.docente },
-        // O CPF vai com pontuacao para o Excel nao tratar como numero e comer o
-        // zero a esquerda -- que e como o CPF chega torto de volta na proxima
-        // planilha.
-        { titulo: 'CPF', valor: (l) => formatarCpf(l.cpf) },
-        { titulo: 'GRE', valor: (l) => l.gre },
-        { titulo: 'INEP', valor: (l) => l.inep },
-        { titulo: 'Escola', valor: (l) => l.escola },
-        { titulo: 'Curso', valor: (l) => l.curso },
-        { titulo: 'Situacao', valor: (l) => ROTULOS_STATUS[l.status] || l.status },
-      ], linhas)
-
+      const arquivo = criarPlanilha({ nomeAba: 'Docentes', colunas, linhas })
       const hoje = new Date().toISOString().slice(0, 10)
-      res.setHeader('Content-Type', 'text/csv; charset=utf-8')
-      res.setHeader('Content-Disposition', `attachment; filename="docentes-concluintes-${hoje}.csv"`)
-      res.send(csv)
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      res.setHeader('Content-Disposition', `attachment; filename="docentes-${hoje}.xlsx"`)
+      res.send(arquivo)
     } catch (erro) {
       const status = erro.statusCode || 500
       res.status(status).json({
-        message: status === 503 ? erro.message : 'Nao foi possivel exportar a lista.',
+        message: status === 503 ? erro.message : 'Nao foi possivel exportar a lista de docentes.',
       })
     }
   })

@@ -1554,7 +1554,11 @@ export function BlocoInstitucional({
 
       {/* ─── Lista ─── */}
       {mostra('lista') && temConclusao && (
-        <ListaDeConcluintes cursoId={dados.cursoId} gre={dados.gre} />
+        <ListaDeConcluintes
+          cursoId={dados.cursoId}
+          gre={dados.gre}
+          cursoNome={cursoAtivo?.curso || ''}
+        />
       )}
 
       {/* ─── A planilha que quem olha monta ─── */}
