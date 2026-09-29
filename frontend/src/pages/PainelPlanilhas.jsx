@@ -61,6 +61,38 @@ const tamanho = (bytes) => (bytes >= 1024 * 1024
 const br = (v) => (typeof v === 'number' ? v.toLocaleString('pt-BR') : v)
 
 /**
+ * Por que o envio falhou, dito de um jeito que dá para agir.
+ *
+ * O servidor explica quase tudo -- coluna faltando, situação não reconhecida,
+ * data mais velha que a última -- e essa explicação é o que a pessoa precisa
+ * ler. O texto genérico só entrava quando não havia explicação nenhuma, e aí
+ * escondia justamente o caso em que a resposta nem chegou a ser do servidor:
+ * um 502 durante um reinício devolve página de erro do nginx, e "não foi
+ * possível processar a planilha" manda procurar defeito no arquivo certo.
+ *
+ * Então o texto agora separa os três casos, e sempre carrega o código: com ele
+ * dá para saber se o problema é a planilha ou o servidor sem abrir o log.
+ */
+function porQueFalhou(e) {
+  const resposta = e?.response
+  if (!resposta) {
+    return 'O envio não chegou ao servidor. Verifique a conexão e tente de novo — '
+      + 'o arquivo não foi alterado.'
+  }
+  const { status, data } = resposta
+  if (data?.message) return data.message
+  if (status === 502 || status === 503 || status === 504) {
+    return `O servidor estava reiniciando (erro ${status}). Espere um minuto e envie de novo — `
+      + 'o arquivo não foi alterado.'
+  }
+  if (status === 413) {
+    return 'A planilha é grande demais para o envio. Exporte só as colunas necessárias e tente de novo.'
+  }
+  return `Não foi possível processar a planilha (erro ${status}). `
+    + 'Confira se o arquivo abre no Excel e tente de novo.'
+}
+
+/**
  * Uma planilha de um curso: quando foi, quanto tinha, quem mandou.
  *
  * Linha, e nao celula de tabela: com o nome do curso numa coluna e as duas
@@ -184,7 +216,7 @@ export default function PainelPlanilhas() {
       setFase(simular ? 'conferido' : 'gravado')
       if (!simular) carregarEnvios()
     } catch (e) {
-      setErro(getApiErrorMessage(e, 'Não foi possível processar a planilha.'))
+      setErro(porQueFalhou(e))
       setFase(simular ? null : 'conferido')
     }
   }

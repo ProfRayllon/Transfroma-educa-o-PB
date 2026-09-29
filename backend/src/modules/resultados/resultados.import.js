@@ -103,10 +103,34 @@ const STATUS = {
   'NAO CONCLUIDO': 'nao_concluido',
   'NAO CONCLUIU': 'nao_concluido',
   'NAO': 'nao_concluido',
+  /* "Nao iniciado" e o rotulo que o ambiente do curso exporta para quem nunca
+     abriu a primeira aula. Entra como NAO CONCLUIDO, e nao como "em andamento":
+     quem nao comecou tambem nao concluiu, e a taxa do painel e concluido sobre
+     o total. Manter "em andamento" so para quem de fato comecou preserva a
+     unica distincao que a coluna carrega. */
+  'NAO INICIADO': 'nao_concluido',
+  'NAO INICIADA': 'nao_concluido',
+  'NAO INICIOU': 'nao_concluido',
   'EM ANDAMENTO': 'em_andamento',
   'ANDAMENTO': 'em_andamento',
   'CURSANDO': 'em_andamento',
+  'INICIADO': 'em_andamento',
+  'INICIADA': 'em_andamento',
 }
+
+/**
+ * A situacao da planilha, pronta para procurar no mapa.
+ *
+ * Fora os acentos e o caixa-alta, tira o sufixo de genero e a pontuacao final:
+ * "Concluido(a)" e "Concluido." sao a mesma resposta que "Concluido", e uma
+ * exportacao nova que passe a escrever assim interromperia a importacao inteira
+ * por causa de dois caracteres.
+ */
+const chaveDeStatus = (valor) => semAcento(valor)
+  .replace(/\s*\((?:A|O|A\/O|O\/A)\)\s*$/, '')
+  .replace(/[.;]+$/, '')
+  .replace(/\s+/g, ' ')
+  .trim()
 
 /**
  * Separador das chaves de agrupamento.
@@ -226,16 +250,42 @@ async function importarConsolidado(conn, { registros, colunas }, ctx) {
    * importacao que falhou.
    */
   const desconhecidos = new Set()
-  const linhas = registros.map((r) => {
-    const status = STATUS[semAcento(r[cStatus])]
+  const linhas = []
+  registros.forEach((r) => {
+    const status = STATUS[chaveDeStatus(r[cStatus])]
     if (!status) desconhecidos.add(r[cStatus])
-    return {
-      cpf: soDigitos(r[cCpf]),
-      docente: cNome ? r[cNome] : null,
-      gre: cGre ? normalizarGre(r[cGre]) : null,
-      inep: cInep ? String(r[cInep] || '').replace(/\D/g, '') || null : null,
-      escola: cEscola ? r[cEscola] : null,
-      status,
+
+    /* Quem leciona em duas escolas vem numa linha so, com os campos da escola
+       juntos por " | " -- e esta tabela guarda um VINCULO por linha. A versao
+       anterior tirava tudo que nao era digito do INEP e colava os dois codigos
+       num so ("25091573 | 25091603" virava "2509157325091603"), que estourava a
+       coluna e derrubava a importacao inteira: treze mil linhas perdidas por
+       causa de 901.
+
+       Agora a linha vira um vinculo por escola. As consultas do painel ja
+       contam CPF distinto onde precisam de gente, e vinculo onde precisam de
+       vinculo -- e a coluna "Vínculos" do resumo passa a dizer a verdade. */
+    const partes = (valor) => String(valor ?? '').split('|').map((x) => x.trim())
+    const gres = cGre ? partes(r[cGre]) : ['']
+    const ineps = cInep ? partes(r[cInep]) : ['']
+    const escolas = cEscola ? partes(r[cEscola]) : ['']
+    const quantos = Math.max(1, gres.length, ineps.length, escolas.length)
+
+    /* Uma GRE so para duas escolas quer dizer que as duas sao da mesma
+       regional; duas para duas casam pela posicao. O mesmo vale para o INEP. */
+    const pegar = (lista, i) => (lista.length === 1 ? lista[0] : lista[i]) || ''
+
+    const cpf = soDigitos(r[cCpf])
+    const docente = cNome ? r[cNome] : null
+    for (let i = 0; i < quantos; i += 1) {
+      linhas.push({
+        cpf,
+        docente,
+        gre: cGre ? normalizarGre(pegar(gres, i)) : null,
+        inep: cInep ? pegar(ineps, i).replace(/\D/g, '') || null : null,
+        escola: cEscola ? pegar(escolas, i) || null : null,
+        status,
+      })
     }
   })
 
@@ -243,7 +293,7 @@ async function importarConsolidado(conn, { registros, colunas }, ctx) {
     throw erro(
       `Situação não reconhecida na coluna "${cStatus}": `
       + `${[...desconhecidos].slice(0, 5).map((v) => `"${v}"`).join(', ')}. `
-      + 'Aceitos hoje: CONCLUÍDO, NÃO CONCLUÍDO e EM ANDAMENTO.'
+      + 'Aceitos hoje: CONCLUÍDO, NÃO CONCLUÍDO, NÃO INICIADO e EM ANDAMENTO.'
     )
   }
 
@@ -268,6 +318,25 @@ async function importarConsolidado(conn, { registros, colunas }, ctx) {
   // Detalhe guarda so a fotografia mais recente (ver resultados.schema.js).
   await conn.query('DELETE FROM consolidado_vinculos WHERE course_id = ?', [ctx.cursoId])
 
+  /**
+   * Nenhuma celula sozinha derruba a importacao inteira.
+   *
+   * O MySQL recusa a INSTRUCAO toda quando um valor passa da largura da coluna,
+   * e como a gravacao vai em lotes de mil, um nome digitado com duzentos
+   * caracteres levava junto as outras 999 linhas -- e a transacao desfazia o
+   * resto. Cortar no tamanho da coluna troca esse tudo-ou-nada por uma perda de
+   * um campo, que e contada e aparece nos avisos da conferencia.
+   */
+  const LARGURA = { cpf: 11, docente: 150, gre: 60, inep: 12, escola: 200 }
+  let cortados = 0
+  const cabe = (valor, coluna) => {
+    if (valor === null || valor === undefined) return null
+    const texto = String(valor)
+    if (texto.length <= LARGURA[coluna]) return texto
+    cortados += 1
+    return texto.slice(0, LARGURA[coluna])
+  }
+
   const LOTE = 1000
   for (let i = 0; i < linhas.length; i += LOTE) {
     await conn.query(
@@ -275,7 +344,9 @@ async function importarConsolidado(conn, { registros, colunas }, ctx) {
          (importacao_id, course_id, cpf, docente, gre, inep, escola, status)
        VALUES ?`,
       [linhas.slice(i, i + LOTE).map((l) => [
-        importacaoId, ctx.cursoId, l.cpf, l.docente, l.gre, l.inep, l.escola, l.status,
+        importacaoId, ctx.cursoId,
+        cabe(l.cpf, 'cpf'), cabe(l.docente, 'docente'), cabe(l.gre, 'gre'),
+        cabe(l.inep, 'inep'), cabe(l.escola, 'escola'), l.status,
       ])]
     )
   }
@@ -328,6 +399,12 @@ async function importarConsolidado(conn, { registros, colunas }, ctx) {
     avisos.push(
       `${n(r.semCadastro).toLocaleString('pt-BR')} docentes da planilha não foram encontrados na base `
       + 'de cursistas pelo CPF. Eles contam na conclusão, mas ficam fora dos gráficos por componente e por função.'
+    )
+  }
+  if (cortados) {
+    avisos.push(
+      `${cortados.toLocaleString('pt-BR')} valores passavam do tamanho da coluna e foram cortados. `
+      + 'A importação continuou; confira se alguma célula da planilha veio com conteúdo a mais.'
     )
   }
   if (!cGre) avisos.push('A planilha não tem coluna de GRE: o filtro e o gráfico por regional ficarão vazios.')
