@@ -3,6 +3,8 @@ import { Link, useParams } from 'react-router-dom'
 import { RefreshCw, Calendar, X, Filter, ChevronDown, Settings, GraduationCap, Star, Database } from 'lucide-react'
 import api from '../lib/api'
 import { useTheme } from '../context/ThemeContext'
+import { useAuth } from '../context/AuthContext'
+import { enviaPlanilhasDoPainel } from '../lib/perfil'
 import { variaveisDoTema } from '../components/painel/graficos'
 import { BlocoInstitucional } from '../components/painel/blocos'
 
@@ -135,6 +137,8 @@ function Seletor({ rotulo, valor, opcoes, aoTrocar }) {
 
 export default function Painel() {
   const { dark } = useTheme()
+  const { user } = useAuth()
+  const podeEnviarPlanilhas = enviaPlanilhasDoPainel(user)
   // Sem seção no endereço é /painel: abre no primeiro dos três.
   const { secao = 'concluintes' } = useParams()
   const painel = PAINEIS[secao] || PAINEIS.tudo
@@ -318,7 +322,9 @@ export default function Painel() {
             </span>
           )}
 
-          <Link
+          {/* O coordenador ve o dashboard mas nao envia planilhas: o backend
+              recusaria, entao a engrenagem nem aparece. */}
+          {podeEnviarPlanilhas && (<Link
             to="/painel/planilhas"
             title="Planilhas dos painéis"
             aria-label="Planilhas dos painéis"
@@ -326,7 +332,7 @@ export default function Painel() {
             style={{ borderColor: 'var(--p-cartaoBorda)', color: 'var(--p-texto2)' }}
           >
             <Settings size={15} />
-          </Link>
+          </Link>)}
 
           <button
             onClick={carregar}

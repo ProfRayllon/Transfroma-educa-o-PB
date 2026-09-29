@@ -53,6 +53,21 @@ const PERFIS_DE_ADMINISTRACAO = ['administrador', 'gerencia']
 export const administraOSistema = (user) => PERFIS_DE_ADMINISTRACAO.includes(user?.role)
 
 /**
+ * Quem abre o Dashboard. Espelha PERFIS_COM_ACESSO em
+ * backend/src/modules/painel/painel.routes.js.
+ *
+ * O coordenador so le: enviar as planilhas que alimentam os paineis continua
+ * com quem administra (`enviaPlanilhasDoPainel`, igual a resultados.routes.js).
+ */
+const PERFIS_DO_DASHBOARD = ['administrador', 'gerencia', 'coordenador']
+
+export const veODashboard = (user) => PERFIS_DO_DASHBOARD.includes(user?.role)
+
+const PERFIS_DAS_PLANILHAS_DO_PAINEL = ['administrador', 'gerencia']
+
+export const enviaPlanilhasDoPainel = (user) => PERFIS_DAS_PLANILHAS_DO_PAINEL.includes(user?.role)
+
+/**
  * Telas que cada perfil alcanca.
  *
  * `null` significa "sem restricao de tela" -- o perfil segue as regras de cada

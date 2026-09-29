@@ -23,7 +23,10 @@ const { doCache, guardar } = require('./painel.cache')
  * As consultas rodam em paralelo: sao independentes entre si e o pool aguenta.
  */
 
-const PERFIS_COM_ACESSO = ['administrador', 'gerencia']
+// O coordenador entra so na leitura: o envio das planilhas que alimentam o
+// painel continua restrito a administrador e gerencia (resultados.routes.js).
+// Espelha `veODashboard` em frontend/src/lib/perfil.js.
+const PERFIS_COM_ACESSO = ['administrador', 'gerencia', 'coordenador']
 
 /**
  * As janelas que a tela oferece, mais "tudo".

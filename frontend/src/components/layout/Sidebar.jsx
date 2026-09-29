@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
+import { veODashboard } from '../../lib/perfil'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import { useAvatar } from '../../context/AvatarContext'
@@ -18,12 +19,12 @@ const isCoordinatorRole = (user) => user?.role === 'coordenador' || (user?.funct
 const navItems = [
   {
     // O painel institucional. A gerencia entra junto porque a plateia dele e
-    // exatamente a dela: alcance, territorio e prestacao de contas. Quem decide
-    // de verdade e o backend, que libera os mesmos dois perfis.
+    // exatamente a dela: alcance, territorio e prestacao de contas. O
+    // coordenador tambem, so para leitura. Quem decide de verdade e o backend.
     to: '/painel',
     icon: LayoutDashboard,
     label: 'Dashboard',
-    visible: (user) => ['administrador', 'gerencia'].includes(user?.role),
+    visible: veODashboard,
   },
   { to: '/cursos', icon: BookOpen, label: 'Cursos' },
   // Producao saiu do menu: o trabalho acontece dentro do curso, pelo botao
