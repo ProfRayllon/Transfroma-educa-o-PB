@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { LifeBuoy, Lock } from 'lucide-react'
+import { Lock } from 'lucide-react'
 
 export default function PublicFooter() {
   return (
@@ -23,8 +23,8 @@ export default function PublicFooter() {
           <h2 className="text-base font-black text-[#1c1033]">Fale Conosco</h2>
           <div>
             <span className="block text-xs font-black uppercase tracking-wider text-[#a855f7]">Suporte</span>
-            <Link className="inline-flex items-center gap-1.5 font-bold text-[#1c1033] hover:text-[#7336C0] hover:underline" to="/suporte">
-              <LifeBuoy size={14} /> Abrir chamado ou acompanhar protocolo
+            <Link className="font-bold text-[#1c1033] hover:text-[#7336C0] hover:underline" to="/suporte">
+              Abrir chamado ou acompanhar protocolo
             </Link>
           </div>
           <div>
