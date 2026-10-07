@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(150) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   registration VARCHAR(30) DEFAULT NULL,
-  role ENUM('administrador','coordenador','supervisor','professor','tutor','tecnico','gestao','revisor','supervisor_tutoria','ti') NOT NULL DEFAULT 'professor',
+  role ENUM('administrador','coordenador','supervisor','professor','tutor','tecnico','gestao','revisor','supervisor_tutoria','ti','gerencia','suporte') NOT NULL DEFAULT 'professor',
   `function` VARCHAR(100) DEFAULT NULL,
   area VARCHAR(150) DEFAULT NULL,
   avatar MEDIUMTEXT DEFAULT NULL,

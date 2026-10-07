@@ -36,7 +36,7 @@ const COURSE_TRAILS = {
   ],
 }
 
-const USER_ROLES = ['administrador', 'coordenador', 'supervisor', 'professor', 'tutor', 'tecnico', 'gestao', 'revisor', 'supervisor_tutoria', 'ti', 'gerencia']
+const USER_ROLES = ['administrador', 'coordenador', 'supervisor', 'professor', 'tutor', 'tecnico', 'gestao', 'revisor', 'supervisor_tutoria', 'ti', 'gerencia', 'suporte']
 const COURSE_STATUS_AVA_VALUES = ['nao_publicado', 'publicado']
 const USER_STATUSES = ['ativo', 'inativo', 'pendente', 'desligado', 'substituido']
 
@@ -1516,6 +1516,7 @@ const criarRotasAtribuicoes = require('./modules/atribuicoes/atribuicoes.routes'
 const criarRotasPublicas = require('./modules/publico/publico.routes')
 const criarRotasPainel = require('./modules/painel/painel.routes')
 const criarRotasResultados = require('./modules/resultados/resultados.routes')
+const criarRotasSuporte = require('./modules/suporte/suporte.routes')
 
 app.use('/api/cursistas', criarRotasCursistas({
   authInterna: auth,
@@ -1547,6 +1548,15 @@ app.use('/api/resultados', criarRotasResultados({
   authInterna: auth,
   requireRole,
   getUsuarioInterno: (id) => store.getUserById(id),
+}))
+
+// Chamados de suporte. Mistura as duas coisas no mesmo prefixo: abrir e
+// consultar protocolo sao publicos (/api/suporte/publico/*), a fila de
+// atendimento exige sessao. A separacao vive dentro do proprio modulo.
+app.use('/api/suporte', criarRotasSuporte({
+  authInterna: auth,
+  getUsuarioInterno: (id) => store.getUserById(id),
+  listarUsuariosPorPerfis: (roles) => store.listUsersByRoles(roles),
 }))
 
 // Unico modulo sem autenticacao, e por isso montado separado dos demais: fica

@@ -307,7 +307,7 @@ async function ensureMysqlSchema() {
   // cada boot, esquecer um perfil ja gravado no banco derruba a API no start
   // (ER_WARN_DATA_TRUNCATED ao tentar encolher o ENUM).
   await pool.execute(
-    "ALTER TABLE users MODIFY role ENUM('administrador','coordenador','supervisor','professor','tutor','tecnico','gestao','revisor','supervisor_tutoria','ti','gerencia') NOT NULL DEFAULT 'professor'"
+    "ALTER TABLE users MODIFY role ENUM('administrador','coordenador','supervisor','professor','tutor','tecnico','gestao','revisor','supervisor_tutoria','ti','gerencia','suporte') NOT NULL DEFAULT 'professor'"
   )
 
   const [userExtraColumns] = await pool.execute(

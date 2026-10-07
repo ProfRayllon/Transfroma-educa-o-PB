@@ -7,6 +7,8 @@ import { AvatarProvider } from './context/AvatarContext'
 import Layout from './components/layout/Layout'
 import Home from './pages/Home'
 import PublicCourses from './pages/PublicCourses'
+import Suporte from './pages/Suporte'
+import Atendimentos from './pages/Atendimentos'
 import Login from './pages/Login'
 import Painel from './pages/Painel'
 import PainelPlanilhas from './pages/PainelPlanilhas'
@@ -72,6 +74,8 @@ export default function App() {
               nao a leitura -- por isso a home e o catalogo ficam fora dos guards. */}
           <Route path="/" element={<Home />} />
           <Route path="/catalogo-cursos" element={<PublicCourses />} />
+          {/* Publico: quem mais precisa de suporte e quem nao consegue entrar. */}
+          <Route path="/suporte" element={<Suporte />} />
           <Route path="/inscricoes" element={<Navigate to="/" replace />} />
           <Route path="/guia" element={<Navigate to="/" replace />} />
           {/* Login da equipe interna. Alcancado pelo rodape do site, nao pelo menu:
@@ -109,6 +113,8 @@ export default function App() {
             <Route path="minhas-avaliacoes" element={<MinhasAvaliacoes />} />
             <Route path="acessos" element={<Acessos />} />
             <Route path="cursistas" element={<CursistasAdmin />} />
+            {/* A fila de chamados de Suporte. O publico abre em /suporte. */}
+            <Route path="atendimentos" element={<Atendimentos />} />
             <Route path="notificacoes" element={<Notificacoes />} />
             <Route path="perfil" element={<Perfil />} />
           </Route>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { ChevronDown, KeyRound, LayoutGrid, LogIn, LogOut, UserCog } from 'lucide-react'
+import { ChevronDown, KeyRound, LayoutGrid, LifeBuoy, LogIn, LogOut, UserCog } from 'lucide-react'
 import { useCursista } from '../../modules/cursista/CursistaContext'
 
 const navLinkClass = ({ isActive }) =>
@@ -117,6 +117,9 @@ export default function PublicNav() {
           <NavLink to="/catalogo-cursos" className={navLinkClass}>Cursos</NavLink>
           <button type="button" onClick={() => goToSection('programa')} className={navBtnClass}>O Programa</button>
           <button type="button" onClick={() => goToSection('guia')} className={navBtnClass}>Guia</button>
+          <NavLink to="/suporte" className={(estado) => `${navLinkClass(estado)} inline-flex items-center gap-1.5`}>
+            <LifeBuoy size={15} /> Suporte
+          </NavLink>
 
           {/* Logado, o botao de entrar vira o menu da conta. A equipe entra pelo
               rodape, em /login -- o publico do portal e o cursista. */}
