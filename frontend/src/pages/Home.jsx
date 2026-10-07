@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, ChevronLeft, ChevronRight, Clock, Download, Info, LayoutGrid } from 'lucide-react'
+import { ArrowRight, ChevronLeft, ChevronRight, Clock, Download, Info, LayoutGrid, LifeBuoy } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
 import MapaParaiba from '../components/public/MapaParaiba'
@@ -637,6 +637,46 @@ export default function Home() {
             >
               Acessar AVA RIEH/PB <ArrowRight size={16} />
             </a>
+          </div>
+        </section>
+
+        {/* ── Suporte ── Logo depois do AVA de proposito: o problema mais comum
+            hoje e justamente nao conseguir entrar, e quem leu o bloco de cima e
+            travou precisa achar a ajuda aqui, sem rolar ate o rodape. */}
+        <section id="suporte" className="bg-white px-[22px] py-20">
+          <div className="mx-auto grid max-w-[1000px] items-center gap-10 md:grid-cols-[1.2fr_0.8fr]">
+            <div>
+              <span className="mb-4 inline-flex items-center gap-2 rounded-full bg-[#f3e8ff] px-3 py-1 text-xs font-black uppercase tracking-wider text-[#6f35b5]">
+                <LifeBuoy size={14} /> Suporte
+              </span>
+              <h2 className="mb-4 text-[36px] font-black leading-tight tracking-tight text-[#1c1033]">Precisa de ajuda?</h2>
+              <p className="text-[17px] leading-relaxed text-[#374151]">
+                Não consegue acessar a plataforma, o AVA ou o seu certificado? Abra um chamado com seu CPF,
+                nome e e-mail. Você recebe um <strong>número de protocolo</strong> por e-mail e é avisado quando
+                o problema for resolvido.
+              </p>
+              <div className="mt-7 flex flex-wrap gap-3">
+                <Link
+                  to="/suporte"
+                  className="inline-flex min-h-[48px] items-center gap-2 rounded-xl bg-[#6f35b5] px-7 py-3 text-[15px] font-black text-white shadow-md transition hover:-translate-y-0.5 hover:bg-[#5a2b94]"
+                >
+                  Abrir chamado <ArrowRight size={16} />
+                </Link>
+                <Link
+                  to="/suporte?aba=consultar"
+                  className="inline-flex min-h-[48px] items-center rounded-xl border border-[#ded6ea] px-7 py-3 text-[15px] font-black text-[#6f35b5] transition hover:bg-[#faf5ff]"
+                >
+                  Acompanhar protocolo
+                </Link>
+              </div>
+            </div>
+            <ul className="grid gap-3">
+              {['Sistema (acesso à plataforma)', 'Ambiente virtual (AVA)', 'Certificado', 'Dados cadastrais'].map((item) => (
+                <li key={item} className="flex items-center gap-3 rounded-xl border border-[#ede7f6] bg-[#faf7ff] px-4 py-3 text-[15px] font-bold text-[#1c1033]">
+                  <span className="h-2 w-2 flex-shrink-0 rounded-full bg-[#a855f7]" /> {item}
+                </li>
+              ))}
+            </ul>
           </div>
         </section>
 

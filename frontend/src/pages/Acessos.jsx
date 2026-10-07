@@ -17,6 +17,7 @@ const MANAGED_ROLES = [
   { value: 'revisor', label: 'Revisor(a)' },
   { value: 'supervisor_tutoria', label: 'Supervisor de tutoria' },
   { value: 'ti', label: 'TI' },
+  { value: 'suporte', label: 'Suporte' },
 ]
 
 const FILTER_ROLES = [

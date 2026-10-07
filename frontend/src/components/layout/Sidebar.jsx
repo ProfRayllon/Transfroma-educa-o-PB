@@ -7,7 +7,7 @@ import { useTheme } from '../../context/ThemeContext'
 import { useAvatar } from '../../context/AvatarContext'
 import {
   LayoutDashboard, BookOpen, ShieldCheck, ClipboardList,
-  ClipboardCheck, LogOut, ChevronLeft, ChevronRight, Camera, Sun, Moon, Users,
+  ClipboardCheck, LogOut, ChevronLeft, ChevronRight, Camera, Sun, Moon, Users, LifeBuoy,
 } from 'lucide-react'
 
 // Menu reduzido ao que cada perfil realmente usa no dia a dia. Cursos e a porta
@@ -54,7 +54,7 @@ const navItems = [
     label: 'Minhas atividades',
     visible: (user, resumo) => (resumo
       ? Boolean(resumo.recebeAtividade)
-      : !['administrador', 'gerencia'].includes(user?.role)),
+      : !['administrador', 'gerencia', 'suporte'].includes(user?.role)),
   },
   {
     // O outro papel de quem acumula os dois. Quem e avaliador so o servidor
@@ -70,6 +70,16 @@ const navItems = [
     visible: (user, resumo) => Boolean(resumo?.souAvaliador)
       && !['administrador', 'gerencia'].includes(user?.role),
     contador: (resumo) => resumo?.pendentesParaAvaliar || 0,
+  },
+  {
+    // A fila de chamados. Quem gere o suporte sempre ve; os demais so quando
+    // algum chamado foi encaminhado a eles -- o servidor responde os dois
+    // casos em /suporte/resumo.
+    to: '/atendimentos',
+    icon: LifeBuoy,
+    label: 'Suporte',
+    visible: (user, _resumo, suporte) => Boolean(suporte?.mostrar) || user?.role === 'suporte',
+    contador: (_resumo, suporte) => suporte?.pendentes || 0,
   },
   { to: '/cursistas', icon: Users, label: 'Cursistas', visible: (user) => user?.role === 'administrador' },
   { to: '/acessos', icon: ShieldCheck, label: 'Colaboradores', visible: (user) => ['administrador', 'gerencia'].includes(user?.role) },
@@ -87,6 +97,7 @@ const roleLabels = {
   revisor: 'Revisor(a)',
   supervisor_tutoria: 'Supervisor de tutoria',
   ti: 'TI',
+  suporte: 'Suporte',
 }
 
 function Tooltip({ label }) {
@@ -104,6 +115,7 @@ export default function Sidebar({ collapsed, onToggle }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [resumoAtribuicoes, setResumoAtribuicoes] = useState(null)
+  const [resumoSuporte, setResumoSuporte] = useState(null)
 
   /**
    * Quantas avaliacoes esperam por esta pessoa.
@@ -117,12 +129,15 @@ export default function Sidebar({ collapsed, onToggle }) {
     api.get('/atribuicoes/resumo')
       .then(({ data }) => { if (ativo) setResumoAtribuicoes(data) })
       .catch(() => { if (ativo) setResumoAtribuicoes(null) })
+    api.get('/suporte/resumo')
+      .then(({ data }) => { if (ativo) setResumoSuporte(data) })
+      .catch(() => { if (ativo) setResumoSuporte(null) })
     return () => { ativo = false }
   }, [location.pathname])
 
   const visibleNavItems = navItems.filter(item => {
     if (item.adminOnly && user?.role !== 'administrador') return false
-    if (item.visible && !item.visible(user, resumoAtribuicoes)) return false
+    if (item.visible && !item.visible(user, resumoAtribuicoes, resumoSuporte)) return false
     return true
   })
 
@@ -175,7 +190,7 @@ export default function Sidebar({ collapsed, onToggle }) {
       {/* Main nav */}
       <nav className={`flex-1 px-2 py-4 space-y-1 ${collapsed ? 'overflow-visible' : 'overflow-y-auto'}`}>
         {visibleNavItems.map(({ to, icon: Icon, label, contador }) => {
-          const pendencias = contador ? contador(resumoAtribuicoes) : 0
+          const pendencias = contador ? contador(resumoAtribuicoes, resumoSuporte) : 0
           return (
             <NavLink
               key={to}

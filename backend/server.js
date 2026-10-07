@@ -26,6 +26,7 @@ async function iniciarTrabalhador() {
   const { garantirEsquema: garantirEsquemaCursistas } = require('./src/modules/cursistas/cursistas.schema')
   const { garantirEsquema: garantirEsquemaAtribuicoes } = require('./src/modules/atribuicoes/atribuicoes.schema')
   const { garantirEsquema: garantirEsquemaResultados } = require('./src/modules/resultados/resultados.schema')
+  const { garantirEsquema: garantirEsquemaSuporte } = require('./src/modules/suporte/suporte.schema')
 
   await initStore()
   // Depois do initStore: e ele quem cria a pool que os modulos usam.
@@ -35,6 +36,7 @@ async function iniciarTrabalhador() {
   // existe, mas a ordem deixa o boot legivel na sequencia em que os dados
   // dependem uns dos outros.
   await garantirEsquemaResultados()
+  await garantirEsquemaSuporte()
 
   app.listen(PORT, () => {
     const quem = cluster.isPrimary ? 'processo unico' : `processo ${process.pid}`

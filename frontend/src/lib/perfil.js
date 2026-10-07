@@ -87,7 +87,11 @@ const TELAS_POR_PERFIL = {
   // producao, '/painel' veio do dashboard. Perder qualquer um aqui tira um
   // acesso que o backend concede -- o item apareceria no menu e o clique
   // cairia de volta em Cursos.
-  gerencia: ['/cursos', '/painel', '/acessos', '/perfil', '/notificacoes'],
+  // '/atendimentos': a fila de Suporte, para quando um chamado for encaminhado
+  // a gerencia. O item so aparece no menu se houver chamado para ela.
+  gerencia: ['/cursos', '/painel', '/acessos', '/atendimentos', '/perfil', '/notificacoes'],
+  // O suporte so atende chamados: a fila e a porta de entrada dele.
+  suporte: ['/atendimentos', '/perfil', '/notificacoes'],
 }
 
 export function telasPermitidas(user) {
@@ -132,4 +136,5 @@ export const NOMES_DE_PERFIL = {
   revisor: 'Revisor(a)',
   supervisor_tutoria: 'Supervisor de tutoria',
   ti: 'TI',
+  suporte: 'Suporte',
 }

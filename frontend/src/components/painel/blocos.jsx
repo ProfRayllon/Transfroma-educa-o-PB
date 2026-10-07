@@ -31,6 +31,7 @@ const ROTULOS_PERFIL = {
   administrador: 'Administrador', gerencia: 'Gerência', coordenador: 'Coordenador',
   supervisor: 'Supervisor', professor: 'Professor', tutor: 'Tutor', tecnico: 'Apoio técnico',
   gestao: 'Gestão de Pessoas', revisor: 'Revisor', supervisor_tutoria: 'Sup. de tutoria', ti: 'TI',
+  suporte: 'Suporte',
 }
 const ROTULOS_ESTAGIO = {
   producao: 'Em produção', supervisao: 'Com a supervisão',
