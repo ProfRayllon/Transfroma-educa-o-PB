@@ -1,11 +1,12 @@
 # Guias e tutoriais do site publico
 
-Os dois botoes da secao **Guias Transforma**, na Home, apontam para arquivos
-desta pasta. O nome tem de bater exatamente, letra por letra:
+Os dois botoes da secao **Guias Transforma**, na Home, abrem arquivos desta
+pasta num visualizador em tela cheia (com opcao de baixar). O nome tem de bater
+exatamente, letra por letra, com a lista `GUIAS` em `frontend/src/pages/Home.jsx`:
 
-| Botao na Home | Arquivo esperado |
+| Botao na Home | Arquivo atual |
 |---|---|
-| Guia do Cursista | `GUIA_CURSISTA_TRANSFORMA_2026.pdf` |
+| Guia do Cursista | `GUIA_CURSISTA_TRANSFORMA_2026_v2.pdf` |
 | Tutorial de Acesso ao RIEH PB | `GUIA_RIEH_TRANSFORMA_v3.pdf` |
 
 Tudo que esta em `frontend/public/` e copiado para a raiz do site pelo build,
@@ -13,11 +14,11 @@ entao `public/guias/X.pdf` fica em `https://transformaeducacaopb.com.br/guias/X.
 
 ## Para trocar ou publicar um guia
 
-1. Coloque o PDF aqui com o nome exato da tabela.
-2. Commit e push na `main` -- o deploy automatico cuida do resto.
-
-Se o nome do arquivo mudar, o `href` correspondente em
-`frontend/src/pages/Home.jsx` precisa mudar junto.
+1. Coloque o PDF novo aqui com um nome de versao nova (`..._v3.pdf`). Nome
+   novo faz o navegador buscar o arquivo novo em vez de mostrar o do cache.
+2. Atualize o `arquivo` correspondente na lista `GUIAS` em
+   `frontend/src/pages/Home.jsx` e apague o PDF antigo desta pasta.
+3. Commit e push na `main`, e rode o deploy.
 
 ## Por que o nome importa tanto
 

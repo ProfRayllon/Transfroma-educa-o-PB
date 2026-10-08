@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, ChevronLeft, ChevronRight, Clock, Download, Info, LayoutGrid } from 'lucide-react'
+import { ArrowRight, BookOpen, ChevronLeft, ChevronRight, Clock, LayoutGrid } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
 import MapaParaiba from '../components/public/MapaParaiba'
 import CapaCurso from '../components/public/CapaCurso'
+import VisualizadorPdf from '../components/public/VisualizadorPdf'
 import { duracaoCurso, nomeTrilha, ordenarPorInscricao } from '../lib/curso'
 import publicApi from '../lib/publicApi'
 import { useCursista } from '../modules/cursista/CursistaContext'
@@ -285,10 +286,21 @@ function FluxoTimeline() {
   )
 }
 
+/**
+ * Os materiais de apoio da secao "Guias Transforma". O nome do arquivo precisa
+ * bater com o que esta em public/guias; um nome novo a cada versao evita que o
+ * navegador mostre a copia antiga guardada em cache.
+ */
+const GUIAS = [
+  { titulo: 'Guia do Cursista', arquivo: '/guias/GUIA_CURSISTA_TRANSFORMA_2026_v2.pdf' },
+  { titulo: 'Tutorial de Acesso ao RIEH PB', arquivo: '/guias/GUIA_RIEH_TRANSFORMA_v3.pdf' },
+]
+
 export default function Home() {
   const [cursos, setCursos] = useState([])
   const [trilhaAtiva, setTrilhaAtiva] = useState(null)
-  const [guiaEmAtualizacao, setGuiaEmAtualizacao] = useState(false)
+  const [guiaAberto, setGuiaAberto] = useState(null)
+  const fecharGuia = useCallback(() => setGuiaAberto(null), [])
   const carouselRef = useRef(null)
 
   const carregar = useCallback(async () => {
@@ -576,44 +588,27 @@ export default function Home() {
             </div>
             <div className="flex shrink-0 flex-col items-start gap-3">
               <div className="flex flex-wrap gap-3">
-                {/*
-                  Botao, e nao link com `download`: o guia esta em revisao e nao
-                  ha arquivo para entregar. Como <a href> ele baixaria o proprio
-                  site com nome de PDF -- foi exatamente o defeito corrigido em
-                  agosto de 2026. Enquanto nao houver arquivo, o clique explica
-                  em vez de entregar algo quebrado.
-                */}
-                <button
-                  type="button"
-                  onClick={() => setGuiaEmAtualizacao(true)}
-                  className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-[15px] font-black text-[#6b21a8] shadow-xl transition hover:-translate-y-0.5 hover:shadow-2xl"
-                >
-                  <Download size={16} /> Guia do Cursista
-                </button>
-                <a
-                  href="/guias/GUIA_RIEH_TRANSFORMA_v3.pdf"
-                  download
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#2d0f5e] px-8 py-4 text-[15px] font-black text-white shadow-xl transition hover:-translate-y-0.5 hover:bg-[#3d1878]"
-                >
-                  <Download size={16} /> Tutorial de Acesso ao RIEH PB
-                </a>
+                {/* Abrem por cima da pagina, em tela cheia, com "Baixar" na
+                    barra do visualizador. Os arquivos vivem em public/guias --
+                    ver o LEIA-ME de la para trocar um guia. */}
+                {GUIAS.map((guia, i) => (
+                  <button
+                    key={guia.arquivo}
+                    type="button"
+                    onClick={() => setGuiaAberto(guia)}
+                    className={i === 0
+                      ? 'inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-[15px] font-black text-[#6b21a8] shadow-xl transition hover:-translate-y-0.5 hover:shadow-2xl'
+                      : 'inline-flex items-center gap-2 rounded-xl bg-[#2d0f5e] px-8 py-4 text-[15px] font-black text-white shadow-xl transition hover:-translate-y-0.5 hover:bg-[#3d1878]'}
+                  >
+                    <BookOpen size={16} /> {guia.titulo}
+                  </button>
+                ))}
               </div>
-
-              {guiaEmAtualizacao && (
-                <div
-                  role="status"
-                  className="flex items-start gap-2.5 rounded-xl border border-white/25 bg-white/10 px-4 py-3 text-[14px] leading-relaxed text-white/90 backdrop-blur-sm md:max-w-[420px]"
-                >
-                  <Info size={16} className="mt-0.5 flex-shrink-0 text-purple-200" />
-                  <span>
-                    O <strong className="font-black text-white">Guia do Cursista</strong> está em
-                    atualização e será disponibilizado em breve.
-                  </span>
-                </div>
-              )}
             </div>
           </div>
         </section>
+
+        <VisualizadorPdf arquivo={guiaAberto?.arquivo} titulo={guiaAberto?.titulo} aoFechar={fecharGuia} />
 
         <MapaParaiba />
 
