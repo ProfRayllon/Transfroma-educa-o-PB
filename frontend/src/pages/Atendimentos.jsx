@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Download, LifeBuoy, MessageSquare, RefreshCw, Search, Send, StickyNote, UserCheck } from 'lucide-react'
+import { Download, Headphones, MessageSquare, RefreshCw, Search, Send, StickyNote, UserCheck } from 'lucide-react'
 import api from '../lib/api'
 import Modal from '../components/ui/Modal'
 import { NOMES_DE_PERFIL } from '../lib/perfil'
@@ -362,7 +362,7 @@ export default function Atendimentos() {
     <div className="space-y-5 animate-fade-in">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="page-title flex items-center gap-2"><LifeBuoy size={22} /> Suporte</h1>
+          <h1 className="page-title flex items-center gap-2"><Headphones size={22} /> Suporte</h1>
           <p className="page-subtitle">
             {dados.gere
               ? 'Todos os chamados abertos pelo formulário público de suporte.'

@@ -6,6 +6,7 @@ const { rateLimit, ipKeyGenerator } = require('express-rate-limit')
 const { requireMysql } = require('../../shared/db')
 const { normalizeCpf, isValidCpf } = require('../../shared/cpf')
 const { porProcesso } = require('../../shared/concorrencia')
+const { configurado: emailConfigurado } = require('../../shared/email')
 const repo = require('./suporte.repo')
 const emails = require('./suporte.emails')
 const service = require('./suporte.service')
@@ -93,9 +94,15 @@ module.exports = function criarRotasSuporte({ authInterna, getUsuarioInterno, li
     message: { message: 'Muitas consultas. Tente novamente em alguns minutos.' },
   })
 
-  /** As listas que o formulario precisa: categorias e status com nomes. */
+  /**
+   * As listas que o formulario precisa, e se o e-mail esta ligado.
+   *
+   * `emailAtivo` deixa a tela honesta: sem SMTP configurado nenhum e-mail sai,
+   * e a pessoa precisa ser avisada para anotar o protocolo em vez de esperar
+   * uma mensagem que nao vai chegar. Configurado o SMTP, o aviso some sozinho.
+   */
   router.get('/publico/opcoes', (req, res) => {
-    res.json({ categorias: service.CATEGORIAS, status: service.STATUS })
+    res.json({ categorias: service.CATEGORIAS, status: service.STATUS, emailAtivo: emailConfigurado() })
   })
 
   router.post('/publico/chamados', freioDeAbertura, tratar(async (req, res) => {
@@ -120,7 +127,7 @@ module.exports = function criarRotasSuporte({ authInterna, getUsuarioInterno, li
     enviarEAnotar(chamado.id, 'protocolo ao solicitante', () => emails.avisarAbertura(chamado))
     enviarEAnotar(chamado.id, 'aviso à equipe de suporte', () => emails.avisarEquipe(chamado))
 
-    res.status(201).json({ protocolo: chamado.protocolo, email: chamado.email })
+    res.status(201).json({ protocolo: chamado.protocolo, email: chamado.email, emailAtivo: emailConfigurado() })
   }))
 
   /**

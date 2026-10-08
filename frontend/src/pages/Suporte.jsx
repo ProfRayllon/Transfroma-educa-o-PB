@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { CheckCircle2, LifeBuoy, Search, Send } from 'lucide-react'
+import { AlertTriangle, Check, CheckCircle2, Copy, Search, Send } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
 import PublicFooter from '../components/public/PublicFooter'
 import publicApi from '../lib/publicApi'
@@ -32,7 +32,50 @@ function mensagemDeErro(e, padrao) {
   return e?.response?.data?.message || padrao
 }
 
-function AbrirChamado() {
+/**
+ * Aviso de e-mail fora do ar. Temporario por natureza: depende so de o SMTP
+ * estar configurado no servidor, e some quando estiver.
+ */
+function AvisoSemEmail({ children }) {
+  return (
+    <div role="status" className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm leading-relaxed text-amber-900">
+      <AlertTriangle size={18} className="mt-0.5 flex-shrink-0 text-amber-600" />
+      <div>{children}</div>
+    </div>
+  )
+}
+
+function BotaoCopiar({ texto }) {
+  const [copiado, setCopiado] = useState(false)
+
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(texto)
+    } catch {
+      // Navegador sem acesso a area de transferencia: o caminho antigo.
+      const campoTemp = document.createElement('textarea')
+      campoTemp.value = texto
+      document.body.appendChild(campoTemp)
+      campoTemp.select()
+      document.execCommand('copy')
+      campoTemp.remove()
+    }
+    setCopiado(true)
+    setTimeout(() => setCopiado(false), 2500)
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={copiar}
+      className="inline-flex items-center gap-1.5 rounded-lg bg-[#14532d] px-3.5 py-2 text-sm font-bold text-white transition hover:bg-[#166534]"
+    >
+      {copiado ? <><Check size={15} /> Copiado</> : <><Copy size={15} /> Copiar protocolo</>}
+    </button>
+  )
+}
+
+function AbrirChamado({ emailAtivo, aoAcompanhar }) {
   const { cursista } = useCursista()
   const [form, setForm] = useState({
     nome: cursista?.name || '', cpf: '', email: cursista?.email || '', categoria: '', descricao: '', site: '',
@@ -53,7 +96,7 @@ function AbrirChamado() {
     setEnviando(true)
     try {
       const { data } = await publicApi.post('/suporte/publico/chamados', form)
-      setProtocolo({ numero: data.protocolo, email: data.email || form.email })
+      setProtocolo({ numero: data.protocolo, email: data.email || form.email, emailAtivo: data.emailAtivo === true })
     } catch (e2) {
       setErro(mensagemDeErro(e2, 'Não foi possível enviar agora. Tente novamente.'))
     } finally {
@@ -67,22 +110,45 @@ function AbrirChamado() {
         <CheckCircle2 size={44} className="mx-auto mb-3 text-[#16a34a]" />
         <h2 className="text-2xl font-black text-[#14532d]">Chamado registrado</h2>
         {protocolo.numero && (
-          <div className="mx-auto my-5 inline-block rounded-xl bg-white px-6 py-3 ring-1 ring-[#bbf7d0]">
-            <span className="block text-xs font-black uppercase tracking-[0.18em] text-[#166534]">Protocolo</span>
-            <span className="text-3xl font-black tracking-wide text-[#14532d]">{protocolo.numero}</span>
+          <div className="mx-auto my-5 inline-flex flex-col items-center gap-3 rounded-xl bg-white px-8 py-4 ring-1 ring-[#bbf7d0]">
+            <span className="block text-xs font-black uppercase tracking-[0.18em] text-[#166534]">Seu protocolo</span>
+            <span className="select-all text-4xl font-black tracking-wide text-[#14532d]">{protocolo.numero}</span>
+            <BotaoCopiar texto={protocolo.numero} />
           </div>
         )}
-        <p className="mx-auto max-w-md text-[15px] leading-relaxed text-[#374151]">
-          Enviamos o número do protocolo para <strong>{protocolo.email}</strong>. Se não encontrar,
-          confira a caixa de spam. Você será avisado por e-mail quando houver resposta.
-        </p>
-        <button
-          type="button"
-          onClick={() => { setProtocolo(null); setForm((f) => ({ ...f, categoria: '', descricao: '' })) }}
-          className="mt-6 rounded-xl border border-[#bbf7d0] bg-white px-5 py-2.5 text-sm font-bold text-[#166534] transition hover:bg-[#dcfce7]"
-        >
-          Abrir outro chamado
-        </button>
+        {protocolo.emailAtivo ? (
+          <p className="mx-auto max-w-md text-[15px] leading-relaxed text-[#374151]">
+            Enviamos o número do protocolo para <strong>{protocolo.email}</strong>. Se não encontrar,
+            confira a caixa de spam. Você será avisado por e-mail quando houver resposta.
+          </p>
+        ) : (
+          <div className="mx-auto max-w-lg">
+            <AvisoSemEmail>
+              <strong>Anote ou copie este número.</strong> No momento o envio de e-mails está
+              temporariamente indisponível, então você <strong>não</strong> vai receber o protocolo por
+              e-mail. Para acompanhar o atendimento, use a aba <strong>Acompanhar protocolo</strong> com
+              este número e o seu CPF.
+            </AvisoSemEmail>
+          </div>
+        )}
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          {protocolo.numero && (
+            <button
+              type="button"
+              onClick={() => aoAcompanhar(protocolo.numero)}
+              className="rounded-xl bg-[#6f35b5] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#5a2b94]"
+            >
+              Acompanhar este protocolo
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => { setProtocolo(null); setForm((f) => ({ ...f, categoria: '', descricao: '' })) }}
+            className="rounded-xl border border-[#bbf7d0] bg-white px-5 py-2.5 text-sm font-bold text-[#166534] transition hover:bg-[#dcfce7]"
+          >
+            Abrir outro chamado
+          </button>
+        </div>
       </div>
     )
   }
@@ -142,6 +208,14 @@ function AbrirChamado() {
 
       {/* Armadilha para robo: invisivel para pessoas, o servidor descarta quem preenche. */}
       <input type="text" name="site" value={form.site} onChange={altera('site')} tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
+
+      {!emailAtivo && (
+        <AvisoSemEmail>
+          O atendimento está funcionando, mas o envio de e-mails está <strong>temporariamente
+          indisponível</strong>. Ao enviar, o número do protocolo aparece nesta tela: anote ou copie,
+          porque é com ele e o seu CPF que você acompanha o chamado.
+        </AvisoSemEmail>
+      )}
 
       {erro && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{erro}</p>}
 
@@ -238,8 +312,23 @@ export default function Suporte() {
   const [params] = useSearchParams()
   const protocoloDoLink = params.get('protocolo') || ''
   const [aba, setAba] = useState(protocoloDoLink || params.get('aba') === 'consultar' ? 'consultar' : 'abrir')
+  const [protocoloConsulta, setProtocoloConsulta] = useState(protocoloDoLink)
+  // Ate a resposta chegar, ou se ela falhar, vale o aviso: prometer um e-mail
+  // que nao chega e pior do que avisar a toa.
+  const [emailAtivo, setEmailAtivo] = useState(false)
 
   useEffect(() => { window.scrollTo(0, 0) }, [])
+
+  useEffect(() => {
+    publicApi.get('/suporte/publico/opcoes')
+      .then(({ data }) => setEmailAtivo(data?.emailAtivo === true))
+      .catch(() => setEmailAtivo(false))
+  }, [])
+
+  const acompanhar = (numero) => {
+    setProtocoloConsulta(numero)
+    setAba('consultar')
+  }
 
   const abaClasse = (ativa) => `flex-1 rounded-lg px-4 py-2.5 text-sm font-black transition ${ativa
     ? 'bg-white text-[#6f35b5] shadow-sm'
@@ -251,8 +340,8 @@ export default function Suporte() {
       <main>
         <section className="bg-[#3b1d7a] px-[22px] pb-24 pt-14 text-white">
           <div className="mx-auto max-w-[820px]">
-            <span className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1.5 text-xs font-black uppercase tracking-wider ring-1 ring-white/25">
-              <LifeBuoy size={14} /> Suporte
+            <span className="mb-4 inline-block rounded-full bg-white/15 px-3 py-1.5 text-xs font-black uppercase tracking-wider ring-1 ring-white/25">
+              Suporte
             </span>
             <h1 className="text-[40px] font-black leading-tight">Como podemos ajudar?</h1>
             <p className="mt-3 max-w-[600px] text-[17px] leading-relaxed text-white/80">
@@ -272,7 +361,9 @@ export default function Suporte() {
 
         <section className="px-[22px]">
           <div className="mx-auto -mt-14 mb-16 max-w-[820px] rounded-2xl bg-white p-6 shadow-[0_12px_40px_rgba(42,24,70,.12)] sm:p-8">
-            {aba === 'abrir' ? <AbrirChamado /> : <ConsultarProtocolo protocoloInicial={protocoloDoLink} />}
+            {aba === 'abrir'
+              ? <AbrirChamado emailAtivo={emailAtivo} aoAcompanhar={acompanhar} />
+              : <ConsultarProtocolo key={protocoloConsulta} protocoloInicial={protocoloConsulta} />}
           </div>
         </section>
       </main>

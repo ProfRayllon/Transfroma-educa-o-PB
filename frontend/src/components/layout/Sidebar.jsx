@@ -7,7 +7,7 @@ import { useTheme } from '../../context/ThemeContext'
 import { useAvatar } from '../../context/AvatarContext'
 import {
   LayoutDashboard, BookOpen, ShieldCheck, ClipboardList,
-  ClipboardCheck, LogOut, ChevronLeft, ChevronRight, Camera, Sun, Moon, Users, LifeBuoy,
+  ClipboardCheck, LogOut, ChevronLeft, ChevronRight, Camera, Sun, Moon, Users, Headphones,
 } from 'lucide-react'
 
 // Menu reduzido ao que cada perfil realmente usa no dia a dia. Cursos e a porta
@@ -76,7 +76,7 @@ const navItems = [
     // algum chamado foi encaminhado a eles -- o servidor responde os dois
     // casos em /suporte/resumo.
     to: '/atendimentos',
-    icon: LifeBuoy,
+    icon: Headphones,
     label: 'Suporte',
     visible: (user, _resumo, suporte) => Boolean(suporte?.mostrar) || user?.role === 'suporte',
     contador: (_resumo, suporte) => suporte?.pendentes || 0,
