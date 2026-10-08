@@ -45,7 +45,7 @@ const PERIODOS = [['7', '7 dias'], ['30', '30 dias'], ['tudo', 'Tudo']]
  */
 const PAINEIS = {
   concluintes: {
-    titulo: 'Docentes Concluintes',
+    titulo: 'Progresso dos Docentes',
     subtitulo: 'Quantos concluiram cada curso, e como isso se distribui pelas regionais.',
   },
   progresso: {

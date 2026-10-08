@@ -174,14 +174,14 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
         /* Escolas e funcao pertencem ao painel de concluintes. Vem no mesmo
            pacote porque sao agregados de poucos bytes -- o que NAO vem aqui e a
            lista de gente, que tem rota propria e paginacao. */
-        resultados.escolasDoConsolidado({ cursoId, gre }),
+        resultados.escolasDoConsolidado({ cursoId, gre, limite: 20 }),
         resultados.concluintesPorFuncao({ cursoId, gre }),
 
         /* Os tres rankings lado a lado do painel de concluintes. Cada um chega
            por um caminho diferente: escola vem da propria planilha, componente
            vem do cadastro pelo CPF, e municipio vem da escola pelo INEP. */
-        resultados.concluintesPorComponente({ cursoId, gre }),
-        resultados.concluintesPorMunicipio({ cursoId, gre }),
+        resultados.concluintesPorComponente({ cursoId, gre, limite: 20 }),
+        resultados.concluintesPorMunicipio({ cursoId, gre, limite: 20 }),
 
         resultados.avaliacaoEvolucao({ cursoId, componente }),
         resultados.componentesAvaliadores({ cursoId }),

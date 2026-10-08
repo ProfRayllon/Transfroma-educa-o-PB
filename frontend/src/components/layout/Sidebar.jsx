@@ -31,7 +31,7 @@ const navItems = [
     visible: veODashboard,
     filhos: [
       // /painel sem secao abre Concluintes, entao ele tambem acende este item.
-      { to: '/painel/concluintes', icon: GraduationCap, label: 'Concluintes', ativoEm: (p) => p === '/painel' || p.startsWith('/painel/concluintes') },
+      { to: '/painel/concluintes', icon: GraduationCap, label: 'Progresso', ativoEm: (p) => p === '/painel' || p.startsWith('/painel/concluintes') },
       { to: '/painel/progresso', icon: Star, label: 'Avaliação' },
       { to: '/painel/sistema', icon: Database, label: 'Sistema' },
     ],

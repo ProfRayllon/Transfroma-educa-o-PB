@@ -494,7 +494,10 @@ async function escolasDoConsolidado({ cursoId = null, gre = null, limite = 8 } =
        FROM consolidado_vinculos
       WHERE 1 = 1${f.sql}
       GROUP BY inep
-      ORDER BY concluidos DESC, vinculos DESC
+      -- Linha sem escola (INEP ou nome vazio) vai para o fim: ela nao e uma
+      -- escola, e no topo do ranking esconderia as escolas de verdade.
+      ORDER BY (inep IS NULL OR inep = '' OR MIN(escola) IS NULL OR MIN(escola) = ''),
+               concluidos DESC, vinculos DESC
       LIMIT ${Number(limite)}`, f.params
   )
 

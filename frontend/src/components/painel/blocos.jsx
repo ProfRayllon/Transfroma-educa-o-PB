@@ -39,6 +39,10 @@ const ROTULOS_ESTAGIO = {
 }
 
 const br = (n) => Number(n || 0).toLocaleString('pt-BR')
+
+/* Os tres rankings do Progresso com a mesma altura: a lista rola por dentro
+   do cartao em vez de cada um crescer do seu jeito. */
+const ROLAGEM_DO_RANKING = 'h-[360px] overflow-y-auto pr-2 -mr-2'
 const pct = (parte, todo) => (todo ? String(Math.round((parte / todo) * 1000) / 10).replace('.', ',') : '0')
 const diaCurto = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 const virgula = (n) => String(n).replace('.', ',')
@@ -221,7 +225,8 @@ function variacaoDaSerie(serie, chave) {
  * por um link antigo.
  */
 const BLOCOS_POR_SECAO = {
-  concluintes: ['kpiConclusao', 'situacao', 'funcao', 'gre', 'escolas', 'lista'],
+  // Sem 'funcao': o cartao saiu do painel de Progresso para a GRE ganhar largura.
+  concluintes: ['kpiConclusao', 'situacao', 'gre', 'escolas', 'lista'],
   progresso: ['kpiAvaliacao', 'evolucao', 'notaRosca', 'positivas', 'indicadores', 'detalhe'],
   sistema: ['kpiBase', 'movimento', 'porCurso', 'perfil', 'gre', 'planilha'],
   tudo: [
@@ -768,11 +773,10 @@ export function BlocoInstitucional({
   /* `temFuncao` entra na conta da grade, e nao so no JSX: o cartao da funcao
      some quando ninguem cruzou com o cadastro, e uma coluna reservada para um
      cartao que nao aparece deixa um vao ao lado dos outros dois. */
-  const gradeSituacao = grade([
-    ['situacao', '1fr'],
-    ...(greComSituacao ? [['gre', '1.35fr']] : []),
-    ...(temFuncao ? [['funcao', '1fr']] : []),
-  ])
+  // No Progresso a GRE abre a linha, larga, e a situacao fica na ponta direita.
+  const gradeSituacao = grade(greComSituacao
+    ? [['gre', '1.9fr'], ['situacao', '1fr'], ...(mostra('funcao') && temFuncao ? [['funcao', '1fr']] : [])]
+    : [['situacao', '1fr'], ...(mostra('funcao') && temFuncao ? [['funcao', '1fr']] : [])])
   /**
    * Em Dados do Sistema a GRE sobe para o lugar de destaque.
    *
@@ -955,6 +959,8 @@ export function BlocoInstitucional({
       {gradeSituacao && temConclusao && (
         <div className="grid grid-cols-1 gap-4 items-stretch xl:[grid-template-columns:var(--cols)]"
           style={gradeSituacao}>
+          {greComSituacao && cartaoGre}
+
           {mostra('situacao') && (
             <Cartao className="flex flex-col">
               <TituloDeBloco
@@ -964,19 +970,35 @@ export function BlocoInstitucional({
               >
                 Situação no curso
               </TituloDeBloco>
+              {/* O centro diz a taxa geral, e a legenda embaixo as duas
+                  porcentagens: a pergunta deste cartao e "que parte concluiu". */}
               <div className="flex-1 flex items-center justify-center min-h-0">
                 <RoscaRotulada
                   total={R.conclusao.base}
-                  altura={310}
-                  centroValor={br(R.conclusao.base)}
-                  centroRotulo="docentes"
+                  altura={360}
+                  centroValor={`${pct(R.conclusao.concluintes, R.conclusao.base)}%`}
+                  centroRotulo="concluíram"
                   fatias={fatiasSituacao}
                 />
               </div>
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                {fatiasSituacao.map((f) => (
+                  <div key={f.rotulo} className="rounded-xl px-3 py-2.5" style={{ background: 'var(--p-trilho)' }}>
+                    <span className="flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--p-texto3)' }}>
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: f.cor }} />
+                      {f.rotulo}
+                    </span>
+                    <span className="block text-[26px] font-bold leading-tight tabular-nums" style={{ color: 'var(--p-texto)' }}>
+                      {pct(f.valor, R.conclusao.base)}%
+                    </span>
+                    <span className="block text-[12px] tabular-nums" style={{ color: 'var(--p-texto3)' }}>
+                      {br(f.valor)} de {br(R.conclusao.base)} docentes
+                    </span>
+                  </div>
+                ))}
+              </div>
             </Cartao>
           )}
-
-          {greComSituacao && cartaoGre}
 
           {mostra('funcao') && temFuncao && (
             <Cartao className="flex flex-col">
@@ -1472,13 +1494,16 @@ export function BlocoInstitucional({
                   régua fosse o percentual, a escola de 4 em 4 empataria no topo
                   com a de 51 em 61 -- as duas com 100%, e é a segunda que
                   importa. Vale para os três rankings desta linha. */}
+              <div className={ROLAGEM_DO_RANKING}>
               <ListaRanqueada
                 itens={R.escolas.maiores.map((e) => ({
-                  rotulo: e.escola,
+                  // Sem escola informada vem por ultimo do servidor; aqui so ganha nome.
+                  rotulo: e.escola || 'Sem escola informada',
                   valor: e.concluidos,
                   nota: `${e.gre} · ${pctBr(e.taxa)}% de ${br(e.vinculos)} vínculos`,
                 }))}
               />
+              </div>
             </Cartao>
           )}
 
@@ -1492,6 +1517,7 @@ export function BlocoInstitucional({
                 Municípios com mais concluintes
               </TituloDeBloco>
 
+              <div className={ROLAGEM_DO_RANKING}>
               <ListaRanqueada
                 itens={R.porMunicipio.itens.map((m) => ({
                   rotulo: m.chave,
@@ -1499,6 +1525,7 @@ export function BlocoInstitucional({
                   nota: `${m.escolas} escolas · ${pctBr(m.taxa)}% de ${br(m.vinculos)} vínculos`,
                 }))}
               />
+              </div>
 
               {/* Aqui a contagem é de VÍNCULO, e não de pessoa: quem leciona em
                   duas escolas de municípios diferentes concluiu nos dois
@@ -1534,12 +1561,14 @@ export function BlocoInstitucional({
                 Componentes com mais concluintes
               </TituloDeBloco>
 
+              <div className={ROLAGEM_DO_RANKING}>
               <ListaRanqueada
                 itens={R.porComponente.itens.map((c) => ({
                   rotulo: c.chave,
                   valor: c.total,
                 }))}
               />
+              </div>
 
               <p className="text-[12px] mt-3" style={{ color: 'var(--p-texto3)' }}>
                 O componente vem do cadastro do cursista, alcançado pelo CPF.{' '}
