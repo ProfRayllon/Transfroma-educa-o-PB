@@ -64,6 +64,15 @@ function recebeuOChamado(ator, chamado) {
   return Boolean(chamado.encaminhadoPerfil) && chamado.encaminhadoPerfil === ator.role
 }
 
+/**
+ * Excluir apaga o chamado e o historico de vez -- nao ha lixeira. Fica so com
+ * o administrador, e nao com o perfil suporte: quem atende encerra (resolvido
+ * ou cancelado), e o registro continua existindo para a prestacao de contas.
+ */
+function podeExcluir(ator) {
+  return ator?.role === 'administrador'
+}
+
 function podeVer(ator, chamado) {
   return gereSuporte(ator) || recebeuOChamado(ator, chamado)
 }
@@ -83,5 +92,6 @@ module.exports = {
   gereSuporte,
   recebeuOChamado,
   podeVer,
+  podeExcluir,
   podeMudarPara,
 }

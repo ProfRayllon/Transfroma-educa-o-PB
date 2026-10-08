@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Download, Headphones, MessageSquare, RefreshCw, Search, Send, StickyNote, UserCheck } from 'lucide-react'
+import { Download, Eye, Headphones, MessageSquare, RefreshCw, Search, Send, StickyNote, Trash2, UserCheck } from 'lucide-react'
 import api from '../lib/api'
 import Modal from '../components/ui/Modal'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { NOMES_DE_PERFIL } from '../lib/perfil'
 import { CATEGORIAS, CLASSE_DO_STATUS, STATUS, formatarDataHora } from '../lib/suporte'
 
@@ -58,7 +59,7 @@ function exportarCsv(chamados) {
   URL.revokeObjectURL(url)
 }
 
-function Detalhe({ id, pessoas, aoMudar }) {
+function Detalhe({ id, pessoas, aoMudar, aoExcluir }) {
   const [dados, setDados] = useState(null)
   const [erro, setErro] = useState('')
   const [aviso, setAviso] = useState('')
@@ -214,14 +215,29 @@ function Detalhe({ id, pessoas, aoMudar }) {
         {statusPossiveis.length > 0 && (
           <section className="rounded-xl border border-gray-200 p-4 space-y-3">
             <h3 className="text-sm font-semibold text-gray-900">Mudar status</h3>
-            <select
-              className="select-field"
-              value={novoStatus.status}
-              onChange={(e) => setNovoStatus((s) => ({ ...s, status: e.target.value }))}
-            >
-              <option value="">Escolha o novo status</option>
-              {statusPossiveis.map((s) => <option key={s} value={s}>{STATUS[s]}</option>)}
-            </select>
+            {/* Uma tag por status. A atual fica marcada e travada; clicar numa
+                outra escolhe, clicar de novo desfaz a escolha. */}
+            <div className="flex flex-wrap gap-2">
+              {Object.keys(STATUS).map((s) => {
+                const atual = s === chamado.status
+                const liberado = statusPossiveis.includes(s)
+                if (!atual && !liberado) return null
+                const escolhido = novoStatus.status === s
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    disabled={atual}
+                    onClick={() => setNovoStatus((n) => ({ ...n, status: escolhido ? '' : s }))}
+                    className={`badge ${CLASSE_DO_STATUS[s]} !px-3 !py-1 text-[13px] transition ${
+                      atual ? 'cursor-default opacity-60' : 'cursor-pointer hover:brightness-95'
+                    } ${escolhido ? 'ring-2 ring-offset-1 ring-brand-500' : ''}`}
+                  >
+                    {STATUS[s]}{atual && ' (atual)'}
+                  </button>
+                )
+              })}
+            </div>
             {novoStatus.status && (
               <>
                 <textarea
@@ -303,6 +319,16 @@ function Detalhe({ id, pessoas, aoMudar }) {
             <Send size={14} /> {mensagem.tipo === 'resposta' ? 'Enviar resposta' : 'Salvar nota'}
           </button>
         </section>
+
+        {permissoes.excluir && (
+          <button
+            type="button"
+            onClick={() => aoExcluir(chamado)}
+            className="flex items-center gap-2 text-sm font-medium text-red-600 hover:text-red-700"
+          >
+            <Trash2 size={14} /> Excluir chamado
+          </button>
+        )}
       </div>
     </div>
   )
@@ -316,6 +342,17 @@ export default function Atendimentos() {
   const [erro, setErro] = useState('')
   const [aberto, setAberto] = useState(null)
   const [pessoas, setPessoas] = useState(null)
+  const [paraExcluir, setParaExcluir] = useState(null)
+
+  const excluir = async (chamado) => {
+    try {
+      await api.delete(`/suporte/chamados/${chamado.id}`)
+      if (aberto === chamado.id) setAberto(null)
+      carregar()
+    } catch (e) {
+      setErro(erroDe(e, 'Não foi possível excluir o chamado.'))
+    }
+  }
 
   const carregar = useCallback(async () => {
     setCarregando(true)
@@ -429,11 +466,12 @@ export default function Atendimentos() {
               <th className="table-header">Status</th>
               <th className="table-header">Encaminhado para</th>
               <th className="table-header">Atualizado</th>
+              <th className="table-header text-center">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {dados.chamados.map((c) => (
-              <tr key={c.id} onClick={() => setAberto(c.id)} className="cursor-pointer hover:bg-brand-50/40">
+              <tr key={c.id} className="hover:bg-brand-50/40">
                 <td className="table-cell font-semibold text-gray-900">{c.protocolo}</td>
                 <td className="table-cell whitespace-nowrap">{formatarDataHora(c.criadoEm)}</td>
                 <td className="table-cell">
@@ -444,10 +482,34 @@ export default function Atendimentos() {
                 <td className="table-cell"><span className={`badge ${CLASSE_DO_STATUS[c.status]}`}>{STATUS[c.status]}</span></td>
                 <td className="table-cell">{destinoDe(c) || <span className="text-gray-400">—</span>}</td>
                 <td className="table-cell whitespace-nowrap">{formatarDataHora(c.atualizadoEm)}</td>
+                <td className="table-cell">
+                  <div className="flex items-center justify-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setAberto(c.id)}
+                      title="Ver chamado"
+                      aria-label={`Ver chamado ${c.protocolo}`}
+                      className="rounded-lg p-1.5 text-brand-700 transition hover:bg-brand-100"
+                    >
+                      <Eye size={16} />
+                    </button>
+                    {dados.podeExcluir && (
+                      <button
+                        type="button"
+                        onClick={() => setParaExcluir(c)}
+                        title="Excluir chamado"
+                        aria-label={`Excluir chamado ${c.protocolo}`}
+                        className="rounded-lg p-1.5 text-red-600 transition hover:bg-red-50"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
             {!carregando && !dados.chamados.length && (
-              <tr><td colSpan={7} className="px-3 py-10 text-center text-sm text-gray-500">Nenhum chamado neste filtro.</td></tr>
+              <tr><td colSpan={8} className="px-3 py-10 text-center text-sm text-gray-500">Nenhum chamado neste filtro.</td></tr>
             )}
           </tbody>
         </table>
@@ -459,8 +521,19 @@ export default function Atendimentos() {
         title={chamadoAberto ? `Chamado ${chamadoAberto.protocolo}` : 'Chamado'}
         size="xl"
       >
-        {aberto && <Detalhe id={aberto} pessoas={pessoas} aoMudar={carregar} />}
+        {aberto && <Detalhe id={aberto} pessoas={pessoas} aoMudar={carregar} aoExcluir={setParaExcluir} />}
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(paraExcluir)}
+        onClose={() => setParaExcluir(null)}
+        onConfirm={() => excluir(paraExcluir)}
+        title="Excluir chamado"
+        message={paraExcluir
+          ? `O chamado ${paraExcluir.protocolo} (${paraExcluir.nome}) e todo o histórico dele serão apagados de vez. Não dá para desfazer.`
+          : ''}
+        confirmLabel="Excluir"
+      />
     </div>
   )
 }

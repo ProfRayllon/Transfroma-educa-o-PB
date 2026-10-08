@@ -193,7 +193,7 @@ module.exports = function criarRotasSuporte({ authInterna, getUsuarioInterno, li
       busca: texto(busca, 100) || undefined,
       perfil: texto(perfil, 30) || undefined,
     })
-    res.json({ ...resultado, gere: service.gereSuporte(req.ator) })
+    res.json({ ...resultado, gere: service.gereSuporte(req.ator), podeExcluir: service.podeExcluir(req.ator) })
   }))
 
   router.get('/chamados/:id', tratar(async (req, res) => {
@@ -207,6 +207,7 @@ module.exports = function criarRotasSuporte({ authInterna, getUsuarioInterno, li
       historico,
       permissoes: {
         encaminhar: service.gereSuporte(req.ator),
+        excluir: service.podeExcluir(req.ator),
         status: Object.keys(service.STATUS).filter((s) => service.podeMudarPara(req.ator, chamado, s)),
       },
     })
@@ -317,6 +318,14 @@ module.exports = function criarRotasSuporte({ authInterna, getUsuarioInterno, li
     await repo.registrarHistorico({ chamadoId: chamado.id, autor: req.ator, tipo: 'resposta', mensagem, publico: true })
     enviarEAnotar(chamado.id, 'resposta ao solicitante', () => emails.enviarResposta(chamado, mensagem))
     res.status(201).json({ ok: true })
+  }))
+
+  router.delete('/chamados/:id', tratar(async (req, res) => {
+    if (!service.podeExcluir(req.ator)) throw erro(403, 'Apenas o administrador exclui chamados.')
+    const chamado = await carregarChamado(req)
+    await repo.excluir(chamado.id)
+    console.log(`[suporte] chamado ${chamado.protocolo} excluido por ${req.ator.name} (id ${req.ator.id})`)
+    res.status(204).end()
   }))
 
   return router

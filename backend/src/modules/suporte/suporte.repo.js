@@ -213,6 +213,12 @@ async function atualizar(id, campos) {
   await getPool().execute(`UPDATE suporte_chamados SET ${sets.join(', ')} WHERE id = ?`, params)
 }
 
+/** Apaga o chamado; o historico vai junto pela FK com ON DELETE CASCADE. */
+async function excluir(id) {
+  const [resultado] = await getPool().execute('DELETE FROM suporte_chamados WHERE id = ?', [id])
+  return resultado.affectedRows > 0
+}
+
 /** A consulta do proprio solicitante: protocolo e CPF precisam bater juntos. */
 async function buscarPorProtocoloECpf(protocolo, cpf) {
   const [[linha]] = await getPool().execute(
@@ -232,5 +238,6 @@ module.exports = {
   historico,
   registrarHistorico,
   atualizar,
+  excluir,
   buscarPorProtocoloECpf,
 }
