@@ -614,37 +614,9 @@ export function AreaDeSerie({
 
 /* ═══ Barras verticais com rótulo em cima ═══ */
 
-/**
- * Curva suave (Catmull-Rom -> Bezier) por pontos [x, y]. Mesmo fator 1/6 da
- * curva do movimento diario: passa por todos os pontos sem lacos.
- */
-function curvaSuave(pontos) {
-  return pontos.map(([x, y], i) => {
-    if (!i) return `M${x.toFixed(2)},${y.toFixed(2)}`
-    const [x0, y0] = pontos[i - 1]
-    const [xa, ya] = pontos[i - 2] || pontos[i - 1]
-    const [xp, yp] = pontos[i + 1] || pontos[i]
-    const c1 = [x0 + (x - xa) / 6, y0 + (y - ya) / 6]
-    const c2 = [x - (xp - x0) / 6, y - (yp - y0) / 6]
-    return `C${c1[0].toFixed(2)},${c1[1].toFixed(2)} ${c2[0].toFixed(2)},${c2[1].toFixed(2)} ${x.toFixed(2)},${y.toFixed(2)}`
-  }).join(' ')
-}
-
-const ESPACO_DO_VALOR = 20 // px reservados acima da barra mais alta para o numero
-const ESPACO_DO_ROTULO = 22 // px do rotulo do eixo embaixo
-
-/**
- * `linha` (opcional): uma serie sobreposta as barras, na MESMA escala, como uma
- * curva neon -- { valores: [n por barra], rotulo, formatar, cor }. As barras e a
- * curva dividem a mesma area de desenho; por isso as colunas nao tem `gap`
- * (o respiro e padding interno), e o centro de cada uma cai exatamente em
- * (i + 0,5) / n da largura -- e la que a curva passa.
- */
-export function BarrasRotuladas({ dados, altura = '100%', formatarValor, mostrarValor = true, linha = null }) {
-  const valoresDaLinha = linha?.valores || []
-  const maximo = Math.max(1, ...dados.map((d) => d.valor), ...valoresDaLinha.map((v) => Number(v) || 0))
+export function BarrasRotuladas({ dados, altura = '100%', formatarValor, mostrarValor = true }) {
+  const maximo = Math.max(1, ...dados.map((d) => d.valor))
   const formatar = (v) => (formatarValor ? formatarValor(v) : br(v))
-  const n = Math.max(1, dados.length)
 
   /* O rótulo de cima encolhe com o espaço de cada barra, e não o contrário.
      A largura do cartão é da grade; se o texto pudesse empurrá-la, trocar
@@ -652,76 +624,42 @@ export function BarrasRotuladas({ dados, altura = '100%', formatarValor, mostrar
      100/n da largura (cqw), um algarismo ocupa uns 0,6 do corpo da fonte, e
      15% fica de folga entre vizinhos. Entre 9,5px e os 12px de sempre. */
   const maiorTexto = Math.max(3, ...dados.map((d) => String(formatar(d.valor)).length))
-  const fonteDoValor = `clamp(9.5px, ${(142 / (n * maiorTexto)).toFixed(2)}cqw, 12px)`
-
-  const pontos = linha && valoresDaLinha.length === dados.length
-    ? valoresDaLinha.map((v, i) => [((i + 0.5) / n) * 100, 100 - ((Number(v) || 0) / maximo) * 100])
-    : null
-  const corDaLinha = linha?.cor || '#22d3ee'
+  const fonteDoValor = `clamp(9.5px, ${(142 / (Math.max(1, dados.length) * maiorTexto)).toFixed(2)}cqw, 12px)`
 
   return (
-    <div className="relative flex w-full" style={{ height: altura, containerType: 'inline-size' }}>
+    <div className="flex items-end gap-2 w-full"
+      style={{ height: altura, containerType: 'inline-size' }}>
       {dados.map((d, i) => {
         const alturaPct = (d.valor / maximo) * 100
         return (
-          <div key={d.rotulo} className="flex-1 min-w-0 h-full flex flex-col px-1 group">
-            {/* A trilha e a area de desenho: a barra mede em % dela, e a curva
-                usa a mesma conta. O numero fica logo acima da barra. */}
-            <div className="relative flex-1" style={{ marginTop: ESPACO_DO_VALOR }}>
-              {mostrarValor && (
-                <span className="absolute left-1/2 -translate-x-1/2 font-semibold tabular-nums whitespace-nowrap"
-                  style={{ color: 'var(--p-texto2)', fontSize: fonteDoValor, bottom: `calc(${alturaPct}% + 4px)` }}>
-                  {formatar(d.valor)}
-                </span>
-              )}
-              <div
-                className="absolute bottom-0 inset-x-0 rounded-t-md animate-coluna origin-bottom transition-opacity group-hover:opacity-80"
-                style={{
-                  height: `${Math.max(1, alturaPct)}%`,
-                  // Do topo claro para a base escura: a barra ganha peso onde
-                  // encosta no eixo, que e onde a leitura comeca.
-                  background: 'linear-gradient(180deg, var(--p-r2) 0%, var(--p-r4) 100%)',
-                  animationDelay: `${i * 35}ms`,
-                }}
-                title={`${d.titulo || d.rotulo}: ${br(d.valor)}${d.nota ? ` · ${d.nota}` : ''}`}
-              />
-            </div>
-            <span className="text-[11px] text-center truncate max-w-full leading-none pt-1.5"
-              style={{ color: 'var(--p-texto3)', height: ESPACO_DO_ROTULO }}>
+          <div key={d.rotulo} className="flex-1 min-w-0 h-full flex flex-col items-center justify-end gap-1.5 group">
+            {/* Com muitas barras o rotulo em cima de cada uma vira uma tarja
+                ilegivel: quem chama passa mostrarValor={false} e o valor fica
+                so no balao ao passar o mouse. */}
+            {mostrarValor && (
+              <span className="font-semibold tabular-nums shrink-0 whitespace-nowrap"
+                style={{ color: 'var(--p-texto2)', fontSize: fonteDoValor }}>
+                {formatarValor ? formatarValor(d.valor) : br(d.valor)}
+              </span>
+            )}
+            <div
+              className="w-full rounded-t-md animate-coluna origin-bottom transition-opacity group-hover:opacity-80"
+              style={{
+                height: `${Math.max(2, alturaPct)}%`,
+                // Do topo claro para a base escura: a barra ganha peso onde
+                // encosta no eixo, que e onde a leitura comeca.
+                background: 'linear-gradient(180deg, var(--p-r2) 0%, var(--p-r4) 100%)',
+                animationDelay: `${i * 35}ms`,
+              }}
+              title={`${d.titulo || d.rotulo}: ${br(d.valor)}${d.nota ? ` · ${d.nota}` : ''}`}
+            />
+            <span className="text-[11px] shrink-0 truncate max-w-full"
+              style={{ color: 'var(--p-texto3)' }}>
               {d.rotulo}
             </span>
           </div>
         )
       })}
-
-      {pontos && (
-        <div className="absolute inset-x-0 pointer-events-none"
-          style={{ top: ESPACO_DO_VALOR, bottom: ESPACO_DO_ROTULO }}>
-          {/* viewBox em porcentagem esticado na caixa: a curva acompanha o
-              tamanho do cartao. `non-scaling-stroke` mantem o traco com a
-              mesma espessura em qualquer proporcao. O brilho e drop-shadow de
-              CSS, que nao deforma com o esticamento como um filtro SVG. */}
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full overflow-visible"
-            style={{ filter: `drop-shadow(0 0 3px ${corDaLinha}) drop-shadow(0 0 9px ${corDaLinha})` }}>
-            <path d={curvaSuave(pontos)} fill="none" stroke={corDaLinha} strokeWidth="2.5"
-              strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"
-              pathLength="1" className="neon-desenho" />
-            {/* Um brilho que corre pela curva: o "movimento" da linha. */}
-            <path d={curvaSuave(pontos)} fill="none" stroke="#ffffff" strokeOpacity="0.85" strokeWidth="2"
-              strokeLinecap="round" vectorEffect="non-scaling-stroke"
-              pathLength="1" className="neon-fluxo" />
-          </svg>
-          {/* Os pontos em HTML, e nao no SVG esticado: la um circulo viraria
-              elipse. Cada um diz o numero da sua GRE ao passar o mouse. */}
-          {pontos.map(([x, y], i) => (
-            <span key={dados[i].rotulo}
-              className="absolute w-2.5 h-2.5 -ml-[5px] -mt-[5px] rounded-full pointer-events-auto cursor-default"
-              style={{ left: `${x}%`, top: `${y}%`, background: '#ffffff', boxShadow: `0 0 0 2px ${corDaLinha}, 0 0 10px ${corDaLinha}` }}
-              title={`${dados[i].titulo || dados[i].rotulo}: ${linha.formatar ? linha.formatar(valoresDaLinha[i], i) : br(valoresDaLinha[i])}`}
-            />
-          ))}
-        </div>
-      )}
     </div>
   )
 }
