@@ -29,3 +29,6 @@ base-cursistas/
 resultados-cursos/
 *consolidado*.xlsx
 *avaliacao*.xlsx
+# Excecao: os modelos de planilha do painel, com dados ficticios, gerados por
+# backend/scripts/gerar-modelos-planilhas.js.
+!frontend/public/modelos/modelo-*.xlsx
