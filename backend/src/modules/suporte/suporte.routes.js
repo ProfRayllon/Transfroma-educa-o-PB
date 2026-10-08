@@ -105,6 +105,19 @@ module.exports = function criarRotasSuporte({ authInterna, getUsuarioInterno, li
     if (!service.CATEGORIAS[categoria]) throw erro(400, 'Escolha do que se trata o chamado.')
     if (descricao.length < 10) throw erro(400, 'Descreva o problema com um pouco mais de detalhe.')
 
+    // Um chamado em aberto por e-mail: o proximo so depois de o anterior ser
+    // concluido. Evita a mesma pessoa abrir varios para o mesmo problema e
+    // sobrecarregar a fila. O protocolo volta na resposta porque, com o e-mail
+    // fora do ar, quem perdeu o numero nao teria outro jeito de recupera-lo --
+    // e ele sozinho nao abre nada: a consulta exige tambem o CPF.
+    const emAberto = await repo.buscarEmAbertoPorEmail(email)
+    if (emAberto) {
+      return res.status(409).json({
+        message: `Você ainda tem um chamado em aberto (protocolo ${emAberto.protocolo}). Ao finalizar esse chamado, você poderá solicitar outro.`,
+        protocoloEmAberto: emAberto.protocolo,
+      })
+    }
+
     const chamado = await repo.criar({ nome, cpf, email, categoria, descricao, ip: clientIp(req) })
 
     enviarEAnotar(chamado.id, 'protocolo ao solicitante', () => emails.avisarAbertura(chamado))

@@ -213,6 +213,21 @@ async function atualizar(id, campos) {
   await getPool().execute(`UPDATE suporte_chamados SET ${sets.join(', ')} WHERE id = ?`, params)
 }
 
+/**
+ * O chamado ainda nao concluido deste e-mail, se houver. Concluido e resolvido
+ * ou cancelado; os demais status contam como em aberto.
+ */
+async function buscarEmAbertoPorEmail(email) {
+  const [[linha]] = await getPool().execute(
+    `SELECT protocolo FROM suporte_chamados
+      WHERE email = ? AND status IN (${STATUS_PENDENTES.map(() => '?').join(', ')})
+      ORDER BY criado_em DESC
+      LIMIT 1`,
+    [email, ...STATUS_PENDENTES]
+  )
+  return linha ? { protocolo: linha.protocolo } : null
+}
+
 /** Apaga o chamado; o historico vai junto pela FK com ON DELETE CASCADE. */
 async function excluir(id) {
   const [resultado] = await getPool().execute('DELETE FROM suporte_chamados WHERE id = ?', [id])
@@ -239,5 +254,6 @@ module.exports = {
   registrarHistorico,
   atualizar,
   excluir,
+  buscarEmAbertoPorEmail,
   buscarPorProtocoloECpf,
 }

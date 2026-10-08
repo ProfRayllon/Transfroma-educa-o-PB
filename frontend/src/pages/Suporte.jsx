@@ -33,10 +33,10 @@ function mensagemDeErro(e, padrao) {
 }
 
 /**
- * Aviso de e-mail fora do ar. Temporario por natureza: depende so de o SMTP
- * estar configurado no servidor, e some quando estiver.
+ * Aviso em amarelo: e-mail fora do ar (temporario, depende so de o SMTP
+ * estar configurado) e chamado ja em aberto no mesmo e-mail.
  */
-function AvisoSemEmail({ children }) {
+function AvisoAmarelo({ children }) {
   return (
     <div role="status" className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm leading-relaxed text-amber-900">
       <AlertTriangle size={18} className="mt-0.5 flex-shrink-0 text-amber-600" />
@@ -82,6 +82,7 @@ function AbrirChamado({ emailAtivo, aoAcompanhar }) {
   })
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState('')
+  const [protocoloEmAberto, setProtocoloEmAberto] = useState(null)
   const [protocolo, setProtocolo] = useState(null)
 
   const altera = (chave) => (e) => {
@@ -92,13 +93,20 @@ function AbrirChamado({ emailAtivo, aoAcompanhar }) {
   const enviar = async (e) => {
     e.preventDefault()
     setErro('')
+    setProtocoloEmAberto(null)
     if (!form.categoria) { setErro('Escolha do que se trata o chamado.'); return }
     setEnviando(true)
     try {
       const { data } = await publicApi.post('/suporte/publico/chamados', form)
       setProtocolo({ numero: data.protocolo, email: data.email || form.email, emailAtivo: data.emailAtivo === true })
     } catch (e2) {
-      setErro(mensagemDeErro(e2, 'Não foi possível enviar agora. Tente novamente.'))
+      // Ja existe chamado em aberto neste e-mail: nao e erro de preenchimento,
+      // e sim um "acompanhe o que voce ja abriu" -- com o atalho para isso.
+      if (e2?.response?.status === 409 && e2.response.data?.protocoloEmAberto) {
+        setProtocoloEmAberto(e2.response.data.protocoloEmAberto)
+      } else {
+        setErro(mensagemDeErro(e2, 'Não foi possível enviar agora. Tente novamente.'))
+      }
     } finally {
       setEnviando(false)
     }
@@ -123,12 +131,12 @@ function AbrirChamado({ emailAtivo, aoAcompanhar }) {
           </p>
         ) : (
           <div className="mx-auto max-w-lg">
-            <AvisoSemEmail>
+            <AvisoAmarelo>
               <strong>Anote ou copie este número.</strong> No momento o envio de e-mails está
               temporariamente indisponível, então você <strong>não</strong> vai receber o protocolo por
               e-mail. Para acompanhar o atendimento, use a aba <strong>Acompanhar protocolo</strong> com
               este número e o seu CPF.
-            </AvisoSemEmail>
+            </AvisoAmarelo>
           </div>
         )}
         <div className="mt-6 flex flex-wrap justify-center gap-3">
@@ -210,11 +218,27 @@ function AbrirChamado({ emailAtivo, aoAcompanhar }) {
       <input type="text" name="site" value={form.site} onChange={altera('site')} tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
 
       {!emailAtivo && (
-        <AvisoSemEmail>
+        <AvisoAmarelo>
           O atendimento está funcionando, mas o envio de e-mails está <strong>temporariamente
           indisponível</strong>. Ao enviar, o número do protocolo aparece nesta tela: anote ou copie,
           porque é com ele e o seu CPF que você acompanha o chamado.
-        </AvisoSemEmail>
+        </AvisoAmarelo>
+      )}
+
+      {protocoloEmAberto && (
+        <AvisoAmarelo>
+          <p>
+            Você ainda tem um chamado em aberto neste e-mail, protocolo <strong>{protocoloEmAberto}</strong>.
+            Ao finalizar esse chamado, você poderá solicitar outro.
+          </p>
+          <button
+            type="button"
+            onClick={() => aoAcompanhar(protocoloEmAberto)}
+            className="mt-2 rounded-lg bg-amber-600 px-3.5 py-1.5 text-sm font-bold text-white transition hover:bg-amber-700"
+          >
+            Acompanhar este protocolo
+          </button>
+        </AvisoAmarelo>
       )}
 
       {erro && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{erro}</p>}
