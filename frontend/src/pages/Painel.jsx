@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { RefreshCw, Calendar, X, Filter, ChevronDown, Settings, GraduationCap, Star, Database } from 'lucide-react'
+import { RefreshCw, Calendar, X, Filter, ChevronDown, Settings } from 'lucide-react'
 import api from '../lib/api'
 import { useTheme } from '../context/ThemeContext'
 import { useAuth } from '../context/AuthContext'
@@ -60,46 +60,6 @@ const PAINEIS = {
     titulo: 'Dashboard',
     subtitulo: 'O retrato do Transforma Educacao PB',
   },
-}
-
-/**
- * Os tres paineis, em botoes no alto da tela.
- *
- * Substituem a capa que existia antes em /painel. Ela mostrava tres artes e
- * nenhum numero: custava um clique para chegar em qualquer dado, e outro para
- * trocar de painel depois. Aqui a troca e um clique so, de dentro do painel em
- * que a pessoa ja esta, e o painel aberto fica marcado.
- */
-const PAINEIS_NA_BARRA = [
-  { chave: 'concluintes', para: '/painel/concluintes', rotulo: 'Concluintes', icone: GraduationCap },
-  { chave: 'progresso', para: '/painel/progresso', rotulo: 'Avaliação', icone: Star },
-  { chave: 'sistema', para: '/painel/sistema', rotulo: 'Sistema', icone: Database },
-]
-
-function BarraDePaineis({ secao }) {
-  return (
-    <div className="flex items-center gap-1.5 flex-wrap">
-      {PAINEIS_NA_BARRA.map(({ chave, para, rotulo, icone: Icone }) => {
-        const ativo = chave === secao
-        return (
-          <Link
-            key={chave}
-            to={para}
-            aria-current={ativo ? 'page' : undefined}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-[13px] font-medium border transition-colors"
-            style={{
-              borderColor: ativo ? 'transparent' : 'var(--p-cartaoBorda)',
-              background: ativo ? 'var(--p-r4)' : 'transparent',
-              color: ativo ? '#FFFFFF' : 'var(--p-texto2)',
-            }}
-          >
-            <Icone size={14} />
-            {rotulo}
-          </Link>
-        )
-      })}
-    </div>
-  )
 }
 
 /**
@@ -218,13 +178,6 @@ export default function Painel() {
             {painel.subtitulo}
             {dados && ` · atualizado às ${new Date(dados.geradoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
           </p>
-
-          {/* Os botões ficam sob o título e não ao lado dos filtros: trocar de
-              painel muda a tela inteira, filtrar muda os números dela. Misturar
-              os dois na mesma fileira daria o mesmo peso a coisas diferentes. */}
-          <div className="mt-3">
-            <BarraDePaineis secao={secao} />
-          </div>
 
           {/* O filtro ativo fica escrito, e não só selecionado na caixa: sem
               isso, quem chega na tela já filtrada leria os números como se
