@@ -7,7 +7,7 @@ import {
 import {
   Cartao, TituloDeBloco, CartaoKpi, BarrasComLinha, BarrasRotuladas, AreaDeSerie,
   Rosca, RoscaRotulada, LegendaDeRosca, ListaRanqueada, CarrosselDeCursos,
-  RankingPirulito, ResumoDoRanking, MosaicoDeIndicadores,
+  RankingPirulito, ResumoDoRanking,
 } from './graficos'
 import ListaDeConcluintes from './listaConcluintes'
 import DetalheDaAvaliacao from './detalheAvaliacao'
@@ -132,6 +132,29 @@ const APELIDOS = [
   [/aprendizagem ativa/i, 'Aprendizagem ativa'],
   [/escala de 1 a 5/i, 'Nota geral'],
 ]
+
+/**
+ * As duas classes de indicadores, cinco perguntas em cada, com a media da
+ * classe em destaque. A "Nota geral" fica fora das duas: ela nao avalia um
+ * aspecto do curso, e sim o curso inteiro -- e vai para o centro da rosca.
+ * Pergunta que nenhuma classe reconhece cai em "Outros", em vez de sumir.
+ */
+const CLASSES_DE_INDICADORES = [
+  {
+    chave: 'pedagogicos',
+    titulo: 'Indicadores pedagógicos',
+    descricao: 'Conteúdo e prática docente',
+    padroes: [/relevante para a prática/i, /claros e bem estruturados/i, /ampliar seus conhecimentos/i, /desafios reais/i, /aprendizagem ativa/i],
+  },
+  {
+    chave: 'recursos',
+    titulo: 'Recursos e metodologia',
+    descricao: 'Materiais, atividades e orientações',
+    padroes: [/videoaulas/i, /materiais escritos/i, /recursos interativos/i, /atividades propostas/i, /orientações para realização/i],
+  },
+]
+
+const ehNotaGeral = (texto) => /escala de 1 a 5/i.test(texto)
 
 function rotuloDaPergunta(texto) {
   const achou = APELIDOS.find(([padrao]) => padrao.test(texto))
@@ -460,13 +483,29 @@ export function BlocoInstitucional({
    * A classificação sai da importação, não daqui: a banda de cada resposta é
    * gravada uma vez, e nenhum gráfico reinventa a sua.
    */
-  const indicadoresDaAvaliacao = (R.avaliacao || []).map((a) => ({
+  const indicadoresDaAvaliacao = (R.avaliacao || []).filter((a) => !ehNotaGeral(a.pergunta)).map((a) => ({
+    pergunta: a.pergunta,
     rotulo: rotuloDaPergunta(a.pergunta),
     titulo: `${a.pergunta} — ${pctBr(a.pctPositivo)}% positivas de ${br(a.respostas)} respostas`,
     valor: a.pctPositivo,
     texto: `${pctBr(a.pctPositivo)}%`,
     icone: iconeDaPergunta(a.pergunta),
   }))
+
+  const classesDaAvaliacao = useMemo(() => {
+    const usados = new Set()
+    const classes = CLASSES_DE_INDICADORES.map((c) => {
+      const itens = indicadoresDaAvaliacao.filter((i) => !usados.has(i.pergunta) && c.padroes.some((re) => re.test(i.pergunta)))
+      itens.forEach((i) => usados.add(i.pergunta))
+      return { ...c, itens }
+    })
+    const resto = indicadoresDaAvaliacao.filter((i) => !usados.has(i.pergunta))
+    if (resto.length) classes.push({ chave: 'outros', titulo: 'Outros indicadores', descricao: 'Perguntas fora das duas classes', itens: resto })
+    return classes
+      .filter((c) => c.itens.length)
+      .map((c) => ({ ...c, media: c.itens.reduce((s, i) => s + i.valor, 0) / c.itens.length }))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [R.avaliacao])
 
   /* A distribuição da nota vai do 5 para o 1: é a ordem em que ela se lê, e a
      rampa acompanha, porque nota é ordinal -- cores sem relação entre si
@@ -1411,17 +1450,29 @@ export function BlocoInstitucional({
 
           {mostra('notaRosca') && (
             <Cartao className="flex flex-col">
-              <TituloDeBloco>Distribuição da nota geral</TituloDeBloco>
-              <div className="flex-1 flex flex-col items-center justify-center gap-4 min-h-0">
+              <TituloDeBloco>Nota geral</TituloDeBloco>
+              {/* A nota geral em destaque, de 0 a 10 (a media de 1 a 5, vezes
+                  dois), e a distribuicao em volta. A legenda e uma linha de
+                  porcentagens, sem contagens: a lista de cinco linhas com
+                  numeros esticava este cartao e, com ele, a linha inteira. */}
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 min-h-0">
                 <Rosca
                   fatias={fatiasNota}
                   total={R.nota.respostas}
-                  centroValor={br(R.nota.respostas)}
-                  centroRotulo="respostas"
-                  tamanho={168}
+                  centroValor={virgula(Math.round(R.nota.media * 20) / 10)}
+                  centroRotulo="de 0 a 10"
+                  tamanho={176}
                 />
-                <div className="w-full">
-                  <LegendaDeRosca fatias={fatiasNota} total={R.nota.respostas} />
+                <p className="text-[12px] text-center" style={{ color: 'var(--p-texto3)' }}>
+                  média {virgula(Math.round(R.nota.media * 100) / 100)} de 5 · {br(R.nota.respostas)} respostas
+                </p>
+                <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
+                  {fatiasNota.map((f) => (
+                    <span key={f.rotulo} className="flex items-center gap-1 text-[12px] tabular-nums" style={{ color: 'var(--p-texto2)' }}>
+                      <span className="w-2 h-2 rounded-full" style={{ background: f.cor }} />
+                      {f.rotulo.replace('Nota ', '')}: <b style={{ color: 'var(--p-texto)' }}>{pct(f.valor, R.nota.respostas)}%</b>
+                    </span>
+                  ))}
                 </div>
               </div>
             </Cartao>
@@ -1462,9 +1513,46 @@ export function BlocoInstitucional({
           </TituloDeBloco>
           <p className="text-[12.5px] -mt-2 mb-4" style={{ color: 'var(--p-texto3)' }}>
             Percentual de respostas positivas em cada item, sobre quem respondeu aquela
-            pergunta. O “Parcialmente” fica de fora dos dois lados.
+            pergunta. O “Parcialmente” fica de fora dos dois lados. A média da classe é a
+            média simples dos seus itens.
           </p>
-          <MosaicoDeIndicadores itens={indicadoresDaAvaliacao} colunas={6} />
+          <div className={`grid grid-cols-1 gap-4 ${classesDaAvaliacao.length >= 2 ? 'lg:grid-cols-2' : ''}`}>
+            {classesDaAvaliacao.map((c) => (
+              <div key={c.chave} className="rounded-xl border p-4" style={{ borderColor: 'var(--p-cartaoBorda)' }}>
+                <div className="flex items-end justify-between gap-3 pb-3 mb-3 border-b" style={{ borderColor: 'var(--p-cartaoBorda)' }}>
+                  <div className="min-w-0">
+                    <h3 className="text-[15px] font-semibold" style={{ color: 'var(--p-texto)' }}>{c.titulo}</h3>
+                    <p className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>{c.descricao}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="block text-[28px] font-bold leading-none tabular-nums" style={{ color: 'var(--p-r5)' }}>
+                      {pctBr(c.media)}%
+                    </span>
+                    <span className="text-[11px]" style={{ color: 'var(--p-texto3)' }}>média da classe</span>
+                  </div>
+                </div>
+                <ul className="space-y-3">
+                  {c.itens.map((i) => (
+                    <li key={i.pergunta} title={i.titulo} className="flex items-center gap-3">
+                      <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--p-trilho)' }}>
+                        <i.icone size={15} style={{ color: 'var(--p-r4)' }} />
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline justify-between gap-2">
+                          {/* Sem truncar: o nome inteiro, em ate duas linhas. */}
+                          <span className="text-[13px] leading-snug" style={{ color: 'var(--p-texto)' }}>{i.rotulo}</span>
+                          <span className="text-[14px] font-bold tabular-nums shrink-0" style={{ color: 'var(--p-texto)' }}>{i.texto}</span>
+                        </div>
+                        <div className="h-1.5 mt-1 rounded-full overflow-hidden" style={{ background: 'var(--p-trilho)' }}>
+                          <div className="h-full rounded-full" style={{ width: `${Math.max(2, Math.min(100, i.valor))}%`, background: 'linear-gradient(90deg, var(--p-r3), var(--p-r5))' }} />
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
         </Cartao>
       )}
 

@@ -49,7 +49,7 @@ const PAINEIS = {
     subtitulo: 'Quantos concluiram cada curso, e como isso se distribui pelas regionais.',
   },
   progresso: {
-    titulo: 'Consolidado do Curso',
+    titulo: 'Avaliação dos Cursos',
     subtitulo: 'Procura, inscricoes e a avaliacao que os cursistas fizeram de cada curso.',
   },
   sistema: {
