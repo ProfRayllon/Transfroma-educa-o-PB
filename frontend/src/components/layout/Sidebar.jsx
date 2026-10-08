@@ -7,7 +7,8 @@ import { useTheme } from '../../context/ThemeContext'
 import { useAvatar } from '../../context/AvatarContext'
 import {
   LayoutDashboard, BookOpen, ShieldCheck, ClipboardList,
-  ClipboardCheck, LogOut, ChevronLeft, ChevronRight, Camera, Sun, Moon, Users, Headphones,
+  ClipboardCheck, LogOut, ChevronLeft, ChevronRight, ChevronDown, Camera, Sun, Moon, Users, Headphones,
+  GraduationCap, Star, Database,
 } from 'lucide-react'
 
 // Menu reduzido ao que cada perfil realmente usa no dia a dia. Cursos e a porta
@@ -21,10 +22,19 @@ const navItems = [
     // O painel institucional. A gerencia entra junto porque a plateia dele e
     // exatamente a dela: alcance, territorio e prestacao de contas. O
     // coordenador tambem, so para leitura. Quem decide de verdade e o backend.
+    //
+    // Clicar abre os tres paineis como subitens, em vez de navegar: cada um e
+    // uma tela propria, e a escolha fica no menu, onde mora a navegacao.
     to: '/painel',
     icon: LayoutDashboard,
     label: 'Dashboard',
     visible: veODashboard,
+    filhos: [
+      // /painel sem secao abre Concluintes, entao ele tambem acende este item.
+      { to: '/painel/concluintes', icon: GraduationCap, label: 'Concluintes', ativoEm: (p) => p === '/painel' || p.startsWith('/painel/concluintes') },
+      { to: '/painel/progresso', icon: Star, label: 'Avaliação' },
+      { to: '/painel/sistema', icon: Database, label: 'Sistema' },
+    ],
   },
   { to: '/cursos', icon: BookOpen, label: 'Cursos' },
   // Producao saiu do menu: o trabalho acontece dentro do curso, pelo botao
@@ -116,6 +126,24 @@ export default function Sidebar({ collapsed, onToggle }) {
   const location = useLocation()
   const [resumoAtribuicoes, setResumoAtribuicoes] = useState(null)
   const [resumoSuporte, setResumoSuporte] = useState(null)
+  // Grupos abertos no menu. O do Dashboard ja nasce aberto quando a pessoa
+  // esta numa tela dele, para o item atual aparecer marcado.
+  const [gruposAbertos, setGruposAbertos] = useState(() => new Set(
+    location.pathname.startsWith('/painel') ? ['/painel'] : [],
+  ))
+  const alternarGrupo = (to) => setGruposAbertos((atual) => {
+    const novo = new Set(atual)
+    if (novo.has(to)) novo.delete(to)
+    else novo.add(to)
+    return novo
+  })
+  // Chegar a um painel por outro caminho (link, redirecionamento) tambem abre
+  // o grupo, senao o item atual ficaria escondido.
+  useEffect(() => {
+    if (location.pathname.startsWith('/painel')) {
+      setGruposAbertos((atual) => (atual.has('/painel') ? atual : new Set([...atual, '/painel'])))
+    }
+  }, [location.pathname])
 
   /**
    * Quantas avaliacoes esperam por esta pessoa.
@@ -189,7 +217,53 @@ export default function Sidebar({ collapsed, onToggle }) {
 
       {/* Main nav */}
       <nav className={`flex-1 px-2 py-4 space-y-1 ${collapsed ? 'overflow-visible' : 'overflow-y-auto'}`}>
-        {visibleNavItems.map(({ to, icon: Icon, label, contador }) => {
+        {visibleNavItems.map(({ to, icon: Icon, label, contador, filhos }) => {
+          if (filhos) {
+            const filhoAtivo = (f) => (f.ativoEm ? f.ativoEm(location.pathname) : location.pathname.startsWith(f.to))
+            const algumAtivo = filhos.some(filhoAtivo)
+
+            // Recolhida, a lateral nao tem onde desdobrar: os subitens viram
+            // icones proprios, cada um com o seu tooltip.
+            if (collapsed) {
+              return filhos.map((f) => (
+                <NavLink key={f.to} to={f.to} className={() => navClass(filhoAtivo(f))}>
+                  <f.icon size={18} className={`flex-shrink-0 ${filhoAtivo(f) ? 'text-white' : 'text-white/70 group-hover:text-white'}`} />
+                  <Tooltip label={`${label} · ${f.label}`} />
+                </NavLink>
+              ))
+            }
+
+            const aberto = gruposAbertos.has(to)
+            return (
+              <div key={to}>
+                <button
+                  type="button"
+                  onClick={() => alternarGrupo(to)}
+                  aria-expanded={aberto}
+                  className={`${navClass(algumAtivo && !aberto)} w-full`}
+                >
+                  <Icon size={18} className={`flex-shrink-0 ${algumAtivo ? 'text-white' : 'text-white/70 group-hover:text-white'}`} />
+                  <span className="flex-1 text-left">{label}</span>
+                  <ChevronDown size={14} className={`text-white/50 transition-transform ${aberto ? 'rotate-180' : ''}`} />
+                </button>
+                {aberto && (
+                  <div className="mt-1 ml-4 space-y-0.5 border-l border-white/15 pl-2">
+                    {filhos.map((f) => (
+                      <NavLink
+                        key={f.to}
+                        to={f.to}
+                        className={() => `${navClass(filhoAtivo(f))} !py-2 text-[13px]`}
+                      >
+                        <f.icon size={15} className={`flex-shrink-0 ${filhoAtivo(f) ? 'text-white' : 'text-white/60 group-hover:text-white'}`} />
+                        <span className="flex-1">{f.label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          }
+
           const pendencias = contador ? contador(resumoAtribuicoes, resumoSuporte) : 0
           return (
             <NavLink

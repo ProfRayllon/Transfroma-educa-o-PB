@@ -5,6 +5,7 @@ const rateLimit = require('express-rate-limit')
 const { getPool, requireMysql } = require('../../shared/db')
 const repo = require('./resultados.repo')
 const { executar, TIPOS } = require('./resultados.import')
+const arquivos = require('./resultados.arquivos')
 const { limparCache } = require('../painel/painel.cache')
 
 /**
@@ -105,6 +106,19 @@ module.exports = function criarRotasResultados({ authInterna, requireRole, getUs
       // que o envio falhou.
       if (!simular) limparCache()
 
+      // O original fica guardado para download. Falhar aqui nao desfaz uma
+      // importacao que ja deu certo: so deixa a planilha sem botao de baixar.
+      if (!simular) {
+        await arquivos.guardar({
+          tipo,
+          cursoId: Number(req.query.curso) || null,
+          referencia: resultado.referencia,
+          nome: resultado.arquivo,
+          buffer: req.body,
+          por: quem?.name || req.user.email,
+        }).catch((e) => console.error('[resultados/arquivo] nao guardou o original', e.message))
+      }
+
       res.json(resultado)
     } catch (erro) {
       // Erro de conteudo da planilha (coluna faltando, situacao desconhecida,
@@ -122,6 +136,37 @@ module.exports = function criarRotasResultados({ authInterna, requireRole, getUs
       if (conexao) conexao.release()
     }
   }
+
+  /**
+   * O arquivo original da planilha em uso, do jeito que foi enviado. Serve de
+   * modelo para a proxima e de prova de onde vieram os numeros do painel.
+   */
+  router.get('/arquivo', soQuemPode, async (req, res) => {
+    try {
+      requireMysql()
+      const tipo = String(req.query.tipo || '')
+      if (!TIPOS.includes(tipo)) return res.status(400).json({ message: 'Tipo de planilha inválido.' })
+      const cursoId = Number(req.query.curso) || null
+      if (tipo !== 'municipios' && !cursoId) return res.status(400).json({ message: 'Informe o curso.' })
+
+      const arquivo = await arquivos.buscar(tipo, cursoId)
+      if (!arquivo) {
+        return res.status(404).json({ message: 'O arquivo desta planilha não foi guardado. Envie-a de novo para poder baixar.' })
+      }
+
+      const ehXlsx = arquivo.conteudo[0] === 0x50 && arquivo.conteudo[1] === 0x4b
+      const nome = String(arquivo.nome || 'planilha').replace(/[^\w.\- ]+/g, '_')
+      res.setHeader('Content-Type', ehXlsx
+        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        : 'text/csv; charset=utf-8')
+      res.setHeader('Content-Disposition', `attachment; filename="${nome}"; filename*=UTF-8''${encodeURIComponent(arquivo.nome || 'planilha')}`)
+      res.send(arquivo.conteudo)
+    } catch (erro) {
+      const status = erro.statusCode || 500
+      if (status === 500) console.error('[resultados/arquivo]', erro)
+      res.status(status).json({ message: status === 503 ? erro.message : 'Não foi possível baixar a planilha.' })
+    }
+  })
 
   router.post('/conferir', soQuemPode, limiteDeEnvio, receberArquivo, processar(true))
   router.post('/enviar', soQuemPode, limiteDeEnvio, receberArquivo, processar(false))
