@@ -132,6 +132,12 @@ function criarPlanilha({ nomeAba = 'Dados', colunas, linhas }) {
 
   const linhasXml = dados.map((linha, rowIndex) => {
     const celulas = linha.map((valor, colIndex) => {
+      // Coluna marcada `numerica` grava numero de verdade (so nas linhas de
+      // dado). Sem a marca tudo continua texto -- CPF como numero perderia o
+      // zero a esquerda, entao a escolha e explicita, coluna a coluna.
+      if (rowIndex > 0 && colunas[colIndex].numerica && typeof valor === 'number' && Number.isFinite(valor)) {
+        return `<c r="${referenciaCelula(rowIndex, colIndex)}"><v>${valor}</v></c>`
+      }
       let texto = String(valor ?? '')
       if (/^[=+\-@\t\r]/.test(texto)) texto = `'${texto}`
       return `<c r="${referenciaCelula(rowIndex, colIndex)}" t="inlineStr"><is><t>${escaparXml(texto)}</t></is></c>`

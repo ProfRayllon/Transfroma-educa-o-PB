@@ -28,6 +28,8 @@ const TIPOS = [
     painel: '/painel/concluintes',
     porCurso: true,
     comData: true,
+    modelo: '/modelos/modelo-consolidado-curso.xlsx',
+    colunas: 'CPF, Docente, GRE, INEP, Escola e Status (CONCLUÍDO, NÃO CONCLUÍDO, EM ANDAMENTO ou NÃO INICIADO). Quem tem duas escolas pode vir numa linha só, com os valores separados por " | ".',
   },
   {
     chave: 'avaliacao',
@@ -37,6 +39,8 @@ const TIPOS = [
     painel: '/painel/progresso',
     porCurso: true,
     comData: false,
+    modelo: '/modelos/modelo-avaliacao-curso.xlsx',
+    colunas: 'Carimbo de data/hora, Turma, Componente curricular, Curso que está avaliando e, depois, uma coluna por pergunta. Respostas aceitas: nota de 1 a 5; Muito relevante/Relevante/Pouco relevante/Irrelevante; Totalmente/Parcialmente/Pouco/Nada; Sim/Não.',
   },
   {
     chave: 'municipios',
@@ -46,6 +50,8 @@ const TIPOS = [
     painel: '/painel/concluintes',
     porCurso: false,
     comData: false,
+    modelo: '/modelos/modelo-escolas-municipios.xlsx',
+    colunas: 'INEP e Município são obrigatórios; UF, Localização, Porte, Latitude e Longitude são opcionais.',
   },
 ]
 
@@ -348,6 +354,23 @@ export default function PainelPlanilhas() {
               })}
             </div>
           </fieldset>
+
+          {/* O modelo da planilha escolhida: colunas que o sistema procura e um
+              arquivo de exemplo, com dados ficticios, para copiar o formato.
+              Gerado por backend/scripts/gerar-modelos-planilhas.js. */}
+          <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/50 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-[12px] leading-relaxed text-gray-600 dark:text-gray-300">
+              <span className="font-semibold text-gray-800 dark:text-gray-100">Colunas esperadas: </span>
+              {def.colunas}
+            </p>
+            <a
+              href={def.modelo}
+              download
+              className="inline-flex shrink-0 items-center gap-1.5 self-start rounded-lg border border-brand-200 bg-white px-3 py-1.5 text-[12px] font-medium text-brand-700 transition hover:bg-brand-50 dark:border-brand-800 dark:bg-gray-900 dark:text-brand-300 sm:self-auto"
+            >
+              <Download size={13} /> Baixar modelo
+            </a>
+          </div>
 
           {(def.porCurso || def.comData) && (
             <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_180px] gap-3">
