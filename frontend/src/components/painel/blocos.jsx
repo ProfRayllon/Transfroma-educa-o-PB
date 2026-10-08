@@ -406,6 +406,28 @@ export function BlocoInstitucional({
     }))
   }, [visaoGre, gresOrdenadas, R.porGre])
 
+  /**
+   * A linha neon sobre o Volume: quantos concluiram em cada GRE, na mesma
+   * escala das barras. As barras sao os profissionais da regional; a linha e
+   * o corte de quem terminou -- a distancia entre as duas e o que falta.
+   * So no Progresso, no Volume e com planilha: nas outras visoes a escala e
+   * percentual e a linha nao teria regua comum com as barras.
+   */
+  const linhaDeConclusao = useMemo(() => {
+    if (secao !== 'concluintes' || visaoGre !== 'cursistas' || !temConclusao) return null
+    const porNome = new Map(R.porGre.map((g) => [g.gre, g]))
+    const valores = gresOrdenadas.map((g) => porNome.get(g.gre)?.concluidos || 0)
+    if (!valores.some(Boolean)) return null
+    return {
+      valores,
+      cor: '#22d3ee',
+      formatar: (v, i) => {
+        const g = porNome.get(gresOrdenadas[i].gre)
+        return g ? `${br(v)} concluíram (${pctBr(g.taxa)}% de ${br(g.vinculos)} vínculos)` : 'sem planilha'
+      },
+    }
+  }, [secao, visaoGre, temConclusao, R.porGre, gresOrdenadas])
+
   const porTaxa = useMemo(() => [...R.porGre].sort((a, b) => a.taxa - b.taxa), [R.porGre])
   const piorGre = porTaxa[0] || null
   const melhorGre = porTaxa[porTaxa.length - 1] || null
@@ -493,14 +515,16 @@ export function BlocoInstitucional({
     mostra('kpiConclusao') && {
       chave: 'totalDocentes',
       icone: Users,
-      rotulo: 'Total de docentes',
+      // Sao os docentes inscritos nos cursos (a base da planilha), e nao o
+      // quadro da rede: o nome diz isso para ninguem ler como total de professores.
+      rotulo: 'Docentes inscritos',
       /* A base do CONSOLIDADO, e não os 13.445 do cadastro: este painel fala da
          planilha, e misturar os dois universos faria a taxa não fechar com a
          divisão dos dois cartões ao lado. */
       valor: temConclusao ? R.conclusao.base : 0,
       gradiente: 'azul',
       comparativo: temConclusao
-        ? `${br(R.conclusao.vinculos)} vínculos com escola · planilha de ${dataCurta(R.conclusao.referencia)}`
+        ? `total de docentes inscritos nos cursos · ${br(R.conclusao.vinculos)} vínculos com escola · planilha de ${dataCurta(R.conclusao.referencia)}`
         : 'aguardando a planilha de consolidado',
     },
     mostra('kpiConclusao') && {
@@ -902,8 +926,22 @@ export function BlocoInstitucional({
                sobe para o título, que vale para as dezesseis. */
             formatarValor={(v) => (visaoGre === 'cursistas' || visaoGre === 'inscritos' ? br(v)
               : visaoGre === 'adesao' ? `${Math.round(v)}%` : pctBr(v))}
+            linha={linhaDeConclusao}
           />
         </div>
+
+        {linhaDeConclusao && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-[12px]" style={{ color: 'var(--p-texto3)' }}>
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-sm" style={{ background: 'linear-gradient(180deg, var(--p-r2), var(--p-r4))' }} />
+              Profissionais na GRE
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-4 h-[3px] rounded-full" style={{ background: linhaDeConclusao.cor, boxShadow: `0 0 6px ${linhaDeConclusao.cor}` }} />
+              Concluíram (vínculos)
+            </span>
+          </div>
+        )}
 
         {visaoGre === 'conclusao' && piorGre && melhorGre && (
           <p className="text-[12px] mt-3 leading-relaxed" style={{ color: 'var(--p-texto3)' }}>

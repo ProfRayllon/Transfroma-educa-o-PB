@@ -449,3 +449,26 @@
   z-index: 100;
   pointer-events: none;
 }
+
+/* Linha neon do grafico de barras do painel (BarrasRotuladas `linha`).
+   O traco se desenha ao abrir e um brilho curto corre por ele sem parar. */
+.neon-desenho {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: neonDesenho 1.4s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards;
+}
+.neon-fluxo {
+  stroke-dasharray: 0.06 0.94;
+  stroke-dashoffset: 0;
+  animation: neonFluxo 3.2s linear 1.7s infinite;
+  opacity: 0;
+}
+@keyframes neonDesenho { to { stroke-dashoffset: 0; } }
+@keyframes neonFluxo {
+  0% { stroke-dashoffset: 0.06; opacity: 1; }
+  100% { stroke-dashoffset: -0.94; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .neon-desenho { animation: none; stroke-dashoffset: 0; }
+  .neon-fluxo { display: none; }
+}
