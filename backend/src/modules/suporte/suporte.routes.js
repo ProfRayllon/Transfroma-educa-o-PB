@@ -1,11 +1,9 @@
 'use strict'
 
 const express = require('express')
-const { rateLimit, ipKeyGenerator } = require('express-rate-limit')
 
 const { requireMysql } = require('../../shared/db')
 const { normalizeCpf, isValidCpf } = require('../../shared/cpf')
-const { porProcesso } = require('../../shared/concorrencia')
 const { configurado: emailConfigurado } = require('../../shared/email')
 const repo = require('./suporte.repo')
 const emails = require('./suporte.emails')
@@ -74,25 +72,10 @@ module.exports = function criarRotasSuporte({ authInterna, getUsuarioInterno, li
   // Publico
   // ---------------------------------------------------------------------------
 
-  // Sem freio, o formulario publico vira canhao de e-mail: cada envio dispara
-  // uma mensagem para o endereco digitado, que pode ser de qualquer pessoa.
-  const freioDeAbertura = rateLimit({
-    windowMs: 60 * 60 * 1000,
-    limit: porProcesso(5),
-    standardHeaders: true,
-    legacyHeaders: false,
-    keyGenerator: (req) => ipKeyGenerator(req.ip),
-    message: { message: 'Muitos chamados abertos a partir desta rede. Tente novamente mais tarde.' },
-  })
-
-  const freioDeConsulta = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: porProcesso(30),
-    standardHeaders: true,
-    legacyHeaders: false,
-    keyGenerator: (req) => ipKeyGenerator(req.ip),
-    message: { message: 'Muitas consultas. Tente novamente em alguns minutos.' },
-  })
+  // Sem limite de tentativas por enquanto. O primeiro freio (5 chamados por
+  // hora por IP) bloqueava gente que nao tinha aberto nenhum. Causa provavel:
+  // atras dos dois proxies da VPS o IP que chega aqui nao e o do visitante, e
+  // todo mundo dividia o mesmo limite. Antes de religar, conferir o IP real.
 
   /**
    * As listas que o formulario precisa, e se o e-mail esta ligado.
@@ -105,7 +88,7 @@ module.exports = function criarRotasSuporte({ authInterna, getUsuarioInterno, li
     res.json({ categorias: service.CATEGORIAS, status: service.STATUS, emailAtivo: emailConfigurado() })
   })
 
-  router.post('/publico/chamados', freioDeAbertura, tratar(async (req, res) => {
+  router.post('/publico/chamados', tratar(async (req, res) => {
     // Campo invisivel na tela: so robo preenche. Responde como sucesso para o
     // robo nao aprender a contornar, mas nao grava nada.
     if (texto(req.body?.site, 200)) return res.status(201).json({ protocolo: null })
@@ -134,7 +117,7 @@ module.exports = function criarRotasSuporte({ authInterna, getUsuarioInterno, li
    * Consulta do proprio solicitante. Protocolo E CPF: o protocolo e sequencial
    * e adivinhavel, e sozinho mostraria o chamado de outra pessoa.
    */
-  router.get('/publico/consulta', freioDeConsulta, tratar(async (req, res) => {
+  router.get('/publico/consulta', tratar(async (req, res) => {
     const protocolo = texto(req.query.protocolo, 20).replace(/\D/g, '')
     const cpf = normalizeCpf(req.query.cpf)
     if (!protocolo || !isValidCpf(cpf)) throw erro(400, 'Informe o protocolo e o CPF.')
