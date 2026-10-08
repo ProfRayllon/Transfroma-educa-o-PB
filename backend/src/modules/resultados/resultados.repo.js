@@ -1,6 +1,7 @@
 'use strict'
 
 const { getPool, requireMysql } = require('../../shared/db')
+const arquivos = require('./resultados.arquivos')
 
 /**
  * Leituras dos resultados que chegam por planilha.
@@ -679,6 +680,8 @@ async function enviosPorCurso() {
        FROM escola_municipio`
   )
 
+  const guardados = await arquivos.chavesGuardadas()
+
   const ultimo = (cursoId, tipo) => envios.find((e) => e.course_id === cursoId && e.tipo === tipo) || null
   const formatar = (e) => (e ? {
     referencia: dia(e.referencia),
@@ -688,11 +691,17 @@ async function enviosPorCurso() {
     em: momento(e.importado_em),
   } : null)
 
+  // `temArquivo`: so as planilhas enviadas depois que o sistema passou a
+  // guardar o original tem o que baixar; as anteriores precisam ser reenviadas.
+  const comArquivo = (envio, tipo, cursoId) => (envio
+    ? { ...envio, temArquivo: guardados.has(arquivos.chaveDe(tipo, cursoId)) }
+    : null)
+
   const lista = cursos.map((c) => ({
     id: c.id,
     nome: c.nome,
-    consolidado: formatar(ultimo(c.id, 'consolidado')),
-    avaliacao: formatar(ultimo(c.id, 'avaliacao')),
+    consolidado: comArquivo(formatar(ultimo(c.id, 'consolidado')), 'consolidado', c.id),
+    avaliacao: comArquivo(formatar(ultimo(c.id, 'avaliacao')), 'avaliacao', c.id),
     // Quantas semanas o curso ja tem de consolidado: e o tamanho da linha do
     // tempo que o painel consegue desenhar.
     semanas: envios.filter((e) => e.course_id === c.id && e.tipo === 'consolidado').length,
@@ -708,6 +717,7 @@ async function enviosPorCurso() {
       escolas: numero(escolas.escolas),
       municipios: numero(escolas.municipios),
       atualizadoEm: momento(escolas.atualizadoEm),
+      temArquivo: guardados.has(arquivos.chaveDe('municipios')),
     },
   }
 }

@@ -2,6 +2,7 @@
 
 const { getPool, isMysqlMode } = require('../../shared/db')
 const { padronizarGresGravadas } = require('../../shared/gre')
+const { garantirTabela: garantirTabelaDeArquivos } = require('./resultados.arquivos')
 
 /**
  * Tabelas dos resultados de curso que chegam por planilha.
@@ -18,6 +19,7 @@ const { padronizarGresGravadas } = require('../../shared/gre')
 async function garantirEsquema() {
   if (!isMysqlMode()) return
   await aplicar(getPool())
+  await garantirTabelaDeArquivos(getPool())
 }
 
 /**

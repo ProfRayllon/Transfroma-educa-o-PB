@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowLeft, GraduationCap, Star, MapPin, Upload, FileSpreadsheet, CheckCircle2,
-  AlertTriangle, Loader2, RefreshCw, X, ArrowRight,
+  AlertTriangle, Loader2, RefreshCw, X, ArrowRight, Download,
 } from 'lucide-react'
 import api, { getApiErrorMessage } from '../lib/api'
 
@@ -99,9 +99,57 @@ function porQueFalhou(e) {
  * planilhas em outras duas, a lista nao cabia ao lado do formulario -- os nomes
  * quebravam em quatro linhas e o botao da ultima coluna saia cortado na borda.
  */
-function LinhaDeEnvio({ rotulo, envio, semanas, aoAtualizar }) {
+/**
+ * Baixa o arquivo original da planilha em uso.
+ *
+ * Pelo axios, e nao por link: a sessao e um Bearer no cabecalho, que um
+ * `<a href>` nao leva -- o download voltaria 401 sem a tela perceber.
+ */
+async function baixarPlanilha({ tipo, cursoId, nome }) {
+  try {
+    const resposta = await api.get('/resultados/arquivo', {
+      params: { tipo, curso: cursoId || undefined },
+      responseType: 'blob',
+    })
+    // O nome de verdade vem do servidor, com a extensao certa (.xlsx ou .csv).
+    const cabecalho = resposta.headers?.['content-disposition'] || ''
+    const doServidor = /filename\*=UTF-8''([^;]+)/i.exec(cabecalho)
+    const url = URL.createObjectURL(resposta.data)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = (doServidor && decodeURIComponent(doServidor[1])) || nome || `${tipo}.xlsx`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    // Com responseType blob, a mensagem de erro do servidor tambem chega como
+    // blob: e preciso le-la para mostrar o motivo de verdade.
+    let mensagem = 'Não foi possível baixar a planilha.'
+    try { mensagem = JSON.parse(await e.response.data.text()).message || mensagem } catch { /* fica a generica */ }
+    window.alert(mensagem)
+  }
+}
+
+function BotaoBaixar({ disponivel, aoBaixar }) {
   return (
-    <div className="grid grid-cols-[86px_minmax(0,1fr)_auto] items-baseline gap-x-3 py-1">
+    <button
+      type="button"
+      onClick={aoBaixar}
+      disabled={!disponivel}
+      title={disponivel
+        ? 'Baixar a planilha em uso, do jeito que foi enviada'
+        : 'Enviada antes de o sistema guardar os arquivos. Envie de novo para poder baixar.'}
+      className="inline-flex items-center gap-1 text-[12px] font-medium text-gray-500 hover:text-brand-700 dark:text-gray-400 dark:hover:text-brand-300 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-gray-500"
+    >
+      <Download size={12} /> Baixar
+    </button>
+  )
+}
+
+function LinhaDeEnvio({ rotulo, envio, semanas, aoAtualizar, aoBaixar }) {
+  return (
+    <div className="grid grid-cols-[86px_minmax(0,1fr)_auto_auto] items-baseline gap-x-3 py-1">
       <span className="text-[12px] text-gray-500 dark:text-gray-400">{rotulo}</span>
       {envio ? (
         <span className="min-w-0 text-[12.5px] text-gray-700 dark:text-gray-200 truncate"
@@ -115,6 +163,7 @@ function LinhaDeEnvio({ rotulo, envio, semanas, aoAtualizar }) {
       ) : (
         <span className="text-[12.5px] text-gray-400">Nenhuma ainda</span>
       )}
+      {envio ? <BotaoBaixar disponivel={envio.temArquivo} aoBaixar={aoBaixar} /> : <span />}
       <button
         type="button"
         onClick={aoAtualizar}
@@ -504,9 +553,11 @@ export default function PainelPlanilhas() {
                   <li key={c.id} className="py-3">
                     <p className="text-[13px] font-semibold text-gray-800 dark:text-gray-100 mb-1">{c.nome}</p>
                     <LinhaDeEnvio rotulo="Consolidado" envio={c.consolidado} semanas={c.semanas}
-                      aoAtualizar={() => prepararEnvio('consolidado', c.id)} />
+                      aoAtualizar={() => prepararEnvio('consolidado', c.id)}
+                      aoBaixar={() => baixarPlanilha({ tipo: 'consolidado', cursoId: c.id, nome: c.consolidado?.arquivo })} />
                     <LinhaDeEnvio rotulo="Avaliação" envio={c.avaliacao}
-                      aoAtualizar={() => prepararEnvio('avaliacao', c.id)} />
+                      aoAtualizar={() => prepararEnvio('avaliacao', c.id)}
+                      aoBaixar={() => baixarPlanilha({ tipo: 'avaliacao', cursoId: c.id, nome: c.avaliacao?.arquivo })} />
                   </li>
                 ))}
               </ul>
@@ -523,10 +574,16 @@ export default function PainelPlanilhas() {
                     </p>
                   </div>
                 </div>
-                <button type="button" onClick={() => prepararEnvio('municipios', null)}
-                  className="shrink-0 text-[12px] font-medium text-brand-700 dark:text-brand-300 hover:underline">
-                  {envios.escolas.escolas ? 'Atualizar' : 'Enviar'}
-                </button>
+                <div className="flex shrink-0 items-baseline gap-3">
+                  {envios.escolas.escolas > 0 && (
+                    <BotaoBaixar disponivel={envios.escolas.temArquivo}
+                      aoBaixar={() => baixarPlanilha({ tipo: 'municipios', nome: 'escolas-municipios' })} />
+                  )}
+                  <button type="button" onClick={() => prepararEnvio('municipios', null)}
+                    className="text-[12px] font-medium text-brand-700 dark:text-brand-300 hover:underline">
+                    {envios.escolas.escolas ? 'Atualizar' : 'Enviar'}
+                  </button>
+                </div>
               </div>
             </>
           )}
