@@ -60,7 +60,8 @@ export function quandoInscricao(curso) {
 }
 
 /**
- * Ordem de exibicao: quem esta com inscricao aberta vem primeiro.
+ * Ordem de exibicao: abertas, depois em breve, depois encerradas. O curso
+ * sem janela de inscricao definida (`fechado`) vai para o fim.
  *
  * A API entrega os cursos por trilha e nome, que e uma ordem util para
  * conferencia mas nao para quem chega no site: o curso que aceita inscricao hoje
@@ -70,7 +71,7 @@ export function quandoInscricao(curso) {
  * A ordenacao do JavaScript e estavel, entao dentro de cada situacao a ordem
  * original (trilha, nome) e preservada -- isto so reagrupa, nao embaralha.
  */
-const PRIORIDADE_SITUACAO = { aberto: 0, em_breve: 1, fechado: 2, encerrado: 3 }
+const PRIORIDADE_SITUACAO = { aberto: 0, em_breve: 1, encerrado: 2, fechado: 3 }
 
 export function ordenarPorInscricao(cursos) {
   const peso = (curso) => PRIORIDADE_SITUACAO[curso?.situacao] ?? 9

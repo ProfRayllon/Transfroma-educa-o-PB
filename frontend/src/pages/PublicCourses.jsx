@@ -2,10 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, ArrowRight, BookOpen, CheckCircle, Clock, GraduationCap, LogIn, X } from 'lucide-react'
 import PublicNav from '../components/public/PublicNav'
-import PublicFooter from '../components/public/PublicFooter'
 import Modal from '../components/ui/Modal'
 import CapaCurso from '../components/public/CapaCurso'
-import { duracaoCurso, nomeTrilha, quandoInscricao } from '../lib/curso'
+import { duracaoCurso, nomeTrilha, ordenarPorInscricao, quandoInscricao } from '../lib/curso'
 import publicApi from '../lib/publicApi'
 import { useCursista } from '../modules/cursista/CursistaContext'
 import cursistaApi, { getCursistaErrorMessage } from '../modules/cursista/api'
@@ -103,12 +102,12 @@ export default function PublicCourses() {
 
   const visiveis = useMemo(() => {
     const termo = query.trim().toLowerCase()
-    return cursos.filter((curso) => {
+    return ordenarPorInscricao(cursos.filter((curso) => {
       const passaFiltro = filtro === 'todos' || curso.trail === filtro
       const passaBusca = !termo || [curso.name, nomeTrilha(curso.trail), curso.resumo || '']
         .join(' ').toLowerCase().includes(termo)
       return passaFiltro && passaBusca
-    })
+    }))
   }, [cursos, filtro, query])
 
   /** Botao de acao do card, que muda com a situacao do curso e a sessao. */
@@ -333,8 +332,6 @@ export default function PublicCourses() {
           </>
         )}
       </main>
-
-      <PublicFooter />
 
       <Modal
         open={Boolean(selecionado)}

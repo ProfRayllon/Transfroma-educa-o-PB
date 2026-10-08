@@ -2,7 +2,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import { LogOut } from 'lucide-react'
 import { useCursista } from './CursistaContext'
 import PublicNav from '../../components/public/PublicNav'
-import PublicFooter from '../../components/public/PublicFooter'
 
 const logoFilter =
   'brightness(0) saturate(100%) invert(28%) sepia(88%) saturate(900%) hue-rotate(248deg) brightness(88%)'
@@ -112,8 +111,6 @@ export default function CursistaShell({
           </div>
         </div>
       </main>
-
-      <PublicFooter />
     </div>
   )
 }

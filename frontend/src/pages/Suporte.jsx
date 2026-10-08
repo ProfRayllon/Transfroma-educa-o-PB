@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { AlertTriangle, Check, CheckCircle2, Copy, Search, Send } from 'lucide-react'
-import PublicNav from '../components/public/PublicNav'
-import PublicFooter from '../components/public/PublicFooter'
+import CursistaShell, { CartaoCursista } from '../modules/cursista/CursistaShell'
 import publicApi from '../lib/publicApi'
 import { useCursista } from '../modules/cursista/CursistaContext'
 import {
@@ -163,8 +162,8 @@ function AbrirChamado({ emailAtivo, aoAcompanhar }) {
 
   return (
     <form onSubmit={enviar} className="grid gap-5" noValidate>
-      <div className="grid gap-5 sm:grid-cols-2">
-        <div className="sm:col-span-2">
+      <div className="grid gap-5 md:grid-cols-2">
+        <div className="md:col-span-2">
           <label className={rotulo} htmlFor="sup-nome">Nome completo</label>
           <input id="sup-nome" className={campo} value={form.nome} onChange={altera('nome')} autoComplete="name" required />
         </div>
@@ -178,26 +177,20 @@ function AbrirChamado({ emailAtivo, aoAcompanhar }) {
         </div>
       </div>
 
-      <fieldset>
-        <legend className={rotulo}>Do que se trata?</legend>
-        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-          {Object.entries(CATEGORIAS).map(([valor, nome]) => {
-            const ativo = form.categoria === valor
-            return (
-              <label
-                key={valor}
-                className={`cursor-pointer rounded-xl border p-3.5 transition ${ativo
-                  ? 'border-[#6f35b5] bg-[#f3e8ff] ring-2 ring-[#e9d5ff]'
-                  : 'border-[#ded6ea] bg-white hover:border-[#c4b5fd]'}`}
-              >
-                <input type="radio" name="categoria" value={valor} checked={ativo} onChange={altera('categoria')} className="sr-only" />
-                <span className="block text-sm font-black text-[#1c1033]">{nome}</span>
-                <span className="mt-0.5 block text-xs leading-snug text-[#566176]">{DICAS_DE_CATEGORIA[valor]}</span>
-              </label>
-            )
-          })}
-        </div>
-      </fieldset>
+      <div>
+        <label className={rotulo} htmlFor="sup-categoria">Do que se trata?</label>
+        <select
+          id="sup-categoria"
+          className={`${campo} cursor-pointer`}
+          value={form.categoria}
+          onChange={altera('categoria')}
+          required
+        >
+          <option value="" disabled>Selecione o assunto</option>
+          {Object.entries(CATEGORIAS).map(([valor, nome]) => <option key={valor} value={valor}>{nome}</option>)}
+        </select>
+        {form.categoria && <span className="mt-1.5 block text-xs text-[#566176]">{DICAS_DE_CATEGORIA[form.categoria]}</span>}
+      </div>
 
       <div>
         <label className={rotulo} htmlFor="sup-descricao">Descreva o problema</label>
@@ -354,44 +347,33 @@ export default function Suporte() {
     setAba('consultar')
   }
 
-  const abaClasse = (ativa) => `flex-1 rounded-lg px-4 py-2.5 text-sm font-black transition ${ativa
+  const abaClasse = (ativa) => `flex-1 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-black transition ${ativa
     ? 'bg-white text-[#6f35b5] shadow-sm'
     : 'text-white/80 hover:text-white'}`
 
+  // Mesma moldura da Area do Cursista: topo roxo na largura do site e o
+  // conteudo em cartao branco logo abaixo. As abas ficam no lugar da "acao".
   return (
-    <div className="min-h-screen bg-[#faf7ff] text-[#1c1033]">
-      <PublicNav />
-      <main>
-        <section className="bg-[#3b1d7a] px-[22px] pb-24 pt-14 text-white">
-          <div className="mx-auto max-w-[820px]">
-            <span className="mb-4 inline-block rounded-full bg-white/15 px-3 py-1.5 text-xs font-black uppercase tracking-wider ring-1 ring-white/25">
-              Suporte
-            </span>
-            <h1 className="text-[40px] font-black leading-tight">Como podemos ajudar?</h1>
-            <p className="mt-3 max-w-[600px] text-[17px] leading-relaxed text-white/80">
-              Não consegue acessar a plataforma, o AVA ou o certificado? Abra um chamado: você recebe
-              um número de protocolo por e-mail e acompanha a resposta por aqui.
-            </p>
-            <div className="mt-8 flex max-w-md gap-1 rounded-xl bg-white/10 p-1 ring-1 ring-white/20" role="tablist">
-              <button type="button" role="tab" aria-selected={aba === 'abrir'} className={abaClasse(aba === 'abrir')} onClick={() => setAba('abrir')}>
-                Abrir chamado
-              </button>
-              <button type="button" role="tab" aria-selected={aba === 'consultar'} className={abaClasse(aba === 'consultar')} onClick={() => setAba('consultar')}>
-                Acompanhar protocolo
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <section className="px-[22px]">
-          <div className="mx-auto -mt-14 mb-16 max-w-[820px] rounded-2xl bg-white p-6 shadow-[0_12px_40px_rgba(42,24,70,.12)] sm:p-8">
-            {aba === 'abrir'
-              ? <AbrirChamado emailAtivo={emailAtivo} aoAcompanhar={acompanhar} />
-              : <ConsultarProtocolo key={protocoloConsulta} protocoloInicial={protocoloConsulta} />}
-          </div>
-        </section>
-      </main>
-      <PublicFooter />
-    </div>
+    <CursistaShell
+      badge="Suporte"
+      titulo="Como podemos ajudar?"
+      descricao="Não consegue acessar a plataforma, o AVA ou o certificado? Abra um chamado e acompanhe o atendimento pelo número do protocolo."
+      acao={(
+        <div className="flex w-full gap-1 rounded-xl bg-white/10 p-1 ring-1 ring-white/20 sm:w-auto" role="tablist">
+          <button type="button" role="tab" aria-selected={aba === 'abrir'} className={abaClasse(aba === 'abrir')} onClick={() => setAba('abrir')}>
+            Abrir chamado
+          </button>
+          <button type="button" role="tab" aria-selected={aba === 'consultar'} className={abaClasse(aba === 'consultar')} onClick={() => setAba('consultar')}>
+            Acompanhar protocolo
+          </button>
+        </div>
+      )}
+    >
+      <CartaoCursista className="sm:p-8">
+        {aba === 'abrir'
+          ? <AbrirChamado emailAtivo={emailAtivo} aoAcompanhar={acompanhar} />
+          : <ConsultarProtocolo key={protocoloConsulta} protocoloInicial={protocoloConsulta} />}
+      </CartaoCursista>
+    </CursistaShell>
   )
 }
