@@ -233,6 +233,39 @@ export default function PlanilhaDaBase({ gres = [], cursoId = null, cursoNome = 
         </p>
       )}
 
+      {/* Quantos da base nao se inscreveram em curso nenhum, sobre os mesmos
+          filtros de regional, escola, nome e situacao. Clicar mostra essas
+          pessoas na tabela. */}
+      {dados?.resumoInscricao && (() => {
+        const r = dados.resumoInscricao
+        const pctSem = r.base ? Math.round((r.semInscricao / r.base) * 1000) / 10 : 0
+        const caixa = 'flex flex-col rounded-xl px-3.5 py-2.5 border text-left transition-colors'
+        return (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+            <div className={caixa} style={{ borderColor: 'var(--p-cartaoBorda)' }}>
+              <span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>Profissionais na base</span>
+              <span className="text-[22px] font-bold tabular-nums" style={{ color: 'var(--p-texto)' }}>{r.base.toLocaleString('pt-BR')}</span>
+            </div>
+            <button type="button" className={caixa} style={{ borderColor: 'var(--p-cartaoBorda)' }}
+              onClick={() => { setFiltros((f) => ({ ...f, inscricao: 'inscrito' })); setPagina(1) }}
+              title="Mostrar na tabela quem está inscrito">
+              <span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>Inscritos em algum curso</span>
+              <span className="text-[22px] font-bold tabular-nums" style={{ color: 'var(--p-texto)' }}>{r.inscritos.toLocaleString('pt-BR')}</span>
+            </button>
+            <button type="button" className={caixa}
+              style={{ borderColor: 'var(--p-r4)', background: filtros.inscricao === 'nao_inscrito' ? 'var(--p-trilho)' : 'transparent' }}
+              onClick={() => { setFiltros((f) => ({ ...f, inscricao: 'nao_inscrito' })); setPagina(1) }}
+              title="Mostrar na tabela quem não se inscreveu">
+              <span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>Não se inscreveram em nenhum curso</span>
+              <span className="text-[22px] font-bold tabular-nums" style={{ color: 'var(--p-r5)' }}>
+                {r.semInscricao.toLocaleString('pt-BR')}
+                <span className="ml-1.5 text-[13px] font-medium" style={{ color: 'var(--p-texto3)' }}>{pctSem.toLocaleString('pt-BR')}%</span>
+              </span>
+            </button>
+          </div>
+        )
+      })()}
+
       {/* ─── Filtros ─── */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
         <Campo rotulo="GRE">

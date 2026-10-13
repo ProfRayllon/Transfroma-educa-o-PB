@@ -233,6 +233,17 @@ async function consultar({
     `SELECT COUNT(*) AS total ${DE} WHERE 1 = 1${f.sql}`, f.params
   )
 
+  /* Quantos do recorte estao inscritos em algum curso e quantos nao. Conta
+     sobre os mesmos filtros da tela, menos o de inscricao e o de curso -- os
+     dois ja decidem a resposta, e com eles o numero de "sem inscricao" seria
+     sempre zero ou o proprio total. */
+  const fResumo = montarFiltro({ gre, inep, nome, situacao })
+  const [[resumo]] = await getPool().query(
+    `SELECT COUNT(*) AS base,
+            SUM(EXISTS (SELECT 1 FROM inscricoes i WHERE i.cursista_id = c.id AND i.status = 'inscrito')) AS inscritos
+       ${DE} WHERE 1 = 1${fResumo.sql}`, fResumo.params
+  )
+
   const selecao = escolhidas.map((c) => `${COLUNAS[c].sql} AS \`${c}\``).join(', ')
   const [linhas] = await getPool().query(
     `SELECT ${selecao} ${DE}
@@ -243,6 +254,11 @@ async function consultar({
 
   return {
     total: numero(cont.total),
+    resumoInscricao: {
+      base: numero(resumo.base),
+      inscritos: numero(resumo.inscritos),
+      semInscricao: numero(resumo.base) - numero(resumo.inscritos),
+    },
     pagina: Number(pagina) || 1,
     porPagina: limite,
     colunas: escolhidas.map((c) => ({ chave: c, titulo: COLUNAS[c].titulo })),
