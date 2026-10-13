@@ -167,6 +167,10 @@ export default function AreaCursista() {
                           <X size={13} />
                           {processando === inscricao.id ? 'Cancelando...' : 'Cancelar inscrição'}
                         </button>
+                      ) : inscricao.obrigatoria ? (
+                        <span className="text-[11px] font-bold text-[#6f35b5]">
+                          Curso obrigatório: inscrição automática.
+                        </span>
                       ) : (
                         <span className="text-[11px] text-[#9070c8]">
                           O prazo de inscrição deste curso já encerrou.

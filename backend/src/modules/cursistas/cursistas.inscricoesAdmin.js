@@ -38,7 +38,7 @@ async function listar(cursistaId) {
   requireMysql()
   await garantirCursista(cursistaId)
   const [linhas] = await getPool().execute(
-    `SELECT i.course_id, i.edition, i.status, i.enrolled_at, c.name AS curso, ${SITUACAO} AS situacao
+    `SELECT i.course_id, i.edition, i.status, i.enrolled_at, c.name AS curso, c.inscricao_obrigatoria, ${SITUACAO} AS situacao
        FROM inscricoes i
        JOIN courses c ON c.id = i.course_id
       WHERE i.cursista_id = ?
@@ -54,6 +54,7 @@ async function listar(cursistaId) {
       status: l.status,
       inscritoEm: l.enrolled_at,
       situacao: l.situacao,
+      obrigatoria: Boolean(Number(l.inscricao_obrigatoria)),
     })),
   }
 }

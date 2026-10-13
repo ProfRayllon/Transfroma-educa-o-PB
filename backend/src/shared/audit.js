@@ -41,6 +41,8 @@ const ACOES = {
   // Separada da do cursista para a trilha dizer quem inscreveu.
   INSCRICAO_CRIADA_ADMIN: 'inscricao_criada_admin',
   INSCRICAO_CANCELADA_ADMIN: 'inscricao_cancelada_admin',
+  CURSO_OBRIGATORIO_LIGADO: 'curso_obrigatorio_ligado',
+  CURSO_OBRIGATORIO_DESLIGADO: 'curso_obrigatorio_desligado',
 }
 
 function clientIp(req) {

@@ -8,6 +8,7 @@ const repo = require('./cursistas.repo')
 const service = require('./cursistas.service')
 const admin = require('./cursistas.admin')
 const inscricoesAdmin = require('./cursistas.inscricoesAdmin')
+const obrigatorios = require('./cursistas.obrigatorios')
 const importacao = require('./cursistas.import')
 const {
   exportarInscritos,
@@ -270,6 +271,18 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
   // Inscricao pelo administrador, em qualquer curso, aberto ou nao.
   router.get('/admin/cursos-para-inscricao', ...soAdmin, tratar(async (_req, res) => {
     res.json(await inscricoesAdmin.cursosDisponiveis())
+  }))
+
+  // Cursos de inscricao obrigatoria: liga/desliga e lista.
+  router.get('/admin/cursos-obrigatorios', ...soAdmin, tratar(async (_req, res) => {
+    res.json(await obrigatorios.listar())
+  }))
+
+  router.put('/admin/cursos/:courseId/obrigatorio', ...soAdmin, tratar(async (req, res) => {
+    const actor = await getUsuarioInterno(req.user.id)
+    res.json(await obrigatorios.definir({
+      courseId: Number(req.params.courseId), ativo: req.body?.ativo === true, actor, req,
+    }))
   }))
 
   router.get('/admin/cursistas/:id/inscricoes', ...soAdmin, tratar(async (req, res) => {

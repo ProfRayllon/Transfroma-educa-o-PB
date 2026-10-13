@@ -4,6 +4,7 @@ const repo = require('./cursistas.repo')
 const { getPool, requireMysql } = require('../../shared/db')
 const { normalizeCpf, isValidCpf, maskCpf } = require('../../shared/cpf')
 const { registrar, ACOES } = require('../../shared/audit')
+const obrigatorios = require('./cursistas.obrigatorios')
 
 /**
  * Manutencao do cadastro de cursistas pela coordenacao.
@@ -172,6 +173,8 @@ async function criar({ corpo, actor, req }) {
     novoId = await repo.criarManual(dados, conexao)
     if (!dados.usuarioId) await repo.gerarUsuarioIdManual(novoId, conexao)
     if (dados.vinculos?.length) await repo.definirVinculos(novoId, dados.vinculos, conexao)
+    // Quem nasce agora entra nos cursos de inscricao obrigatoria.
+    await obrigatorios.sincronizar({ conexao })
     await conexao.commit()
   } catch (error) {
     await conexao.rollback()

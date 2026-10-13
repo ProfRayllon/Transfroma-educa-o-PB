@@ -209,7 +209,70 @@ function MultiSelectFilter({ label, placeholder, options, values, onChange }) {
   )
 }
 
-function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, ementaStatus }) {
+/**
+ * Inscricao obrigatoria, so para o administrador: ligar inscreve todos os
+ * cursistas ativos da base neste curso, e eles nao podem cancelar. A
+ * confirmacao fica aqui dentro porque a acao alcanca a base inteira.
+ */
+function InscricaoObrigatoria({ course, obrigatorio, onAlternar }) {
+  const [confirmando, setConfirmando] = useState(false)
+  const [salvando, setSalvando] = useState(false)
+  const [resultado, setResultado] = useState(null)
+
+  const aplicar = async () => {
+    setSalvando(true)
+    setResultado(null)
+    try {
+      const dados = await onAlternar(course.id, !obrigatorio)
+      setResultado(dados?.obrigatorio
+        ? { ok: true, texto: `Pronto: ${Number(dados.inscritos || 0).toLocaleString('pt-BR')} cursistas inscritos agora.` }
+        : { ok: true, texto: 'Inscrição deixou de ser obrigatória. As inscrições feitas continuam.' })
+      setConfirmando(false)
+    } catch (error) {
+      setResultado({ ok: false, texto: getApiErrorMessage(error, 'Não foi possível alterar.') })
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <div className={`rounded-xl border px-3 py-3 text-xs ${obrigatorio ? 'border-brand-200 bg-brand-50' : 'border-gray-100 bg-gray-50'}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="font-semibold text-gray-800">Inscrição automática obrigatória</div>
+          <p className="text-gray-500 mt-0.5">
+            {obrigatorio
+              ? 'Ligada: todos os cursistas ativos estão inscritos e não podem cancelar. Quem entrar na base depois é inscrito automaticamente.'
+              : 'Inscreve todos os cursistas ativos da base neste curso, sem opção de cancelar.'}
+          </p>
+        </div>
+        {!confirmando && (
+          <button type="button" onClick={() => setConfirmando(true)} className={obrigatorio ? 'btn-secondary text-xs' : 'btn-primary text-xs'}>
+            {obrigatorio ? 'Desligar' : 'Ligar'}
+          </button>
+        )}
+      </div>
+      {confirmando && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white border border-gray-200 px-3 py-2">
+          <span className="text-gray-700">
+            {obrigatorio
+              ? 'Desligar a obrigatoriedade? As inscrições já feitas continuam.'
+              : 'Inscrever agora todos os cursistas ativos da base neste curso?'}
+          </span>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setConfirmando(false)} className="btn-secondary text-xs" disabled={salvando}>Cancelar</button>
+            <button type="button" onClick={aplicar} className="btn-primary text-xs" disabled={salvando}>
+              {salvando ? 'Aplicando…' : 'Confirmar'}
+            </button>
+          </div>
+        </div>
+      )}
+      {resultado && <p className={`mt-2 ${resultado.ok ? 'text-green-700' : 'text-red-600'}`}>{resultado.texto}</p>}
+    </div>
+  )
+}
+
+function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, ementaStatus, obrigatorio = false, onAlternarObrigatorio = null }) {
   const navigate = useNavigate()
   const { user } = useAuth()
   const color = getTrailColor(course.primaryTrail)
@@ -448,6 +511,9 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
       )}
     >
       <div className="space-y-4">
+        {onAlternarObrigatorio && (
+          <InscricaoObrigatoria course={course} obrigatorio={obrigatorio} onAlternar={onAlternarObrigatorio} />
+        )}
         {textoInscricao && (
           <div className={`rounded-xl px-3 py-2 border text-xs ${inscricao.cls}`}>
             <div className="flex items-center gap-2 font-semibold">
@@ -968,6 +1034,26 @@ export default function Cursos() {
     }).catch(() => {})
   }, [])
 
+  // Cursos de inscricao obrigatoria: so o administrador ve e altera.
+  const ehAdministrador = user?.role === 'administrador'
+  const [obrigatorios, setObrigatorios] = useState(new Set())
+  useEffect(() => {
+    if (!ehAdministrador) return
+    api.get('/cursistas/admin/cursos-obrigatorios')
+      .then(({ data }) => setObrigatorios(new Set(data)))
+      .catch(() => setObrigatorios(new Set()))
+  }, [ehAdministrador])
+  const alternarObrigatorio = async (courseId, ativo) => {
+    const { data } = await api.put(`/cursistas/admin/cursos/${courseId}/obrigatorio`, { ativo })
+    setObrigatorios((atual) => {
+      const novo = new Set(atual)
+      if (data.obrigatorio) novo.add(courseId)
+      else novo.delete(courseId)
+      return novo
+    })
+    return data
+  }
+
   const isCoordinator = user?.role === 'coordenador' || (user?.function || '').toLowerCase().includes('coordenador')
   const canManage = mandaEmCursos(user) || user?.role === 'supervisor' || isCoordinator
 
@@ -1230,6 +1316,8 @@ export default function Cursos() {
               onDelete={setConfirmDeleteCourse}
               onUpdateStatusAva={handleUpdateStatusAva}
               ementaStatus={ementaStatuses[course.id]}
+              obrigatorio={obrigatorios.has(course.id)}
+              onAlternarObrigatorio={ehAdministrador ? alternarObrigatorio : null}
             />
           ))}
         </div>

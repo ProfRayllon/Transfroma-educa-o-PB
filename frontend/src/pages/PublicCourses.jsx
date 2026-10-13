@@ -148,7 +148,7 @@ export default function PublicCourses() {
           <span className={`${classeBase} border border-green-200 bg-green-50 text-green-700`}>
             <CheckCircle size={tamanho === 'card' ? 13 : 15} /> Inscrito
           </span>
-          <button
+          {!curso.obrigatoria && <button
             type="button"
             onClick={() => cancelar(curso)}
             disabled={processando === curso.id}
@@ -156,7 +156,7 @@ export default function PublicCourses() {
           >
             <X size={tamanho === 'card' ? 13 : 15} />
             {processando === curso.id ? 'Cancelando...' : 'Cancelar'}
-          </button>
+          </button>}
         </>
       )
     }

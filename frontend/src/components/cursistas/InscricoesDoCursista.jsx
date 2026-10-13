@@ -100,6 +100,7 @@ export default function InscricoesDoCursista({ cursistaId }) {
             return (
               <li key={i.courseId} className="flex items-center gap-2 rounded-lg border border-gray-100 px-3 py-2">
                 <span className="flex-1 min-w-0 text-sm text-gray-800 truncate" title={i.curso}>{i.curso}</span>
+                {i.obrigatoria && <span className="text-[10px] px-2 py-0.5 rounded-full border bg-brand-50 text-brand-700 border-brand-200">obrigatório</span>}
                 <span className={`text-[10px] px-2 py-0.5 rounded-full border ${sit.cls}`}>{sit.texto}</span>
                 <span className="text-[11px] text-gray-500 w-16 text-right">{STATUS[i.status] || i.status}</span>
                 {i.status === 'inscrito' ? (
