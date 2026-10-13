@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Download, Columns, Loader2, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Download, Columns, Loader2, X, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 import api from '../../lib/api'
 import { Cartao, TituloDeBloco } from './graficos'
 
@@ -32,7 +32,8 @@ const comoParametros = (filtros, colunas, cursoId) => ({
   ...(filtros.nome ? { nome: filtros.nome } : {}),
   ...(filtros.situacao ? { situacao: filtros.situacao } : {}),
   ...(filtros.inscricao ? { inscricao: filtros.inscricao } : {}),
-  ...(filtros.cursoBase ? { cursoBase: filtros.cursoBase } : {}),
+  ...(filtros.cursosBase.length ? { cursoBase: filtros.cursosBase.join(',') } : {}),
+  ...(filtros.cursosBase.length > 1 && filtros.modo === 'todos' ? { modo: 'todos' } : {}),
   colunas: colunas.join(','),
 })
 
@@ -54,7 +55,7 @@ const estiloDeCampo = {
 }
 
 export default function PlanilhaDaBase({ gres = [], cursoId = null, cursoNome = '' }) {
-  const [filtros, setFiltros] = useState({ gre: '', inep: '', nome: '', situacao: '', inscricao: '', cursoBase: '' })
+  const [filtros, setFiltros] = useState({ gre: '', inep: '', nome: '', situacao: '', inscricao: '', cursosBase: [], modo: 'algum' })
   const [colunas, setColunas] = useState(null)
   const [dados, setDados] = useState(null)
   const [pagina, setPagina] = useState(1)
@@ -63,6 +64,15 @@ export default function PlanilhaDaBase({ gres = [], cursoId = null, cursoNome = 
   const [baixando, setBaixando] = useState(false)
   const [abrirColunas, setAbrirColunas] = useState(false)
   const caixaDeColunas = useRef(null)
+  const [abrirCursos, setAbrirCursos] = useState(false)
+  const caixaDeCursos = useRef(null)
+
+  useEffect(() => {
+    if (!abrirCursos) return undefined
+    const fora = (e) => { if (caixaDeCursos.current && !caixaDeCursos.current.contains(e.target)) setAbrirCursos(false) }
+    document.addEventListener('mousedown', fora)
+    return () => document.removeEventListener('mousedown', fora)
+  }, [abrirCursos])
 
   /* A digitação não dispara uma consulta por tecla: o nome só vai ao servidor
      quando a pessoa para de digitar. Sem isso, escrever "MARIA" são cinco
@@ -119,9 +129,23 @@ export default function PlanilhaDaBase({ gres = [], cursoId = null, cursoNome = 
   const situacoes = dados?.opcoes?.situacoes || []
   const inscricoes = dados?.opcoes?.inscricoes || []
   const cursosDoFiltro = dados?.opcoes?.cursos || []
-  const nomeDoCursoBase = cursosDoFiltro.find((c) => String(c.id) === String(filtros.cursoBase))?.nome
+  const qtdCursos = filtros.cursosBase.length
+  // Como os quadros e o filtro de inscricao falam do recorte de cursos.
+  const doRecorte = qtdCursos === 0 ? null
+    : qtdCursos === 1 ? 'neste curso'
+      : filtros.modo === 'todos' ? 'em todos os cursos selecionados' : 'nos cursos selecionados'
+  const resumoDosCursos = qtdCursos === 0 ? 'Todos os cursos'
+    : qtdCursos === 1 ? (cursosDoFiltro.find((c) => c.id === filtros.cursosBase[0])?.nome || '1 curso')
+      : `${qtdCursos} cursos`
+  const alternarCurso = (id) => {
+    setFiltros((f) => ({
+      ...f,
+      cursosBase: f.cursosBase.includes(id) ? f.cursosBase.filter((x) => x !== id) : [...f.cursosBase, id],
+    }))
+    setPagina(1)
+  }
   const visiveis = dados?.colunas || []
-  const temFiltro = Boolean(filtros.gre || filtros.inep || filtros.nome || filtros.situacao || filtros.inscricao || filtros.cursoBase)
+  const temFiltro = Boolean(filtros.gre || filtros.inep || filtros.nome || filtros.situacao || filtros.inscricao || filtros.cursosBase.length)
 
   const paginas = useMemo(
     () => Math.max(1, Math.ceil((dados?.total || 0) / (dados?.porPagina || 25))),
@@ -145,7 +169,7 @@ export default function PlanilhaDaBase({ gres = [], cursoId = null, cursoNome = 
   }
 
   const limpar = () => {
-    setFiltros({ gre: '', inep: '', nome: '', situacao: '', inscricao: '', cursoBase: '' })
+    setFiltros({ gre: '', inep: '', nome: '', situacao: '', inscricao: '', cursosBase: [], modo: 'algum' })
     setNomeDigitado('')
     setPagina(1)
   }
@@ -252,14 +276,14 @@ export default function PlanilhaDaBase({ gres = [], cursoId = null, cursoNome = 
             <button type="button" className={caixa} style={{ borderColor: 'var(--p-cartaoBorda)' }}
               onClick={() => { setFiltros((f) => ({ ...f, inscricao: 'inscrito' })); setPagina(1) }}
               title="Mostrar na tabela quem está inscrito">
-              <span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>{nomeDoCursoBase ? 'Inscritos neste curso' : 'Inscritos em algum curso'}</span>
+              <span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>{doRecorte ? `Inscritos ${doRecorte}` : 'Inscritos em algum curso'}</span>
               <span className="text-[22px] font-bold tabular-nums" style={{ color: 'var(--p-texto)' }}>{r.inscritos.toLocaleString('pt-BR')}</span>
             </button>
             <button type="button" className={caixa}
               style={{ borderColor: 'var(--p-r4)', background: filtros.inscricao === 'nao_inscrito' ? 'var(--p-trilho)' : 'transparent' }}
               onClick={() => { setFiltros((f) => ({ ...f, inscricao: 'nao_inscrito' })); setPagina(1) }}
               title="Mostrar na tabela quem não se inscreveu">
-              <span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>{nomeDoCursoBase ? 'Não se inscreveram neste curso' : 'Não se inscreveram em nenhum curso'}</span>
+              <span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>{doRecorte ? `Não inscritos ${doRecorte}` : 'Não se inscreveram em nenhum curso'}</span>
               <span className="text-[22px] font-bold tabular-nums" style={{ color: 'var(--p-r5)' }}>
                 {r.semInscricao.toLocaleString('pt-BR')}
                 <span className="ml-1.5 text-[13px] font-medium" style={{ color: 'var(--p-texto3)' }}>{pctSem.toLocaleString('pt-BR')}%</span>
@@ -318,17 +342,58 @@ export default function PlanilhaDaBase({ gres = [], cursoId = null, cursoNome = 
         {/* O curso muda a pergunta da inscricao: com ele, "inscrito" e
             "sem inscricao" passam a valer para este curso, e os quadros acima
             tambem. */}
-        <Campo rotulo="Curso">
-          <select
-            value={filtros.cursoBase}
-            onChange={(e) => { setFiltros((f) => ({ ...f, cursoBase: e.target.value })); setPagina(1) }}
-            className="px-3 py-2 rounded-lg text-[13px] border" style={estiloDeCampo}
-          >
-            <option value="">Todos os cursos</option>
-            {cursosDoFiltro.map((c) => (
-              <option key={c.id} value={c.id}>{c.nome} ({c.inscritos.toLocaleString('pt-BR')})</option>
-            ))}
-          </select>
+        <Campo rotulo="Cursos">
+          <div className="relative" ref={caixaDeCursos}>
+            <button
+              type="button"
+              onClick={() => setAbrirCursos((v) => !v)}
+              className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-[13px] border text-left"
+              style={estiloDeCampo}
+              title={resumoDosCursos}
+            >
+              <span className="truncate">{resumoDosCursos}</span>
+              <ChevronDown size={14} className="shrink-0" />
+            </button>
+            {abrirCursos && (
+              <div className="absolute left-0 top-full mt-1 z-20 p-2 rounded-xl border shadow-lg w-80 max-h-96 overflow-y-auto"
+                style={{ ...estiloDeCampo, borderColor: 'var(--p-cartaoBorda)' }}>
+                {/* Com dois ou mais, a pessoa escolhe o que "inscrito" quer dizer. */}
+                {qtdCursos > 1 && (
+                  <div className="flex gap-1 p-1 mb-2 rounded-lg" style={{ background: 'var(--p-trilho)' }}>
+                    {[['algum', 'Em qualquer um'], ['todos', 'Em todos']].map(([chave, rotulo]) => (
+                      <button key={chave} type="button"
+                        onClick={() => { setFiltros((f) => ({ ...f, modo: chave })); setPagina(1) }}
+                        className="flex-1 px-2 py-1 rounded-md text-[12px] font-medium"
+                        style={filtros.modo === chave
+                          ? { background: 'var(--p-cartao)', color: 'var(--p-texto)' }
+                          : { color: 'var(--p-texto3)' }}>
+                        {rotulo}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {cursosDoFiltro.map((c) => (
+                  <label key={c.id} className="flex items-start gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer text-[13px] hover:opacity-80">
+                    <input type="checkbox" className="mt-0.5 accent-current"
+                      checked={filtros.cursosBase.includes(c.id)}
+                      onChange={() => alternarCurso(c.id)} />
+                    <span className="min-w-0" style={{ color: 'var(--p-texto)' }}>
+                      {c.nome}
+                      <span style={{ color: 'var(--p-texto3)' }}> · {c.inscritos.toLocaleString('pt-BR')}</span>
+                    </span>
+                  </label>
+                ))}
+                {qtdCursos > 0 && (
+                  <button type="button"
+                    onClick={() => { setFiltros((f) => ({ ...f, cursosBase: [], modo: 'algum' })); setPagina(1) }}
+                    className="w-full mt-1 px-2 py-1.5 rounded-lg text-[12px] text-left hover:opacity-80"
+                    style={{ color: 'var(--p-r4)' }}>
+                    Limpar seleção
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </Campo>
 
         <Campo rotulo="Inscrição">
@@ -340,7 +405,7 @@ export default function PlanilhaDaBase({ gres = [], cursoId = null, cursoNome = 
             <option value="">Todas</option>
             {inscricoes.map((i) => (
               <option key={i.chave} value={i.chave}>
-                {filtros.cursoBase ? (i.chave === 'inscrito' ? 'Inscrito neste curso' : 'Não inscrito neste curso') : i.rotulo}
+                {doRecorte ? (i.chave === 'inscrito' ? `Inscrito ${doRecorte}` : `Não inscrito ${doRecorte}`) : i.rotulo}
               </option>
             ))}
           </select>
@@ -373,9 +438,9 @@ export default function PlanilhaDaBase({ gres = [], cursoId = null, cursoNome = 
                     style={{ color: 'var(--p-texto)' }} title={linha[c.chave]}>
                     {/* Inscricao em etiqueta: com a base toda na tela, inscritos e
                         nao inscritos no curso se separam pela cor de relance. */}
-                    {c.chave === 'inscrito' && (linha[c.chave] === 'Sim' || linha[c.chave] === 'Não') ? (
+                    {c.chave === 'inscrito' && /^(Sim|Não)/.test(linha[c.chave] || '') ? (
                       <span className="inline-block px-2 py-0.5 rounded-full text-[12px] font-medium"
-                        style={linha[c.chave] === 'Sim'
+                        style={linha[c.chave].startsWith('Sim')
                           ? { background: 'rgba(22,163,74,.12)', color: '#15803d' }
                           : { background: 'var(--p-trilho)', color: 'var(--p-texto3)' }}>
                         {linha[c.chave]}

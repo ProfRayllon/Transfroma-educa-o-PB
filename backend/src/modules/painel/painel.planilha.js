@@ -118,15 +118,34 @@ const PADRAO = ['nome', 'cpf', 'gre', 'escola', 'inep', 'situacao', 'inscrito']
 /**
  * O recorte por inscricao, que convive com o da situacao do cadastro.
  *
- * Com um curso escolhido no filtro da planilha (`cursoBase`), a pergunta passa
- * a ser "inscrito NESTE curso". Sem ele, "em algum curso" -- que deixa de dizer
- * muita coisa quando ha curso de inscricao obrigatoria, porque ai a base
- * inteira esta inscrita em algum.
+ * Com cursos escolhidos no filtro da planilha (`cursosBase`), a pergunta passa
+ * a ser sobre ELES: inscrito em pelo menos um (`modo` 'algum') ou em todos
+ * ('todos'). Sem curso, "em algum curso" -- que deixa de dizer muita coisa
+ * quando ha curso de inscricao obrigatoria, porque ai a base inteira esta
+ * inscrita em algum.
+ *
+ * Os ids entram no SQL como numeros ja validados pela rota (normalizarCursos):
+ * a lista e variavel, e montar placeholders em tres lugares diferentes da
+ * consulta seria mais facil de errar do que inteiros conferidos.
  */
-function condicaoDeInscricao(cursoBase) {
-  return cursoBase
-    ? { sql: "SELECT 1 FROM inscricoes i WHERE i.cursista_id = c.id AND i.status = 'inscrito' AND i.course_id = ?", params: [cursoBase] }
-    : { sql: "SELECT 1 FROM inscricoes i WHERE i.cursista_id = c.id AND i.status = 'inscrito'", params: [] }
+function idsSeguros(cursosBase) {
+  return [...new Set((cursosBase || []).map(Number).filter((n) => Number.isInteger(n) && n > 0))]
+}
+
+function contagemNosCursos(ids) {
+  return `(SELECT COUNT(DISTINCT i.course_id) FROM inscricoes i
+            WHERE i.cursista_id = c.id AND i.status = 'inscrito' AND i.course_id IN (${ids.join(',')}))`
+}
+
+/** Expressao booleana SQL: a pessoa conta como inscrita neste recorte. */
+function condicaoDeInscricao(cursosBase, modo) {
+  const ids = idsSeguros(cursosBase)
+  if (!ids.length) {
+    return "EXISTS (SELECT 1 FROM inscricoes i WHERE i.cursista_id = c.id AND i.status = 'inscrito')"
+  }
+  return modo === 'todos' && ids.length > 1
+    ? `${contagemNosCursos(ids)} = ${ids.length}`
+    : `${contagemNosCursos(ids)} > 0`
 }
 
 const SITUACOES = {
@@ -176,7 +195,7 @@ function normalizarColunas(pedidas) {
  * varredura na tabela, e por isso a busca so entra com tres caracteres -- uma
  * letra so varreria a base inteira a cada tecla.
  */
-function montarFiltro({ gre, inep, nome, situacao, inscricao, curso, cursoBase }) {
+function montarFiltro({ gre, inep, nome, situacao, inscricao, curso, cursosBase, modo }) {
   const onde = []
   const params = []
 
@@ -206,9 +225,7 @@ function montarFiltro({ gre, inep, nome, situacao, inscricao, curso, cursoBase }
 
   if (SITUACOES[situacao]) onde.push(SITUACOES[situacao])
   if (inscricao === 'inscrito' || inscricao === 'nao_inscrito') {
-    const cond = condicaoDeInscricao(cursoBase)
-    onde.push(` AND ${inscricao === 'inscrito' ? '' : 'NOT '}EXISTS (${cond.sql})`)
-    params.push(...cond.params)
+    onde.push(` AND ${inscricao === 'inscrito' ? '' : 'NOT '}(${condicaoDeInscricao(cursosBase, modo)})`)
   }
 
   /* O curso escolhido la em cima, no filtro do painel.
@@ -232,12 +249,12 @@ const DE = 'FROM cursistas c'
 
 /** A planilha na tela: uma pagina de linhas mais o total do recorte. */
 async function consultar({
-  gre = null, inep = null, nome = '', situacao = null, inscricao = null, curso = null, cursoBase = null,
+  gre = null, inep = null, nome = '', situacao = null, inscricao = null, curso = null, cursosBase = null, modo = 'algum',
   colunas = null, pagina = 1, porPagina = 25,
 } = {}) {
   requireMysql()
   const escolhidas = normalizarColunas(colunas)
-  const f = montarFiltro({ gre, inep, nome, situacao, inscricao, curso, cursoBase })
+  const f = montarFiltro({ gre, inep, nome, situacao, inscricao, curso, cursosBase, modo })
   const limite = Math.min(200, Math.max(5, Number(porPagina) || 25))
   const salto = Math.max(0, ((Number(pagina) || 1) - 1) * limite)
 
@@ -250,13 +267,12 @@ async function consultar({
      dois ja decidem a resposta, e com eles o numero de "sem inscricao" seria
      sempre zero ou o proprio total. */
   const fResumo = montarFiltro({ gre, inep, nome, situacao })
-  const condResumo = condicaoDeInscricao(cursoBase)
   const [[resumo]] = await getPool().query(
-    `SELECT COUNT(*) AS base, SUM(EXISTS (${condResumo.sql})) AS inscritos
-       ${DE} WHERE 1 = 1${fResumo.sql}`, [...condResumo.params, ...fResumo.params]
+    `SELECT COUNT(*) AS base, SUM(${condicaoDeInscricao(cursosBase, modo)}) AS inscritos
+       ${DE} WHERE 1 = 1${fResumo.sql}`, fResumo.params
   )
 
-  const selecao = escolhidas.map((c) => `${colunaDoRecorte(c, cursoBase).sql} AS \`${c}\``).join(', ')
+  const selecao = escolhidas.map((c) => `${colunaDoRecorte(c, cursosBase, modo).sql} AS \`${c}\``).join(', ')
   const [linhas] = await getPool().query(
     `SELECT ${selecao} ${DE}
       WHERE 1 = 1${f.sql}
@@ -267,14 +283,15 @@ async function consultar({
   return {
     total: numero(cont.total),
     resumoInscricao: {
-      cursoBase: cursoBase || null,
+      cursos: idsSeguros(cursosBase),
+      modo,
       base: numero(resumo.base),
       inscritos: numero(resumo.inscritos),
       semInscricao: numero(resumo.base) - numero(resumo.inscritos),
     },
     pagina: Number(pagina) || 1,
     porPagina: limite,
-    colunas: escolhidas.map((c) => ({ chave: c, titulo: colunaDoRecorte(c, cursoBase).titulo })),
+    colunas: escolhidas.map((c) => ({ chave: c, titulo: colunaDoRecorte(c, cursosBase, modo).titulo })),
     itens: linhas.map((l) => {
       const linha = {}
       escolhidas.forEach((c) => {
@@ -300,14 +317,14 @@ async function consultar({
  * sistema tres vezes maior numa VPS de 957 MB.
  */
 async function paraExportar({
-  gre = null, inep = null, nome = '', situacao = null, inscricao = null, curso = null, cursoBase = null,
+  gre = null, inep = null, nome = '', situacao = null, inscricao = null, curso = null, cursosBase = null, modo = 'algum',
   colunas = null,
 } = {}) {
   requireMysql()
   const escolhidas = normalizarColunas(colunas)
-  const f = montarFiltro({ gre, inep, nome, situacao, inscricao, curso, cursoBase })
+  const f = montarFiltro({ gre, inep, nome, situacao, inscricao, curso, cursosBase, modo })
 
-  const selecao = escolhidas.map((c) => `${colunaDoRecorte(c, cursoBase).sql} AS \`${c}\``).join(', ')
+  const selecao = escolhidas.map((c) => `${colunaDoRecorte(c, cursosBase, modo).sql} AS \`${c}\``).join(', ')
   const [linhas] = await getPool().query(
     `SELECT ${selecao} ${DE}
       WHERE 1 = 1${f.sql}
@@ -318,7 +335,7 @@ async function paraExportar({
   return {
     colunas: escolhidas.map((c) => ({
       chave: c,
-      titulo: colunaDoRecorte(c, cursoBase).titulo,
+      titulo: colunaDoRecorte(c, cursosBase, modo).titulo,
       valor: (l) => {
         const bruto = l[c]
         if (c === 'cpf') return cpfComPontos(bruto)
@@ -334,19 +351,20 @@ async function paraExportar({
  * A definicao da coluna para este recorte. Com um curso escolhido no filtro,
  * "Inscrito em curso" responde por AQUELE curso -- senao a coluna dizia "Sim"
  * para quem estava em qualquer outro, e a tabela parecia nao obedecer o filtro.
- * O id entra no SQL como numero ja validado pela rota (normalizarCurso).
+ * Com varios cursos, o valor diz tambem em quantos deles: "Sim (2 de 3)".
  */
-function colunaDoRecorte(chave, cursoBase) {
-  const id = Number(cursoBase)
-  if (chave === 'inscrito' && Number.isInteger(id) && id > 0) {
-    return {
-      ...COLUNAS.inscrito,
-      titulo: 'Inscrito neste curso',
-      sql: `IF(EXISTS (SELECT 1 FROM inscricoes i
-                        WHERE i.cursista_id = c.id AND i.status = 'inscrito' AND i.course_id = ${id}), 'Sim', 'Não')`,
-    }
+function colunaDoRecorte(chave, cursosBase, modo) {
+  const ids = idsSeguros(cursosBase)
+  if (chave !== 'inscrito' || !ids.length) return COLUNAS[chave]
+  const cond = condicaoDeInscricao(ids, modo)
+  if (ids.length === 1) {
+    return { ...COLUNAS.inscrito, titulo: 'Inscrito neste curso', sql: `IF(${cond}, 'Sim', 'Não')` }
   }
-  return COLUNAS[chave]
+  return {
+    ...COLUNAS.inscrito,
+    titulo: modo === 'todos' ? 'Inscrito em todos os cursos' : 'Inscrito nos cursos',
+    sql: `CONCAT(IF(${cond}, 'Sim', 'Não'), ' (', ${contagemNosCursos(ids)}, ' de ${ids.length})')`,
+  }
 }
 
 /** Os cursos para o filtro da planilha, com quantos inscritos cada um tem. */

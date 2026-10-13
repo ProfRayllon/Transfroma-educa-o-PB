@@ -62,6 +62,11 @@ function normalizarCurso(valor) {
   return Number.isInteger(n) && n > 0 ? n : null
 }
 
+/** Lista de cursos "1,2,3", so com inteiros positivos e no maximo 30. */
+function normalizarCursos(valor) {
+  return [...new Set(String(valor || '').split(',').map(normalizarCurso).filter(Boolean))].slice(0, 30)
+}
+
 /**
  * A GRE aceita so o formato que existe no banco.
  *
@@ -381,7 +386,8 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
         situacao: String(req.query.situacao || '') || null,
         inscricao: String(req.query.inscricao || '') || null,
         curso: normalizarCurso(req.query.curso),
-        cursoBase: normalizarCurso(req.query.cursoBase),
+        cursosBase: normalizarCursos(req.query.cursoBase),
+        modo: req.query.modo === 'todos' ? 'todos' : 'algum',
         colunas: req.query.colunas,
         pagina: Number(req.query.pagina) || 1,
         porPagina: Number(req.query.porPagina) || 25,
@@ -411,7 +417,8 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
         situacao: String(req.query.situacao || '') || null,
         inscricao: String(req.query.inscricao || '') || null,
         curso: normalizarCurso(req.query.curso),
-        cursoBase: normalizarCurso(req.query.cursoBase),
+        cursosBase: normalizarCursos(req.query.cursoBase),
+        modo: req.query.modo === 'todos' ? 'todos' : 'algum',
         colunas: req.query.colunas,
       })
 
