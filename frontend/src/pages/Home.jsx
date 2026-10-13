@@ -6,6 +6,7 @@ import PublicFooter from '../components/public/PublicFooter'
 import MapaParaiba from '../components/public/MapaParaiba'
 import CapaCurso from '../components/public/CapaCurso'
 import VisualizadorPdf from '../components/public/VisualizadorPdf'
+import AlertaInscricoes from '../components/public/AlertaInscricoes'
 import { duracaoCurso, nomeTrilha, ordenarPorInscricao } from '../lib/curso'
 import publicApi from '../lib/publicApi'
 import { useCursista } from '../modules/cursista/CursistaContext'
@@ -609,6 +610,9 @@ export default function Home() {
         </section>
 
         <VisualizadorPdf arquivo={guiaAberto?.arquivo} titulo={guiaAberto?.titulo} aoFechar={fecharGuia} />
+
+        {/* Contagem regressiva das inscricoes, uma vez por sessao. */}
+        <AlertaInscricoes cursos={cursos} />
 
         <MapaParaiba />
 
