@@ -256,7 +256,7 @@ async function consultar({
        ${DE} WHERE 1 = 1${fResumo.sql}`, [...condResumo.params, ...fResumo.params]
   )
 
-  const selecao = escolhidas.map((c) => `${COLUNAS[c].sql} AS \`${c}\``).join(', ')
+  const selecao = escolhidas.map((c) => `${colunaDoRecorte(c, cursoBase).sql} AS \`${c}\``).join(', ')
   const [linhas] = await getPool().query(
     `SELECT ${selecao} ${DE}
       WHERE 1 = 1${f.sql}
@@ -274,7 +274,7 @@ async function consultar({
     },
     pagina: Number(pagina) || 1,
     porPagina: limite,
-    colunas: escolhidas.map((c) => ({ chave: c, titulo: COLUNAS[c].titulo })),
+    colunas: escolhidas.map((c) => ({ chave: c, titulo: colunaDoRecorte(c, cursoBase).titulo })),
     itens: linhas.map((l) => {
       const linha = {}
       escolhidas.forEach((c) => {
@@ -307,7 +307,7 @@ async function paraExportar({
   const escolhidas = normalizarColunas(colunas)
   const f = montarFiltro({ gre, inep, nome, situacao, inscricao, curso, cursoBase })
 
-  const selecao = escolhidas.map((c) => `${COLUNAS[c].sql} AS \`${c}\``).join(', ')
+  const selecao = escolhidas.map((c) => `${colunaDoRecorte(c, cursoBase).sql} AS \`${c}\``).join(', ')
   const [linhas] = await getPool().query(
     `SELECT ${selecao} ${DE}
       WHERE 1 = 1${f.sql}
@@ -318,7 +318,7 @@ async function paraExportar({
   return {
     colunas: escolhidas.map((c) => ({
       chave: c,
-      titulo: COLUNAS[c].titulo,
+      titulo: colunaDoRecorte(c, cursoBase).titulo,
       valor: (l) => {
         const bruto = l[c]
         if (c === 'cpf') return cpfComPontos(bruto)
@@ -328,6 +328,25 @@ async function paraExportar({
     })),
     linhas,
   }
+}
+
+/**
+ * A definicao da coluna para este recorte. Com um curso escolhido no filtro,
+ * "Inscrito em curso" responde por AQUELE curso -- senao a coluna dizia "Sim"
+ * para quem estava em qualquer outro, e a tabela parecia nao obedecer o filtro.
+ * O id entra no SQL como numero ja validado pela rota (normalizarCurso).
+ */
+function colunaDoRecorte(chave, cursoBase) {
+  const id = Number(cursoBase)
+  if (chave === 'inscrito' && Number.isInteger(id) && id > 0) {
+    return {
+      ...COLUNAS.inscrito,
+      titulo: 'Inscrito neste curso',
+      sql: `IF(EXISTS (SELECT 1 FROM inscricoes i
+                        WHERE i.cursista_id = c.id AND i.status = 'inscrito' AND i.course_id = ${id}), 'Sim', 'Não')`,
+    }
+  }
+  return COLUNAS[chave]
 }
 
 /** Os cursos para o filtro da planilha, com quantos inscritos cada um tem. */

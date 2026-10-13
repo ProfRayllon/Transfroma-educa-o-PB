@@ -371,7 +371,16 @@ export default function PlanilhaDaBase({ gres = [], cursoId = null, cursoNome = 
                 {visiveis.map((c) => (
                   <td key={c.chave} className="px-2 py-2 align-top max-w-[280px] truncate"
                     style={{ color: 'var(--p-texto)' }} title={linha[c.chave]}>
-                    {linha[c.chave] || '—'}
+                    {/* Inscricao em etiqueta: com a base toda na tela, inscritos e
+                        nao inscritos no curso se separam pela cor de relance. */}
+                    {c.chave === 'inscrito' && (linha[c.chave] === 'Sim' || linha[c.chave] === 'Não') ? (
+                      <span className="inline-block px-2 py-0.5 rounded-full text-[12px] font-medium"
+                        style={linha[c.chave] === 'Sim'
+                          ? { background: 'rgba(22,163,74,.12)', color: '#15803d' }
+                          : { background: 'var(--p-trilho)', color: 'var(--p-texto3)' }}>
+                        {linha[c.chave]}
+                      </span>
+                    ) : (linha[c.chave] || '—')}
                   </td>
                 ))}
               </tr>
