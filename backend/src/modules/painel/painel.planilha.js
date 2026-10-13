@@ -115,10 +115,18 @@ const COLUNAS = {
 /** As colunas que a tela mostra quando ninguem escolheu nada. */
 const PADRAO = ['nome', 'cpf', 'gre', 'escola', 'inep', 'situacao', 'inscrito']
 
-/** O recorte por inscricao, que convive com o da situacao do cadastro. */
-const INSCRICAO = {
-  inscrito: " AND EXISTS (SELECT 1 FROM inscricoes i WHERE i.cursista_id = c.id AND i.status = 'inscrito')",
-  nao_inscrito: " AND NOT EXISTS (SELECT 1 FROM inscricoes i WHERE i.cursista_id = c.id AND i.status = 'inscrito')",
+/**
+ * O recorte por inscricao, que convive com o da situacao do cadastro.
+ *
+ * Com um curso escolhido no filtro da planilha (`cursoBase`), a pergunta passa
+ * a ser "inscrito NESTE curso". Sem ele, "em algum curso" -- que deixa de dizer
+ * muita coisa quando ha curso de inscricao obrigatoria, porque ai a base
+ * inteira esta inscrita em algum.
+ */
+function condicaoDeInscricao(cursoBase) {
+  return cursoBase
+    ? { sql: "SELECT 1 FROM inscricoes i WHERE i.cursista_id = c.id AND i.status = 'inscrito' AND i.course_id = ?", params: [cursoBase] }
+    : { sql: "SELECT 1 FROM inscricoes i WHERE i.cursista_id = c.id AND i.status = 'inscrito'", params: [] }
 }
 
 const SITUACOES = {
@@ -168,7 +176,7 @@ function normalizarColunas(pedidas) {
  * varredura na tabela, e por isso a busca so entra com tres caracteres -- uma
  * letra so varreria a base inteira a cada tecla.
  */
-function montarFiltro({ gre, inep, nome, situacao, inscricao, curso }) {
+function montarFiltro({ gre, inep, nome, situacao, inscricao, curso, cursoBase }) {
   const onde = []
   const params = []
 
@@ -197,7 +205,11 @@ function montarFiltro({ gre, inep, nome, situacao, inscricao, curso }) {
   }
 
   if (SITUACOES[situacao]) onde.push(SITUACOES[situacao])
-  if (INSCRICAO[inscricao]) onde.push(INSCRICAO[inscricao])
+  if (inscricao === 'inscrito' || inscricao === 'nao_inscrito') {
+    const cond = condicaoDeInscricao(cursoBase)
+    onde.push(` AND ${inscricao === 'inscrito' ? '' : 'NOT '}EXISTS (${cond.sql})`)
+    params.push(...cond.params)
+  }
 
   /* O curso escolhido la em cima, no filtro do painel.
      Sem isto a tabela continuava mostrando a base inteira enquanto o resto da
@@ -220,12 +232,12 @@ const DE = 'FROM cursistas c'
 
 /** A planilha na tela: uma pagina de linhas mais o total do recorte. */
 async function consultar({
-  gre = null, inep = null, nome = '', situacao = null, inscricao = null, curso = null,
+  gre = null, inep = null, nome = '', situacao = null, inscricao = null, curso = null, cursoBase = null,
   colunas = null, pagina = 1, porPagina = 25,
 } = {}) {
   requireMysql()
   const escolhidas = normalizarColunas(colunas)
-  const f = montarFiltro({ gre, inep, nome, situacao, inscricao, curso })
+  const f = montarFiltro({ gre, inep, nome, situacao, inscricao, curso, cursoBase })
   const limite = Math.min(200, Math.max(5, Number(porPagina) || 25))
   const salto = Math.max(0, ((Number(pagina) || 1) - 1) * limite)
 
@@ -238,10 +250,10 @@ async function consultar({
      dois ja decidem a resposta, e com eles o numero de "sem inscricao" seria
      sempre zero ou o proprio total. */
   const fResumo = montarFiltro({ gre, inep, nome, situacao })
+  const condResumo = condicaoDeInscricao(cursoBase)
   const [[resumo]] = await getPool().query(
-    `SELECT COUNT(*) AS base,
-            SUM(EXISTS (SELECT 1 FROM inscricoes i WHERE i.cursista_id = c.id AND i.status = 'inscrito')) AS inscritos
-       ${DE} WHERE 1 = 1${fResumo.sql}`, fResumo.params
+    `SELECT COUNT(*) AS base, SUM(EXISTS (${condResumo.sql})) AS inscritos
+       ${DE} WHERE 1 = 1${fResumo.sql}`, [...condResumo.params, ...fResumo.params]
   )
 
   const selecao = escolhidas.map((c) => `${COLUNAS[c].sql} AS \`${c}\``).join(', ')
@@ -255,6 +267,7 @@ async function consultar({
   return {
     total: numero(cont.total),
     resumoInscricao: {
+      cursoBase: cursoBase || null,
       base: numero(resumo.base),
       inscritos: numero(resumo.inscritos),
       semInscricao: numero(resumo.base) - numero(resumo.inscritos),
@@ -287,12 +300,12 @@ async function consultar({
  * sistema tres vezes maior numa VPS de 957 MB.
  */
 async function paraExportar({
-  gre = null, inep = null, nome = '', situacao = null, inscricao = null, curso = null,
+  gre = null, inep = null, nome = '', situacao = null, inscricao = null, curso = null, cursoBase = null,
   colunas = null,
 } = {}) {
   requireMysql()
   const escolhidas = normalizarColunas(colunas)
-  const f = montarFiltro({ gre, inep, nome, situacao, inscricao, curso })
+  const f = montarFiltro({ gre, inep, nome, situacao, inscricao, curso, cursoBase })
 
   const selecao = escolhidas.map((c) => `${COLUNAS[c].sql} AS \`${c}\``).join(', ')
   const [linhas] = await getPool().query(
@@ -317,6 +330,16 @@ async function paraExportar({
   }
 }
 
+/** Os cursos para o filtro da planilha, com quantos inscritos cada um tem. */
+async function cursosParaFiltro() {
+  const [linhas] = await getPool().query(
+    `SELECT cu.id, cu.name,
+            (SELECT COUNT(*) FROM inscricoes i WHERE i.course_id = cu.id AND i.status = 'inscrito') AS inscritos
+       FROM courses cu ORDER BY cu.name`
+  )
+  return linhas.map((l) => ({ id: l.id, nome: l.name, inscritos: numero(l.inscritos) }))
+}
+
 /** O catalogo de colunas e de situacoes, para a tela montar os controles. */
 function opcoes() {
   return {
@@ -336,4 +359,4 @@ function opcoes() {
   }
 }
 
-module.exports = { consultar, paraExportar, opcoes, COLUNAS, PADRAO }
+module.exports = { consultar, paraExportar, opcoes, cursosParaFiltro, COLUNAS, PADRAO }

@@ -32,6 +32,7 @@ const comoParametros = (filtros, colunas, cursoId) => ({
   ...(filtros.nome ? { nome: filtros.nome } : {}),
   ...(filtros.situacao ? { situacao: filtros.situacao } : {}),
   ...(filtros.inscricao ? { inscricao: filtros.inscricao } : {}),
+  ...(filtros.cursoBase ? { cursoBase: filtros.cursoBase } : {}),
   colunas: colunas.join(','),
 })
 
@@ -53,7 +54,7 @@ const estiloDeCampo = {
 }
 
 export default function PlanilhaDaBase({ gres = [], cursoId = null, cursoNome = '' }) {
-  const [filtros, setFiltros] = useState({ gre: '', inep: '', nome: '', situacao: '', inscricao: '' })
+  const [filtros, setFiltros] = useState({ gre: '', inep: '', nome: '', situacao: '', inscricao: '', cursoBase: '' })
   const [colunas, setColunas] = useState(null)
   const [dados, setDados] = useState(null)
   const [pagina, setPagina] = useState(1)
@@ -117,8 +118,10 @@ export default function PlanilhaDaBase({ gres = [], cursoId = null, cursoNome = 
   const catalogo = dados?.opcoes?.colunas || []
   const situacoes = dados?.opcoes?.situacoes || []
   const inscricoes = dados?.opcoes?.inscricoes || []
+  const cursosDoFiltro = dados?.opcoes?.cursos || []
+  const nomeDoCursoBase = cursosDoFiltro.find((c) => String(c.id) === String(filtros.cursoBase))?.nome
   const visiveis = dados?.colunas || []
-  const temFiltro = Boolean(filtros.gre || filtros.inep || filtros.nome || filtros.situacao || filtros.inscricao)
+  const temFiltro = Boolean(filtros.gre || filtros.inep || filtros.nome || filtros.situacao || filtros.inscricao || filtros.cursoBase)
 
   const paginas = useMemo(
     () => Math.max(1, Math.ceil((dados?.total || 0) / (dados?.porPagina || 25))),
@@ -142,7 +145,7 @@ export default function PlanilhaDaBase({ gres = [], cursoId = null, cursoNome = 
   }
 
   const limpar = () => {
-    setFiltros({ gre: '', inep: '', nome: '', situacao: '', inscricao: '' })
+    setFiltros({ gre: '', inep: '', nome: '', situacao: '', inscricao: '', cursoBase: '' })
     setNomeDigitado('')
     setPagina(1)
   }
@@ -249,14 +252,14 @@ export default function PlanilhaDaBase({ gres = [], cursoId = null, cursoNome = 
             <button type="button" className={caixa} style={{ borderColor: 'var(--p-cartaoBorda)' }}
               onClick={() => { setFiltros((f) => ({ ...f, inscricao: 'inscrito' })); setPagina(1) }}
               title="Mostrar na tabela quem está inscrito">
-              <span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>Inscritos em algum curso</span>
+              <span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>{nomeDoCursoBase ? 'Inscritos neste curso' : 'Inscritos em algum curso'}</span>
               <span className="text-[22px] font-bold tabular-nums" style={{ color: 'var(--p-texto)' }}>{r.inscritos.toLocaleString('pt-BR')}</span>
             </button>
             <button type="button" className={caixa}
               style={{ borderColor: 'var(--p-r4)', background: filtros.inscricao === 'nao_inscrito' ? 'var(--p-trilho)' : 'transparent' }}
               onClick={() => { setFiltros((f) => ({ ...f, inscricao: 'nao_inscrito' })); setPagina(1) }}
               title="Mostrar na tabela quem não se inscreveu">
-              <span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>Não se inscreveram em nenhum curso</span>
+              <span className="text-[12px]" style={{ color: 'var(--p-texto3)' }}>{nomeDoCursoBase ? 'Não se inscreveram neste curso' : 'Não se inscreveram em nenhum curso'}</span>
               <span className="text-[22px] font-bold tabular-nums" style={{ color: 'var(--p-r5)' }}>
                 {r.semInscricao.toLocaleString('pt-BR')}
                 <span className="ml-1.5 text-[13px] font-medium" style={{ color: 'var(--p-texto3)' }}>{pctSem.toLocaleString('pt-BR')}%</span>
@@ -267,7 +270,7 @@ export default function PlanilhaDaBase({ gres = [], cursoId = null, cursoNome = 
       })()}
 
       {/* ─── Filtros ─── */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-4">
         <Campo rotulo="GRE">
           <select
             value={filtros.gre}
@@ -312,6 +315,22 @@ export default function PlanilhaDaBase({ gres = [], cursoId = null, cursoNome = 
         {/* Inscrição é outra pergunta que situação do cadastro: dá para ter
             cadastro confirmado sem estar em curso nenhum, e o contrário
             também. Dois seletores, e não um só com as opções misturadas. */}
+        {/* O curso muda a pergunta da inscricao: com ele, "inscrito" e
+            "sem inscricao" passam a valer para este curso, e os quadros acima
+            tambem. */}
+        <Campo rotulo="Curso">
+          <select
+            value={filtros.cursoBase}
+            onChange={(e) => { setFiltros((f) => ({ ...f, cursoBase: e.target.value })); setPagina(1) }}
+            className="px-3 py-2 rounded-lg text-[13px] border" style={estiloDeCampo}
+          >
+            <option value="">Todos os cursos</option>
+            {cursosDoFiltro.map((c) => (
+              <option key={c.id} value={c.id}>{c.nome} ({c.inscritos.toLocaleString('pt-BR')})</option>
+            ))}
+          </select>
+        </Campo>
+
         <Campo rotulo="Inscrição">
           <select
             value={filtros.inscricao}
@@ -319,7 +338,11 @@ export default function PlanilhaDaBase({ gres = [], cursoId = null, cursoNome = 
             className="px-3 py-2 rounded-lg text-[13px] border" style={estiloDeCampo}
           >
             <option value="">Todas</option>
-            {inscricoes.map((i) => <option key={i.chave} value={i.chave}>{i.rotulo}</option>)}
+            {inscricoes.map((i) => (
+              <option key={i.chave} value={i.chave}>
+                {filtros.cursoBase ? (i.chave === 'inscrito' ? 'Inscrito neste curso' : 'Não inscrito neste curso') : i.rotulo}
+              </option>
+            ))}
           </select>
         </Campo>
       </div>

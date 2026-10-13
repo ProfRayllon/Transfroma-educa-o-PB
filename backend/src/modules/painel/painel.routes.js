@@ -381,11 +381,12 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
         situacao: String(req.query.situacao || '') || null,
         inscricao: String(req.query.inscricao || '') || null,
         curso: normalizarCurso(req.query.curso),
+        cursoBase: normalizarCurso(req.query.cursoBase),
         colunas: req.query.colunas,
         pagina: Number(req.query.pagina) || 1,
         porPagina: Number(req.query.porPagina) || 25,
       })
-      res.json({ ...dados, opcoes: planilha.opcoes() })
+      res.json({ ...dados, opcoes: { ...planilha.opcoes(), cursos: await planilha.cursosParaFiltro() } })
     } catch (erro) {
       const status = erro.statusCode || 500
       res.status(status).json({
@@ -410,6 +411,7 @@ module.exports = function criarRotasPainel({ authInterna, requireRole }) {
         situacao: String(req.query.situacao || '') || null,
         inscricao: String(req.query.inscricao || '') || null,
         curso: normalizarCurso(req.query.curso),
+        cursoBase: normalizarCurso(req.query.cursoBase),
         colunas: req.query.colunas,
       })
 
