@@ -9,7 +9,10 @@ cd "$APP_DIR"
 git fetch origin main
 git reset --hard origin/main
 
-docker compose up -d --build --force-recreate
+# Um build de cada vez: os dois em paralelo, com o sistema no ar, passavam da
+# memoria da VPS (~1 GB) e travavam a maquina.
+COMPOSE_PARALLEL_LIMIT=1 docker compose build
+docker compose up -d --force-recreate
 
 attempts=20
 for i in $(seq 1 "$attempts"); do
