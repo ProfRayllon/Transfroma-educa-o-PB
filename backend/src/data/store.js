@@ -274,17 +274,27 @@ function mapNotificationRow(row) {
   }
 }
 
+/**
+ * Data no horario de parede do banco (America/Sao_Paulo), sem fuso no texto.
+ *
+ * Antes saia por toISOString(), que converte para UTC: "17:53" gravado virava
+ * "20:53" na resposta. A tela le esse texto sem fuso como hora local, entao o
+ * formulario de inscricoes abria tres horas adiantado -- e salvar sem mexer
+ * gravava o valor errado, empurrando o horario mais tres horas a cada edicao.
+ *
+ * Os componentes locais saem no fuso do processo, que o docker-compose fixa
+ * em America/Sao_Paulo, o mesmo do banco.
+ */
 function formatDate(value, includeTime = false) {
   if (!value) return null
 
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
 
-  if (includeTime) {
-    return date.toISOString().slice(0, 19)
-  }
-
-  return date.toISOString().slice(0, 10)
+  const dois = (n) => String(n).padStart(2, '0')
+  const dia = `${date.getFullYear()}-${dois(date.getMonth() + 1)}-${dois(date.getDate())}`
+  if (!includeTime) return dia
+  return `${dia}T${dois(date.getHours())}:${dois(date.getMinutes())}:${dois(date.getSeconds())}`
 }
 
 async function createPool() {
