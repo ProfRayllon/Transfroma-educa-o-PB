@@ -1,6 +1,7 @@
 'use strict'
 
 const repo = require('./cursistas.repo')
+const obrigatorios = require('./cursistas.obrigatorios')
 const { padronizarGre } = require('../../shared/gre')
 const { getPool, requireMysql } = require('../../shared/db')
 const { normalizeCpf, isValidCpf } = require('../../shared/cpf')
@@ -214,6 +215,8 @@ async function importar({ arquivo, actor, req }) {
         ))
         await repo.substituirVinculos(gravados, conexao)
       }
+      // Os cadastros novos da planilha entram nos cursos obrigatorios.
+      await obrigatorios.sincronizar({ conexao })
       await conexao.commit()
     } catch (error) {
       await conexao.rollback()

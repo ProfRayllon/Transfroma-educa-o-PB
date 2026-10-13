@@ -52,6 +52,19 @@ async function garantirEsquema() {
     )
   }
 
+  /**
+   * Curso de inscricao obrigatoria: todo cursista ativo e inscrito nele e nao
+   * pode cancelar. A coluna mora em `courses`, mas quem a usa e este modulo --
+   * ver cursistas.obrigatorios.js.
+   */
+  const [[obrigatoria]] = await pool.query(
+    `SELECT COUNT(*) AS existe FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'courses' AND COLUMN_NAME = 'inscricao_obrigatoria'`
+  )
+  if (!Number(obrigatoria.existe)) {
+    await pool.execute('ALTER TABLE courses ADD COLUMN inscricao_obrigatoria TINYINT(1) NOT NULL DEFAULT 0')
+  }
+
   await padronizarGresGravadas(pool, 'cursista_vinculos')
 }
 

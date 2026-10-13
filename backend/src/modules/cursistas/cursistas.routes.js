@@ -7,6 +7,8 @@ const auth = require('./cursistas.auth')
 const repo = require('./cursistas.repo')
 const service = require('./cursistas.service')
 const admin = require('./cursistas.admin')
+const inscricoesAdmin = require('./cursistas.inscricoesAdmin')
+const obrigatorios = require('./cursistas.obrigatorios')
 const importacao = require('./cursistas.import')
 const {
   exportarInscritos,
@@ -264,6 +266,42 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
   router.get('/admin/cursistas/:id', ...soAdmin, tratar(async (req, res) => {
     const actor = await getUsuarioInterno(req.user.id)
     res.json(await admin.detalhar({ id: idDaRota(req), actor, req }))
+  }))
+
+  // Inscricao pelo administrador, em qualquer curso, aberto ou nao.
+  router.get('/admin/cursos-para-inscricao', ...soAdmin, tratar(async (_req, res) => {
+    res.json(await inscricoesAdmin.cursosDisponiveis())
+  }))
+
+  // Cursos de inscricao obrigatoria: liga/desliga e lista.
+  router.get('/admin/cursos-obrigatorios', ...soAdmin, tratar(async (_req, res) => {
+    res.json(await obrigatorios.listar())
+  }))
+
+  router.put('/admin/cursos/:courseId/obrigatorio', ...soAdmin, tratar(async (req, res) => {
+    const actor = await getUsuarioInterno(req.user.id)
+    res.json(await obrigatorios.definir({
+      courseId: Number(req.params.courseId), ativo: req.body?.ativo === true, actor, req,
+    }))
+  }))
+
+  router.get('/admin/cursistas/:id/inscricoes', ...soAdmin, tratar(async (req, res) => {
+    res.json(await inscricoesAdmin.listar(idDaRota(req)))
+  }))
+
+  router.post('/admin/cursistas/:id/inscricoes', ...soAdmin, tratar(async (req, res) => {
+    const actor = await getUsuarioInterno(req.user.id)
+    res.status(201).json(await inscricoesAdmin.inscrever({
+      cursistaId: idDaRota(req), courseId: Number(req.body?.courseId), actor, req,
+    }))
+  }))
+
+  router.delete('/admin/cursistas/:id/inscricoes/:courseId', ...soAdmin, tratar(async (req, res) => {
+    const actor = await getUsuarioInterno(req.user.id)
+    await inscricoesAdmin.cancelar({
+      cursistaId: idDaRota(req), courseId: Number(req.params.courseId), actor, req,
+    })
+    res.status(204).end()
   }))
 
   router.put('/admin/cursistas/:id', ...soAdmin, tratar(async (req, res) => {

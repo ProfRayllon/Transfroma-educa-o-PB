@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Info, Plus, Trash2 } from 'lucide-react'
 import Modal from '../ui/Modal'
+import InscricoesDoCursista from './InscricoesDoCursista'
 import api, { getApiErrorMessage } from '../../lib/api'
 
 /**
@@ -360,6 +361,10 @@ export default function FormularioCursista({ open, cursistaId, onClose, onSalvo 
               ))}
             </div>
           </div>
+
+          {/* Inscricoes: so na edicao, e salvas na hora -- nao dependem do
+              botao Salvar do cadastro. */}
+          {editando && <InscricoesDoCursista cursistaId={cursistaId} />}
         </form>
       )}
     </Modal>

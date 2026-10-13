@@ -88,3 +88,18 @@ export function duracaoCurso(curso) {
   }
   return null
 }
+
+/**
+ * Se um conteudo de producao esta concluido: aprovado pela supervisao e pela
+ * coordenacao, e pelo revisor quando o curso tem revisores.
+ *
+ * Regra UNICA para a tela de Producao e para o cartao em Cursos. Antes o cartao
+ * exigia tambem o status do professor em "concluido"; um conteudo aprovado com
+ * o professor ainda em outro status aparecia concluido na Producao e nao subia
+ * a porcentagem do curso.
+ */
+export function conteudoConcluido(material, temRevisores = false) {
+  return material?.supervisorStatus === 'aprovado'
+    && material?.coordinatorStatus === 'aprovado'
+    && (!temRevisores || material?.revisorStatus === 'aprovado')
+}

@@ -92,6 +92,7 @@ module.exports = function criarRotasPublicas() {
     const [rows] = await getPool().query(
       `SELECT c.id, c.name, c.primary_trail, c.secondary_trail, c.total_sessions,
               c.workload_hours, c.enrollment_opens_at, c.enrollment_closes_at,
+              c.inscricao_obrigatoria,
               -- Mesmo criterio da rota de imagem: se o data URI nao for de
               -- imagem, a rota recusa e o front mostraria capa quebrada.
               (c.image LIKE 'data:image/%') AS tem_imagem,
@@ -123,6 +124,7 @@ module.exports = function criarRotasPublicas() {
       totalSessions: row.total_sessions,
       workloadHours: row.workload_hours ?? null,
       resumo: row.resumo || null,
+      obrigatoria: Boolean(Number(row.inscricao_obrigatoria)),
       hasImage: Boolean(Number(row.tem_imagem)),
       /**
        * Marca de versao da capa, para o front variar a URL da imagem.

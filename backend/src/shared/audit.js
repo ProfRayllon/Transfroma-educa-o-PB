@@ -37,6 +37,12 @@ const ACOES = {
   // Abrir o cadastro completo expoe o CPF inteiro na tela. Registrar o acesso e
   // o que a LGPD pede de quem trata dado pessoal: saber quem viu o que.
   CADASTRO_ABERTO_ADMIN: 'cadastro_aberto_admin',
+  // Inscricao feita ou desfeita pelo administrador, fora da janela se preciso.
+  // Separada da do cursista para a trilha dizer quem inscreveu.
+  INSCRICAO_CRIADA_ADMIN: 'inscricao_criada_admin',
+  INSCRICAO_CANCELADA_ADMIN: 'inscricao_cancelada_admin',
+  CURSO_OBRIGATORIO_LIGADO: 'curso_obrigatorio_ligado',
+  CURSO_OBRIGATORIO_DESLIGADO: 'curso_obrigatorio_desligado',
 }
 
 function clientIp(req) {

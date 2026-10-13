@@ -116,7 +116,9 @@ async function listarMinhasInscricoes(cursistaId) {
             -- banco, pela mesma razao da situacao do catalogo: e esta a regra
             -- que cancelarInscricao aplica, e calcular de outro jeito no front
             -- faria a tela oferecer um botao que o servidor recusaria.
-            (NOW() BETWEEN c.enrollment_opens_at AND c.enrollment_closes_at) AS pode_cancelar
+            (NOW() BETWEEN c.enrollment_opens_at AND c.enrollment_closes_at)
+              AND NOT c.inscricao_obrigatoria AS pode_cancelar,
+            c.inscricao_obrigatoria
      FROM inscricoes i
      JOIN courses c ON c.id = i.course_id
      WHERE i.cursista_id = ?
@@ -136,6 +138,7 @@ async function listarMinhasInscricoes(cursistaId) {
     imageVersion: Number(row.versao_capa || 0),
     enrollmentClosesAt: row.enrollment_closes_at,
     podeCancelar: Boolean(Number(row.pode_cancelar)),
+    obrigatoria: Boolean(Number(row.inscricao_obrigatoria)),
     edition: row.edition,
     status: row.status,
     enrolledAt: row.enrolled_at,
@@ -199,11 +202,15 @@ async function cancelarInscricao({ cursistaId, courseId, req }) {
   requireMysql()
 
   const [rows] = await getPool().execute(
-    `SELECT (NOW() BETWEEN enrollment_opens_at AND enrollment_closes_at) AS aberto
+    `SELECT (NOW() BETWEEN enrollment_opens_at AND enrollment_closes_at) AS aberto,
+            inscricao_obrigatoria
      FROM courses WHERE id = ? LIMIT 1`,
     [courseId]
   )
   if (!rows[0]) throw erro(404, 'Curso nao encontrado.')
+  if (Number(rows[0].inscricao_obrigatoria)) {
+    throw erro(400, 'A inscricao neste curso e obrigatoria e nao pode ser cancelada.')
+  }
   if (!Number(rows[0].aberto)) {
     throw erro(400, 'O prazo de inscricao deste curso ja encerrou.')
   }
