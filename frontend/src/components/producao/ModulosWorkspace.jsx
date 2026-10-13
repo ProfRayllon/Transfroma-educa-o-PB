@@ -13,6 +13,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useData } from '../../context/DataContext'
 import { useTheme } from '../../context/ThemeContext'
 import api, { getApiErrorMessage } from '../../lib/api'
+import { conteudoConcluido } from '../../lib/curso'
 import {
   PROFESSOR_STATUS_OPTIONS,
   SUPERVISOR_STATUS_OPTIONS,
@@ -742,10 +743,7 @@ export default function ModulosWorkspace({ course }) {
     let pendentes = 0
 
     courseMaterials.forEach(m => {
-      const aprovado = m.supervisorStatus === 'aprovado'
-        && m.coordinatorStatus === 'aprovado'
-        && (!hasRevisors || m.revisorStatus === 'aprovado')
-      if (aprovado) { concluidos += 1; return }
+      if (conteudoConcluido(m, hasRevisors)) { concluidos += 1; return }
       // Entregue pelo professor, aguardando supervisao/coordenacao/revisao.
       if (m.status === 'concluido') { emRevisao += 1; return }
       if (m.status === 'em_execucao' || m.status === 'em_ajustes') { emProducao += 1; return }

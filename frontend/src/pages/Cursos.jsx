@@ -26,7 +26,7 @@ import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 import api, { getApiErrorMessage } from '../lib/api'
 import { mandaEmCursos } from '../lib/perfil'
-import { quandoInscricao } from '../lib/curso'
+import { conteudoConcluido, quandoInscricao } from '../lib/curso'
 
 const PRIMARY_TRAILS = {
   'TRILHAS TRANSVERSAIS': [
@@ -239,7 +239,8 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
 
   const courseMaterials = materials.filter((material) => materialMatchesCourse(material, course))
   const totalContents = courseMaterials.length
-  const completedSessions = courseMaterials.filter((material) => material.status === 'concluido' && material.supervisorStatus === 'aprovado' && material.coordinatorStatus === 'aprovado').length
+  const temRevisores = (course.revisors?.length || 0) > 0
+  const completedSessions = courseMaterials.filter((material) => conteudoConcluido(material, temRevisores)).length
   const totalModules = new Set(courseMaterials.map(m => m.module || 1)).size
   const progress = totalContents > 0 ? Math.round((completedSessions / totalContents) * 100) : 0
 
@@ -1067,7 +1068,10 @@ export default function Cursos() {
   const courseContentCount = (course) =>
     materials.filter((material) => materialMatchesCourse(material, course)).length
 
-  const totalCompleted = materials.filter(m => m.status === 'concluido' && m.supervisorStatus === 'aprovado' && m.coordinatorStatus === 'aprovado').length
+  const totalCompleted = materials.filter((m) => {
+    const curso = courses.find((c) => materialMatchesCourse(m, c))
+    return conteudoConcluido(m, (curso?.revisors?.length || 0) > 0)
+  }).length
   const totalSessions = materials.length
   const overallProgress = totalSessions > 0 ? Math.round((totalCompleted / totalSessions) * 100) : 0
 
