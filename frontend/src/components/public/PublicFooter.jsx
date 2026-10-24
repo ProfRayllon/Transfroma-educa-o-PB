@@ -28,6 +28,12 @@ export default function PublicFooter() {
             </Link>
           </div>
           <div>
+            <span className="block text-xs font-black uppercase tracking-wider text-[#a855f7]">Certificados</span>
+            <Link className="font-bold text-[#1c1033] hover:text-[#7336C0] hover:underline" to="/validar">
+              Validar um certificado
+            </Link>
+          </div>
+          <div>
             <span className="block text-xs font-black uppercase tracking-wider text-[#a855f7]">E-mail</span>
             <a className="font-bold text-[#1c1033] hover:text-[#7336C0] hover:underline" href="mailto:gefdp@see.pb.gov.br">gefdp@see.pb.gov.br</a>
           </div>

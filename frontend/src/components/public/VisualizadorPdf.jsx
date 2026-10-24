@@ -12,7 +12,7 @@ import { Download, ExternalLink, X } from 'lucide-react'
  * desenham PDF dentro de iframe. Por isso a barra sempre oferece "Baixar" e
  * "Abrir em nova aba", e o rodape avisa -- a pessoa nunca fica sem caminho.
  */
-export default function VisualizadorPdf({ arquivo, titulo, aoFechar }) {
+export default function VisualizadorPdf({ arquivo, titulo, aoFechar, nomeArquivo = null }) {
   useEffect(() => {
     if (!arquivo) return undefined
     const anterior = document.body.style.overflow
@@ -27,7 +27,8 @@ export default function VisualizadorPdf({ arquivo, titulo, aoFechar }) {
 
   if (!arquivo) return null
 
-  const nomeDoArquivo = arquivo.split('/').pop()
+  // Endereco blob: (PDF gerado na hora) nao tem nome no caminho; quem chama informa.
+  const nomeDoArquivo = nomeArquivo || arquivo.split('/').pop()
   const botao = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-bold transition'
 
   return (

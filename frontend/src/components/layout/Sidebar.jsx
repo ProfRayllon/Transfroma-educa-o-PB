@@ -8,7 +8,7 @@ import { useAvatar } from '../../context/AvatarContext'
 import {
   LayoutDashboard, BookOpen, ShieldCheck, ClipboardList,
   ClipboardCheck, LogOut, ChevronLeft, ChevronRight, ChevronDown, Camera, Sun, Moon, Users, Headphones,
-  GraduationCap, Star, Database,
+  GraduationCap, Star, Database, Award,
 } from 'lucide-react'
 
 // Menu reduzido ao que cada perfil realmente usa no dia a dia. Cursos e a porta
@@ -92,6 +92,7 @@ const navItems = [
     contador: (_resumo, suporte) => suporte?.pendentes || 0,
   },
   { to: '/cursistas', icon: Users, label: 'Cursistas', visible: (user) => user?.role === 'administrador' },
+  { to: '/certificados', icon: Award, label: 'Certificados', visible: (user) => user?.role === 'administrador' },
   { to: '/acessos', icon: ShieldCheck, label: 'Colaboradores', visible: (user) => ['administrador', 'gerencia'].includes(user?.role) },
 ].filter((item) => item.to !== '/frequencia')
 

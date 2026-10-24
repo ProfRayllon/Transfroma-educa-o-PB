@@ -1517,6 +1517,7 @@ const criarRotasPublicas = require('./modules/publico/publico.routes')
 const criarRotasPainel = require('./modules/painel/painel.routes')
 const criarRotasResultados = require('./modules/resultados/resultados.routes')
 const criarRotasSuporte = require('./modules/suporte/suporte.routes')
+const criarRotasCertificados = require('./modules/certificados/certificados.routes')
 
 app.use('/api/cursistas', criarRotasCursistas({
   authInterna: auth,
@@ -1557,6 +1558,14 @@ app.use('/api/suporte', criarRotasSuporte({
   authInterna: auth,
   getUsuarioInterno: (id) => store.getUserById(id),
   listarUsuariosPorPerfis: (roles) => store.listUsersByRoles(roles),
+}))
+
+// Certificados: configuracao e base pelo administrador, download pelo cursista
+// logado e validacao publica pelo codigo -- as tres portas vivem no modulo.
+app.use('/api/certificados', criarRotasCertificados({
+  authInterna: auth,
+  requireRole,
+  getUsuarioInterno: (id) => store.getUserById(id),
 }))
 
 // Unico modulo sem autenticacao, e por isso montado separado dos demais: fica
