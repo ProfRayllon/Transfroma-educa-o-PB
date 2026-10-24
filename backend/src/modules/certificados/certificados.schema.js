@@ -67,6 +67,24 @@ async function garantirEsquema() {
         FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
+
+  /**
+   * Codigo com letras do curso (LEG-A7K9-X2M4), alem do numerico dos
+   * certificados antigos (9999-9999-9999). VARCHAR(20) cabe os dois; o
+   * MODIFY roda a cada boot e e inofensivo depois da primeira vez.
+   */
+  await pool.query('ALTER TABLE certificados MODIFY codigo VARCHAR(20) NOT NULL')
+  await garantirColuna(pool, 'certificado_config', 'prefixo_codigo', 'VARCHAR(4) DEFAULT NULL AFTER texto')
+}
+
+/** Coluna nova em tabela que ja existe: o CREATE TABLE IF NOT EXISTS nao a cria. */
+async function garantirColuna(pool, tabela, coluna, definicao) {
+  const [[c]] = await pool.query(
+    `SELECT COUNT(*) AS existe FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+    [tabela, coluna]
+  )
+  if (!Number(c.existe)) await pool.execute(`ALTER TABLE ${tabela} ADD COLUMN ${coluna} ${definicao}`)
 }
 
 module.exports = { garantirEsquema }

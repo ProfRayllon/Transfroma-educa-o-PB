@@ -139,8 +139,14 @@ async function gerarPdf(dados) {
   const pagina = pdf.addPage([LARGURA, ALTURA])
 
   if (dados.arte?.length) {
+    // Copia para um bloco proprio. O Buffer que o mysql2 devolve e um recorte de
+    // um pacote maior (byteOffset != 0), e o leitor de JPEG do pdf-lib olha o
+    // ArrayBuffer inteiro desde o inicio -- nao achava o FFD8 e falhava com
+    // "SOI not found". Lido de arquivo o recorte comeca no zero e o erro some,
+    // por isso so apareceu em producao.
+    const arte = new Uint8Array(dados.arte)
     // JPEG entra como esta, sem decodificar: e o que deixa a geracao barata.
-    const imagem = dados.tipoArte === 'image/png' ? await pdf.embedPng(dados.arte) : await pdf.embedJpg(dados.arte)
+    const imagem = dados.tipoArte === 'image/png' ? await pdf.embedPng(arte) : await pdf.embedJpg(arte)
     pagina.drawImage(imagem, { x: 0, y: 0, width: LARGURA, height: ALTURA })
   }
 
@@ -153,7 +159,7 @@ async function gerarPdf(dados) {
   const base = String(dados.urlValidacao || '').replace(/\/+$/, '')
   cartao(pagina, { x: 143, y: 252, l: 337, a: 151, raio: 24, cor: BRANCO })
   const qr = await QRCode.toBuffer(`${base}/${dados.codigo}`, { type: 'png', margin: 0, width: 360, errorCorrectionLevel: 'M' })
-  const imagemQr = await pdf.embedPng(qr)
+  const imagemQr = await pdf.embedPng(new Uint8Array(qr))
   const ladoQr = 112
   pagina.drawImage(imagemQr, { x: 158 * E, y: ALTURA - (271 + ladoQr) * E, width: ladoQr * E, height: ladoQr * E })
 

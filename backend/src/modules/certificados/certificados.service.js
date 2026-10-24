@@ -28,18 +28,44 @@ function urlDeValidacao() {
   return `${site}/validar`
 }
 
-/** "123456789012" ou "1234 5678 9012" -> "1234-5678-9012"; outra coisa, null. */
+/**
+ * Dois formatos de codigo convivem:
+ *  - o do sistema, com o prefixo do curso: LEG-A7K9-X2M4;
+ *  - o numerico dos certificados emitidos antes (Google): 9999-9999-9999.
+ * Aceita digitado de qualquer jeito (minusculas, sem hifen, com espacos) e
+ * devolve na forma canonica; o que nao for nenhum dos dois, null.
+ */
 function normalizarCodigo(valor) {
-  const digitos = String(valor ?? '').replace(/\D/g, '')
-  if (digitos.length !== 12) return null
-  return `${digitos.slice(0, 4)}-${digitos.slice(4, 8)}-${digitos.slice(8)}`
+  const limpo = String(valor ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+  if (/^\d{12}$/.test(limpo)) return `${limpo.slice(0, 4)}-${limpo.slice(4, 8)}-${limpo.slice(8)}`
+  const m = /^([A-Z]{2,4})([A-Z0-9]{4})([A-Z0-9]{4})$/.exec(limpo)
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : null
 }
 
-/** Mesmo formato dos certificados que ja circulam: 9999-9999-9999. */
-function novoCodigo() {
-  let digitos = ''
-  for (let i = 0; i < 12; i += 1) digitos += crypto.randomInt(0, 10)
-  return normalizarCodigo(digitos)
+// Sem 0/O, 1/I/L: quem digita o codigo do papel nao confunde.
+const ALFABETO = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'
+const PALAVRAS_VAZIAS = new Set(['A', 'O', 'AS', 'OS', 'DE', 'DA', 'DO', 'DAS', 'DOS', 'E', 'EM', 'NA', 'NO', 'NAS', 'NOS', 'PARA', 'COM', 'POR', 'AO', 'AOS', 'UM', 'UMA', 'FOR', 'THE', 'OF'])
+
+/**
+ * Prefixo sugerido a partir do nome do curso: as iniciais das palavras que
+ * importam (Analise de Dados e Gestao -> ADG). Com menos de tres palavras,
+ * completa com as letras da primeira (Legislacao Educacional -> LEG).
+ */
+function prefixoSugerido(nome) {
+  const palavras = String(nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
+    .split(/[^A-Z]+/).filter((p) => p && !PALAVRAS_VAZIAS.has(p))
+  if (!palavras.length) return 'CRT'
+  if (palavras.length >= 3) return palavras.slice(0, 3).map((p) => p[0]).join('')
+  return palavras[0].slice(0, 3).padEnd(3, 'X')
+}
+
+const normalizarPrefixo = (valor) => String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4)
+
+function novoCodigo(prefixo) {
+  let corpo = ''
+  for (let i = 0; i < 8; i += 1) corpo += ALFABETO[crypto.randomInt(0, ALFABETO.length)]
+  return `${prefixo}-${corpo.slice(0, 4)}-${corpo.slice(4)}`
 }
 
 async function cursoExiste(courseId) {
@@ -82,7 +108,7 @@ async function obterConfig(courseId) {
   requireMysql()
   const curso = await cursoExiste(courseId)
   const [[cfg]] = await getPool().execute(
-    `SELECT liberado, nome_curso, periodo, carga_horaria, texto, arte_tipo, arte_nome, arte_tamanho,
+    `SELECT liberado, nome_curso, periodo, carga_horaria, texto, prefixo_codigo, arte_tipo, arte_nome, arte_tamanho,
             atualizado_por, atualizado_em
        FROM certificado_config WHERE course_id = ?`,
     [courseId]
@@ -103,6 +129,7 @@ async function obterConfig(courseId) {
     cargaHoraria: cfg?.carga_horaria ?? curso.workload_hours ?? 30,
     texto: cfg?.texto ?? TEXTO_PADRAO,
     textoPadrao: TEXTO_PADRAO,
+    prefixoCodigo: cfg?.prefixo_codigo || prefixoSugerido(cfg?.nome_curso || curso.name),
     arte: cfg?.arte_tamanho ? { nome: cfg.arte_nome, tipo: cfg.arte_tipo, tamanho: cfg.arte_tamanho } : null,
     atualizadoPor: cfg?.atualizado_por ?? null,
     atualizadoEm: cfg?.atualizado_em ?? null,
@@ -122,7 +149,9 @@ function lerCamposDaConfig(corpo = {}) {
   if (!nomeCurso) throw erro(400, 'Informe o nome do curso como deve sair no certificado.')
   const conteudo = String(corpo.texto ?? '').trim().slice(0, 2000)
   if (!conteudo) throw erro(400, 'O texto do certificado nao pode ficar vazio.')
-  return { nomeCurso, periodo: texto(corpo.periodo, 150), cargaHoraria: carga, texto: conteudo }
+  const prefixoCodigo = normalizarPrefixo(corpo.prefixoCodigo) || prefixoSugerido(nomeCurso)
+  if (prefixoCodigo.length < 2) throw erro(400, 'O prefixo do codigo precisa de 2 a 4 letras.')
+  return { nomeCurso, periodo: texto(corpo.periodo, 150), cargaHoraria: carga, texto: conteudo, prefixoCodigo }
 }
 
 async function salvarConfig({ courseId, corpo, actor, req }) {
@@ -137,11 +166,12 @@ async function salvarConfig({ courseId, corpo, actor, req }) {
   }
 
   await getPool().execute(
-    `INSERT INTO certificado_config (course_id, liberado, nome_curso, periodo, carga_horaria, texto, atualizado_por)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO certificado_config (course_id, liberado, nome_curso, periodo, carga_horaria, texto, prefixo_codigo, atualizado_por)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE liberado = VALUES(liberado), nome_curso = VALUES(nome_curso), periodo = VALUES(periodo),
-       carga_horaria = VALUES(carga_horaria), texto = VALUES(texto), atualizado_por = VALUES(atualizado_por)`,
-    [courseId, liberado, campos.nomeCurso, campos.periodo, campos.cargaHoraria, campos.texto, actor?.name || null]
+       carga_horaria = VALUES(carga_horaria), texto = VALUES(texto), prefixo_codigo = VALUES(prefixo_codigo),
+       atualizado_por = VALUES(atualizado_por)`,
+    [courseId, liberado, campos.nomeCurso, campos.periodo, campos.cargaHoraria, campos.texto, campos.prefixoCodigo, actor?.name || null]
   )
   await registrar({
     actorType: 'admin', actorId: actor?.id || null, actorLabel: actor?.name || null,
@@ -250,7 +280,7 @@ async function previa({ courseId, corpo }) {
     courseId,
     nome: 'Maria José da Silva Exemplo',
     cpf: '12345678909',
-    codigo: '0000-0000-0000',
+    codigo: `${config.prefixoCodigo}-0000-0000`,
     config,
   })
 }
@@ -321,24 +351,28 @@ function lerRegistrosDaBase(arquivo) {
         if (!mapa[campo] && aceitas.includes(chave)) mapa[campo] = original
       }
     }
-    if (mapa.cpf && mapa.nome) {
+    if (mapa.cpf) {
       if (tabela.registros.length > MAX_LINHAS) throw erro(400, `A planilha tem ${tabela.registros.length} linhas; o limite e ${MAX_LINHAS}.`)
       return {
         temCodigo: Boolean(mapa.codigo),
         registros: tabela.registros.map((r, i) => ({
           linha: i + 2,
           cpfBruto: r[mapa.cpf],
-          nome: r[mapa.nome],
+          nome: mapa.nome ? r[mapa.nome] : '',
           codigo: mapa.codigo ? r[mapa.codigo] : '',
         })),
       }
     }
   }
-  throw erro(400, 'A planilha precisa das colunas CPF e NOME_COMPLETO (CODIGO_VALIDACAO e opcional).')
+  throw erro(400, 'A planilha precisa da coluna CPF (NOME_COMPLETO e opcional: sem ela, vale o nome do cadastro).')
 }
 
 /**
  * Le a base e aplica (ou so simula, com `gravar: false`).
+ *
+ * O nome vem da planilha quando ela traz; senao, do cadastro do cursista. O
+ * codigo e gerado pelo sistema com o prefixo do curso -- a coluna de codigo so
+ * serve para trazer certificados emitidos fora dele, que ja circulam.
  *
  * Quem ja tinha certificado mantem o codigo; o nome e atualizado e, se estava
  * revogado, volta a valer. Com `completa`, quem nao veio na planilha e
@@ -347,10 +381,14 @@ function lerRegistrosDaBase(arquivo) {
  */
 async function importarBase({ courseId, arquivo, completa = false, gravar = false, actor, req }) {
   requireMysql()
-  await cursoExiste(courseId)
+  const curso = await cursoExiste(courseId)
   const { registros, temCodigo } = lerRegistrosDaBase(arquivo)
 
   const pool = getPool()
+  const [[cfgCodigo]] = await pool.execute('SELECT prefixo_codigo, nome_curso FROM certificado_config WHERE course_id = ?', [courseId])
+  const prefixo = cfgCodigo?.prefixo_codigo || prefixoSugerido(cfgCodigo?.nome_curso || curso.name)
+  const [cadastros] = await pool.query('SELECT cpf, name FROM cursistas')
+  const nomeNoCadastro = new Map(cadastros.map((c) => [c.cpf, c.name]))
   const [existentes] = await pool.execute('SELECT id, cpf, nome, codigo, status FROM certificados WHERE course_id = ?', [courseId])
   const porCpf = new Map(existentes.map((e) => [e.cpf, e]))
   const [todosOsCodigos] = await pool.query('SELECT codigo, course_id, cpf FROM certificados')
@@ -359,15 +397,16 @@ async function importarBase({ courseId, arquivo, completa = false, gravar = fals
   const problemas = []
   const vistos = new Set()
   const gravacoes = []
-  const resumo = { linhas: registros.length, novos: 0, atualizados: 0, reativados: 0, inalterados: 0, revogados: 0, ignorados: 0, codigoMantido: 0 }
+  const resumo = { linhas: registros.length, novos: 0, atualizados: 0, reativados: 0, inalterados: 0, revogados: 0, ignorados: 0, codigoMantido: 0, nomeDoCadastro: 0 }
 
   for (const r of registros) {
     const cpf = normalizeCpf(r.cpfBruto)
-    const nome = texto(r.nome, 200)
+    let nome = texto(r.nome, 200)
+    if (!nome && nomeNoCadastro.has(cpf)) { nome = texto(nomeNoCadastro.get(cpf), 200); resumo.nomeDoCadastro += 1 }
     const recusar = (motivo) => { resumo.ignorados += 1; problemas.push({ linha: r.linha, cpf: maskCpf(cpf) || String(r.cpfBruto ?? '').slice(0, 20), motivo }) }
 
     if (!isValidCpf(cpf)) { recusar('CPF invalido'); continue }
-    if (!nome) { recusar('Nome vazio'); continue }
+    if (!nome) { recusar('CPF sem cadastro no sistema e sem nome na planilha'); continue }
     if (vistos.has(cpf)) { recusar('CPF repetido na planilha (vale a primeira linha)'); continue }
     vistos.add(cpf)
 
@@ -376,13 +415,13 @@ async function importarBase({ courseId, arquivo, completa = false, gravar = fals
     const codigoInformado = temCodigo && String(r.codigo ?? '').trim() ? normalizarCodigo(r.codigo) : null
 
     if (!atual) {
-      if (temCodigo && String(r.codigo ?? '').trim() && !codigoInformado) { recusar('Codigo de validacao fora do formato 9999-9999-9999'); continue }
+      if (temCodigo && String(r.codigo ?? '').trim() && !codigoInformado) { recusar('Codigo de validacao em formato desconhecido'); continue }
       if (codigoInformado) {
         const dono = donoDoCodigo.get(codigoInformado)
         if (dono && dono !== `${courseId}:${cpf}`) { recusar('Codigo de validacao ja usado por outro certificado'); continue }
         codigo = codigoInformado
       } else {
-        do { codigo = novoCodigo() } while (donoDoCodigo.has(codigo))
+        do { codigo = novoCodigo(prefixo) } while (donoDoCodigo.has(codigo))
       }
       donoDoCodigo.set(codigo, `${courseId}:${cpf}`)
       resumo.novos += 1
@@ -443,7 +482,7 @@ async function listarEmitidos({ courseId, busca = '', status = '', pagina = 1, p
   const termo = texto(busca, 100)
   if (termo) {
     const digitos = termo.replace(/\D/g, '')
-    if (digitos.length === 11 && /^[\d.\-\s]+$/.test(termo)) { onde.push('cpf = ?'); params.push(normalizeCpf(digitos)) } else if (/^\d{4}-?\d{4}-?\d{4}$/.test(termo)) { onde.push('codigo = ?'); params.push(normalizarCodigo(termo)) } else { onde.push('nome LIKE ?'); params.push(`%${termo}%`) }
+    if (digitos.length === 11 && /^[\d.\-\s]+$/.test(termo)) { onde.push('cpf = ?'); params.push(normalizeCpf(digitos)) } else if (normalizarCodigo(termo)) { onde.push('codigo = ?'); params.push(normalizarCodigo(termo)) } else { onde.push('nome LIKE ?'); params.push(`%${termo}%`) }
   }
   if (status === 'valido' || status === 'revogado') { onde.push('status = ?'); params.push(status) }
   const tamanho = Math.min(100, Math.max(1, Number(porPagina) || 25))

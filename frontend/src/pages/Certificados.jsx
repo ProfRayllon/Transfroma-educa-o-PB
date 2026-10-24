@@ -67,6 +67,7 @@ function AbaConfiguracao({ curso, config, aoSalvar, aoVerPdf }) {
       periodo: config.periodo || '',
       cargaHoraria: config.cargaHoraria || 30,
       texto: config.texto || '',
+      prefixoCodigo: config.prefixoCodigo || '',
       liberado: config.liberado,
     })
     setAviso(null)
@@ -157,7 +158,7 @@ function AbaConfiguracao({ curso, config, aoSalvar, aoVerPdf }) {
       </section>
 
       {/* Textos */}
-      <section className="grid gap-4 sm:grid-cols-[1fr_200px_120px]">
+      <section className="grid gap-4 sm:grid-cols-[1fr_190px_110px_110px]">
         <label className="block">
           <span className="mb-1 block text-xs font-semibold text-gray-600">Nome do curso no certificado</span>
           <input className="input-field" value={form.nomeCurso} onChange={mudar('nomeCurso')} maxLength={255} />
@@ -170,7 +171,21 @@ function AbaConfiguracao({ curso, config, aoSalvar, aoVerPdf }) {
           <span className="mb-1 block text-xs font-semibold text-gray-600">Carga horária (h)</span>
           <input className="input-field" type="number" min={1} max={999} value={form.cargaHoraria} onChange={mudar('cargaHoraria')} />
         </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-gray-600">Prefixo do código</span>
+          <input
+            className="input-field font-mono uppercase"
+            value={form.prefixoCodigo}
+            onChange={(e) => setForm((f) => ({ ...f, prefixoCodigo: e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4) }))}
+            maxLength={4}
+            placeholder="LEG"
+          />
+        </label>
       </section>
+      <p className="-mt-3 text-xs text-gray-500">
+        Os códigos são gerados pelo sistema: <span className="font-mono font-semibold text-gray-700">{form.prefixoCodigo || 'LEG'}-A7K9-X2M4</span>.
+        {' '}Trocar o prefixo vale para os próximos; quem já tem certificado mantém o código.
+      </p>
 
       <section>
         <div className="mb-1 flex items-end justify-between gap-2">
@@ -220,6 +235,7 @@ function Resumo({ resultado }) {
   const itens = [
     ['Linhas lidas', r.linhas],
     ['Novos certificados', r.novos],
+    ['Nome do cadastro', r.nomeDoCadastro || 0],
     ['Nomes atualizados', r.atualizados],
     ['Reativados', r.reativados],
     ['Sem alteração', r.inalterados],
@@ -309,13 +325,12 @@ function AbaBase({ curso, aoAtualizar }) {
   return (
     <div className="space-y-5">
       <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600">
-        <p className="font-semibold text-gray-800">Planilha .xlsx ou .csv com as colunas:</p>
+        <p className="font-semibold text-gray-800">Planilha .xlsx ou .csv com a coluna <strong>CPF</strong> — basta ela.</p>
         <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
-          <li><strong>CPF</strong> — com ou sem pontuação</li>
-          <li><strong>NOME_COMPLETO</strong> — como deve sair no certificado</li>
-          <li><strong>CODIGO_VALIDACAO</strong> — opcional; se não vier, o sistema gera (formato 0000-0000-0000)</li>
+          <li><strong>CPF</strong> — com ou sem pontuação (obrigatória)</li>
+          <li><strong>NOME_COMPLETO</strong> — opcional; sem ela, vale o nome do cadastro do cursista no sistema</li>
         </ul>
-        <p className="mt-2 text-xs text-gray-500">Pode reenviar quantas vezes precisar: quem já tem certificado mantém o mesmo código, e quem é novo ganha o seu. Outras colunas são ignoradas.</p>
+        <p className="mt-2 text-xs text-gray-500">O código de validação é gerado pelo sistema, com o prefixo do curso. Pode reenviar quantas vezes precisar: quem já tem certificado mantém o código, e quem é novo ganha o seu. Outras colunas são ignoradas.</p>
       </div>
 
       <label className="flex items-start gap-3 rounded-xl border border-gray-200 px-4 py-3">

@@ -12,11 +12,13 @@ import publicApi from '../lib/publicApi'
  * a consulta, para o resultado poder ser compartilhado.
  */
 
-/** Mascara enquanto digita: 9999-9999-9999. */
-function mascarar(valor) {
-  const d = String(valor).replace(/\D/g, '').slice(0, 12)
-  return [d.slice(0, 4), d.slice(4, 8), d.slice(8, 12)].filter(Boolean).join('-')
-}
+/**
+ * Dois formatos de codigo: o do sistema (LEG-A7K9-X2M4) e o numerico dos
+ * certificados antigos (8283-1271-7098). Enquanto digita, so maiusculas, numeros
+ * e hifen; quem arruma o formato e o servidor.
+ */
+const mascarar = (valor) => String(valor).toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 16)
+const completo = (valor) => valor.replace(/-/g, '').length >= 10
 
 const dataLonga = (valor) => {
   if (!valor) return null
@@ -40,7 +42,7 @@ function Resultado({ dados }) {
         <AlertTriangle size={20} className="mt-0.5 flex-shrink-0" />
         <div>
           <p className="font-black">Nenhum certificado encontrado com este código.</p>
-          <p className="mt-1 text-sm">Confira se digitou os 12 números exatamente como aparecem no certificado.</p>
+          <p className="mt-1 text-sm">Confira se digitou o código exatamente como aparece no certificado, abaixo do QR Code.</p>
         </div>
       </div>
     )
@@ -85,7 +87,7 @@ export default function ValidarCertificado() {
     setCodigo(alvo)
     setDados(null)
     setErro('')
-    if (alvo.length !== 14) return
+    if (!completo(alvo)) return
     let ativo = true
     setConsultando(true)
     publicApi.get(`/certificados/publico/validar/${alvo}`)
@@ -97,8 +99,8 @@ export default function ValidarCertificado() {
 
   const consultar = (e) => {
     e.preventDefault()
-    if (codigo.length !== 14) {
-      setErro('O código tem 12 números, no formato 0000-0000-0000.')
+    if (!completo(codigo)) {
+      setErro('Digite o código completo, como aparece no certificado (ex.: LEG-A7K9-X2M4).')
       return
     }
     navigate(`/validar/${codigo}`)
@@ -117,9 +119,9 @@ export default function ValidarCertificado() {
             <input
               value={codigo}
               onChange={(e) => { setCodigo(mascarar(e.target.value)); setErro('') }}
-              inputMode="numeric"
               autoComplete="off"
-              placeholder="0000-0000-0000"
+              autoCapitalize="characters"
+              placeholder="LEG-A7K9-X2M4"
               className="w-full rounded-xl border border-[#ded6ea] bg-white px-4 py-3 font-mono text-[18px] tracking-[0.12em] text-[#1c1033] outline-none transition focus:border-[#6f35b5] focus:ring-2 focus:ring-[#6f35b5]/15"
             />
           </label>
