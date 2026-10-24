@@ -3,6 +3,7 @@
 const { getPool, requireMysql } = require('../../shared/db')
 const { registrar, ACOES } = require('../../shared/audit')
 const { EDICAO_ATUAL } = require('./cursistas.service')
+const { inscreverPelaBase } = require('../certificados/certificados.inscricoes')
 
 /**
  * Cursos de inscricao obrigatoria: todo cursista ativo da base fica inscrito,
@@ -37,6 +38,9 @@ async function sincronizar({ courseId = null, conexao = null } = {}) {
      ON DUPLICATE KEY UPDATE course_id = inscricoes.course_id`,
     courseId ? [EDICAO_ATUAL, courseId] : [EDICAO_ATUAL]
   )
+  // Quem entra na base depois do certificado ja emitido ganha a inscricao do
+  // curso concluido (so na sincronizacao geral, que e a de cadastro/importacao).
+  if (!courseId) await inscreverPelaBase({ conexao })
   // Com ON DUPLICATE KEY, linha nova conta 1 e linha existente sem mudanca, 0.
   return resultado.affectedRows
 }

@@ -7,6 +7,7 @@ const { lerPlanilha, criarPlanilha } = require('../../shared/xlsx')
 const { textoDoArquivo, descobrirSeparador, lerCsvComCabecalho } = require('../../shared/csvLeitura')
 const { registrar, ACOES } = require('../../shared/audit')
 const { gerarPdf, TEXTO_PADRAO } = require('./certificados.pdf')
+const { inscreverPelaBase } = require('./certificados.inscricoes')
 
 /**
  * Certificados: configuracao por curso, base de quem tem direito, emissao do
@@ -465,6 +466,8 @@ async function processar({ courseId, curso, registros, temCodigo, modo, gravar, 
       for (let i = 0; i < aRevogar.length; i += 1000) {
         await conexao.query("UPDATE certificados SET status = 'revogado' WHERE id IN (?)", [aRevogar.slice(i, i + 1000)])
       }
+      // Na mesma transacao: quem ganhou certificado aparece inscrito no curso.
+      resumo.inscritos = await inscreverPelaBase({ courseId, conexao })
       await conexao.commit()
     } catch (e) {
       await conexao.rollback()
@@ -587,6 +590,7 @@ async function alterarStatus({ id, status, actor, req }) {
   if (!['valido', 'revogado'].includes(status)) throw erro(400, 'Situacao invalida.')
   const certificado = await buscarPorId(id)
   await getPool().execute('UPDATE certificados SET status = ? WHERE id = ?', [status, id])
+  if (status === 'valido') await inscreverPelaBase({ courseId: certificado.course_id })
   await registrar({
     actorType: 'admin', actorId: actor?.id || null, actorLabel: actor?.name || null,
     action: status === 'revogado' ? ACOES.CERTIFICADO_REVOGADO : ACOES.CERTIFICADO_REATIVADO,

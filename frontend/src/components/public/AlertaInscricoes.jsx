@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Award, Clock, KeyRound, X } from 'lucide-react'
+import { ArrowRight, Clock, FileBadge2, KeyRound, X } from 'lucide-react'
 import CapaCurso from './CapaCurso'
 
 /**
@@ -21,7 +21,7 @@ const CHAVE_SESSAO = 'transforma:alerta-inscricoes-visto-v2'
 /** O que mudou para o cursista. Tirar daqui quando deixar de ser novidade. */
 const NOVIDADES = [
   {
-    icone: Award,
+    icone: FileBadge2,
     titulo: 'Certificados na Área do Cursista',
     texto: 'Concluiu um curso? Entre com o seu CPF e baixe o certificado em PDF, com código de validação.',
   },
@@ -67,9 +67,11 @@ function Novidades() {
   return (
     <div className="grid gap-2.5 sm:grid-cols-2">
       {NOVIDADES.map(({ icone: Icone, titulo, texto }) => (
-        <div key={titulo} className="flex gap-3 rounded-2xl border border-[#ede7f6] bg-[#faf7ff] p-3.5 text-left">
-          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#6f35b5] text-white">
-            <Icone size={18} />
+        <div key={titulo} className="flex items-start gap-3 rounded-2xl border border-[#ede7f6] bg-[#fcfaff] p-3.5 text-left">
+          {/* Icone de traco fino sobre fundo suave: mais sobrio que o bloco
+              roxo chapado, e nao compete com o botao principal. */}
+          <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-white to-[#f3e8ff] text-[#6f35b5] shadow-[0_2px_8px_rgba(111,53,181,.12)] ring-1 ring-[#e9d5ff]">
+            <Icone size={21} strokeWidth={1.6} />
           </span>
           <span>
             <span className="block text-[13.5px] font-black leading-tight text-[#1c1033]">{titulo}</span>
