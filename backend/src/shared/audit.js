@@ -50,6 +50,8 @@ const ACOES = {
   CERTIFICADO_BASE_ENVIADA: 'certificado_base_enviada',
   CERTIFICADO_REVOGADO: 'certificado_revogado',
   CERTIFICADO_REATIVADO: 'certificado_reativado',
+  CERTIFICADO_ADICIONADO_MANUAL: 'certificado_adicionado_manual',
+  CERTIFICADO_EXCLUIDO: 'certificado_excluido',
 }
 
 function clientIp(req) {

@@ -84,6 +84,19 @@ export default function LoginCursista() {
       <CartaoCursista>
         <TituloCartao>Acesso do cursista</TituloCartao>
 
+        {/* Como entrar, em tres passos: a maior parte dos chamados de acesso era
+            de quem nao sabia a senha de primeiro acesso ou tinha esquecido a sua. */}
+        {!senhaPadrao && (
+          <div className="mb-5 rounded-xl border border-[#e9d5ff] bg-[#faf5ff] px-4 py-3.5 text-[13px] text-[#3b1d6e]">
+            <p className="font-black text-[#6f35b5]">Novo: agora você mesmo recupera o acesso</p>
+            <ol className="mt-1.5 list-decimal space-y-1 pl-4 leading-snug">
+              <li>Digite o seu <strong>CPF</strong>.</li>
+              <li>Primeiro acesso ou esqueceu a senha? Clique em <strong>Redefinir senha</strong> e veja a senha padrão.</li>
+              <li>Entre e crie uma <strong>senha nova</strong>. Guarde-a bem!</li>
+            </ol>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           {senhaPadrao && (
             <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-4 text-sm text-green-900">

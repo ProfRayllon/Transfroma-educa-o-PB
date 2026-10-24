@@ -2,8 +2,8 @@
 
 const crypto = require('node:crypto')
 const { getPool, requireMysql } = require('../../shared/db')
-const { normalizeCpf, isValidCpf, maskCpf } = require('../../shared/cpf')
-const { lerPlanilha } = require('../../shared/xlsx')
+const { normalizeCpf, isValidCpf, maskCpf, formatCpf } = require('../../shared/cpf')
+const { lerPlanilha, criarPlanilha } = require('../../shared/xlsx')
 const { textoDoArquivo, descobrirSeparador, lerCsvComCabecalho } = require('../../shared/csvLeitura')
 const { registrar, ACOES } = require('../../shared/audit')
 const { gerarPdf, TEXTO_PADRAO } = require('./certificados.pdf')
@@ -367,23 +367,19 @@ function lerRegistrosDaBase(arquivo) {
   throw erro(400, 'A planilha precisa da coluna CPF (NOME_COMPLETO e opcional: sem ela, vale o nome do cadastro).')
 }
 
-/**
- * Le a base e aplica (ou so simula, com `gravar: false`).
- *
- * O nome vem da planilha quando ela traz; senao, do cadastro do cursista. O
- * codigo e gerado pelo sistema com o prefixo do curso -- a coluna de codigo so
- * serve para trazer certificados emitidos fora dele, que ja circulam.
- *
- * Quem ja tinha certificado mantem o codigo; o nome e atualizado e, se estava
- * revogado, volta a valer. Com `completa`, quem nao veio na planilha e
- * revogado -- sem ela, a planilha so acrescenta, para dar para mandar a base
- * em partes.
- */
-async function importarBase({ courseId, arquivo, completa = false, gravar = false, actor, req }) {
-  requireMysql()
-  const curso = await cursoExiste(courseId)
-  const { registros, temCodigo } = lerRegistrosDaBase(arquivo)
+const MODOS = ['adicionar', 'completa']
 
+/**
+ * O coracao da base: aplica uma lista de registros (da planilha ou do
+ * formulario manual) ao curso.
+ *
+ *  - 'adicionar': so entra quem e novo. Quem ja esta na base nao e tocado --
+ *    nem o nome --, para nao mexer no que ja esta certo. Quem estava revogado
+ *    e veio de novo volta a valer.
+ *  - 'completa': a planilha e a lista inteira. Atualiza nomes, reativa, e
+ *    revoga quem ficou de fora.
+ */
+async function processar({ courseId, curso, registros, temCodigo, modo, gravar, actor, req, acao, origem }) {
   const pool = getPool()
   const [[cfgCodigo]] = await pool.execute('SELECT prefixo_codigo, nome_curso FROM certificado_config WHERE course_id = ?', [courseId])
   const prefixo = cfgCodigo?.prefixo_codigo || prefixoSugerido(cfgCodigo?.nome_curso || curso.name)
@@ -393,6 +389,7 @@ async function importarBase({ courseId, arquivo, completa = false, gravar = fals
   const porCpf = new Map(existentes.map((e) => [e.cpf, e]))
   const [todosOsCodigos] = await pool.query('SELECT codigo, course_id, cpf FROM certificados')
   const donoDoCodigo = new Map(todosOsCodigos.map((c) => [c.codigo, `${c.course_id}:${c.cpf}`]))
+  const completa = modo === 'completa'
 
   const problemas = []
   const vistos = new Set()
@@ -401,11 +398,20 @@ async function importarBase({ courseId, arquivo, completa = false, gravar = fals
 
   for (const r of registros) {
     const cpf = normalizeCpf(r.cpfBruto)
-    let nome = texto(r.nome, 200)
+    const nomeDaPlanilha = texto(r.nome, 200)
+    let nome = nomeDaPlanilha
     if (!nome && nomeNoCadastro.has(cpf)) { nome = texto(nomeNoCadastro.get(cpf), 200); resumo.nomeDoCadastro += 1 }
-    const recusar = (motivo) => { resumo.ignorados += 1; problemas.push({ linha: r.linha, cpf: maskCpf(cpf) || String(r.cpfBruto ?? '').slice(0, 20), motivo }) }
+    const recusar = (motivo) => {
+      resumo.ignorados += 1
+      // CPF como veio na planilha, inteiro: e o que a pessoa precisa para
+      // achar a linha e corrigir. A tela e so do administrador.
+      problemas.push({ linha: r.linha, cpf: String(r.cpfBruto ?? '').trim().slice(0, 30), nome: nomeDaPlanilha, motivo })
+    }
 
-    if (!isValidCpf(cpf)) { recusar('CPF invalido'); continue }
+    if (!String(r.cpfBruto ?? '').trim()) { recusar('CPF vazio'); continue }
+    if (!isValidCpf(cpf)) { recusar('CPF invalido (digitos verificadores nao conferem)'); continue }
+    // Quem ja esta na base e veio sem nome continua com o nome que tem.
+    if (!nome && porCpf.has(cpf)) nome = porCpf.get(cpf).nome
     if (!nome) { recusar('CPF sem cadastro no sistema e sem nome na planilha'); continue }
     if (vistos.has(cpf)) { recusar('CPF repetido na planilha (vale a primeira linha)'); continue }
     vistos.add(cpf)
@@ -430,10 +436,15 @@ async function importarBase({ courseId, arquivo, completa = false, gravar = fals
     }
 
     if (codigoInformado && codigoInformado !== atual.codigo) resumo.codigoMantido += 1
-    if (atual.status === 'revogado') resumo.reativados += 1
-    else if (atual.nome !== nome) resumo.atualizados += 1
-    else { resumo.inalterados += 1; continue }
-    gravacoes.push({ cpf, nome, codigo })
+    if (atual.status === 'revogado') {
+      resumo.reativados += 1
+      gravacoes.push({ cpf, nome: completa ? nome : atual.nome, codigo })
+    } else if (completa && atual.nome !== nome) {
+      resumo.atualizados += 1
+      gravacoes.push({ cpf, nome, codigo })
+    } else {
+      resumo.inalterados += 1
+    }
   }
 
   const aRevogar = completa ? existentes.filter((e) => e.status === 'valido' && !vistos.has(e.cpf)).map((e) => e.id) : []
@@ -463,12 +474,59 @@ async function importarBase({ courseId, arquivo, completa = false, gravar = fals
     }
     await registrar({
       actorType: 'admin', actorId: actor?.id || null, actorLabel: actor?.name || null,
-      action: ACOES.CERTIFICADO_BASE_ENVIADA, req,
-      details: { courseId, completa: Boolean(completa), ...resumo },
+      action: acao, req, details: { courseId, modo, origem, ...resumo },
     })
   }
 
-  return { gravado: Boolean(gravar), completa: Boolean(completa), resumo, problemas: problemas.slice(0, 200), totalProblemas: problemas.length }
+  return { gravado: Boolean(gravar), modo, resumo, problemas, totalProblemas: problemas.length }
+}
+
+/** Planilha enviada pela tela (conferir ou gravar). */
+async function importarBase({ courseId, arquivo, modo = 'adicionar', gravar = false, actor, req }) {
+  requireMysql()
+  if (!MODOS.includes(modo)) throw erro(400, 'Modo de envio invalido.')
+  const curso = await cursoExiste(courseId)
+  const { registros, temCodigo } = lerRegistrosDaBase(arquivo)
+  const resultado = await processar({
+    courseId, curso, registros, temCodigo, modo, gravar, actor, req,
+    acao: ACOES.CERTIFICADO_BASE_ENVIADA, origem: 'planilha',
+  })
+  // A tela mostra ate 200 linhas; a lista inteira sai pela planilha de ignorados.
+  return { ...resultado, problemas: resultado.problemas.slice(0, 200) }
+}
+
+/** As linhas ignoradas de uma planilha, como .xlsx, para corrigir e reenviar. */
+async function planilhaDeIgnorados({ courseId, arquivo, modo = 'adicionar' }) {
+  requireMysql()
+  const curso = await cursoExiste(courseId)
+  const { registros, temCodigo } = lerRegistrosDaBase(arquivo)
+  const { problemas } = await processar({ courseId, curso, registros, temCodigo, modo: MODOS.includes(modo) ? modo : 'adicionar', gravar: false })
+  return criarPlanilha({
+    nomeAba: 'Ignorados',
+    colunas: [
+      { titulo: 'LINHA', valor: (p) => p.linha, numerica: true },
+      { titulo: 'CPF', valor: (p) => p.cpf },
+      { titulo: 'NOME_COMPLETO', valor: (p) => p.nome },
+      { titulo: 'MOTIVO', valor: (p) => p.motivo },
+    ],
+    linhas: problemas,
+  })
+}
+
+/** Uma pessoa so, pelo formulario: entra sem mexer em mais ninguem. */
+async function adicionarManual({ courseId, cpf, nome, actor, req }) {
+  requireMysql()
+  const curso = await cursoExiste(courseId)
+  const resultado = await processar({
+    courseId, curso,
+    registros: [{ linha: 1, cpfBruto: cpf, nome, codigo: '' }],
+    temCodigo: false, modo: 'adicionar', gravar: true, actor, req,
+    acao: ACOES.CERTIFICADO_ADICIONADO_MANUAL, origem: 'manual',
+  })
+  if (resultado.problemas.length) throw erro(400, resultado.problemas[0].motivo.replace(' na planilha', ''))
+  if (resultado.resumo.inalterados) throw erro(409, 'Este CPF ja tem certificado valido neste curso.')
+  const [[linha]] = await getPool().execute('SELECT nome, codigo FROM certificados WHERE course_id = ? AND cpf = ?', [courseId, normalizeCpf(cpf)])
+  return { reativado: resultado.resumo.reativados > 0, nome: linha?.nome, codigo: linha?.codigo }
 }
 
 // ---------------------------------------------------------------------------
@@ -535,6 +593,52 @@ async function alterarStatus({ id, status, actor, req }) {
     req, details: { certificadoId: id, courseId: certificado.course_id, codigo: certificado.codigo },
   })
   return { id, status }
+}
+
+/** A lista de emitidos (com o filtro da tela) em .xlsx, CPF inteiro. */
+async function exportarEmitidos({ courseId, status = '' }) {
+  requireMysql()
+  const curso = await cursoExiste(courseId)
+  const filtro = status === 'valido' || status === 'revogado' ? ' AND status = ?' : ''
+  const [linhas] = await getPool().query(
+    `SELECT cpf, nome, codigo, status, downloads, primeiro_download_em, emitido_em
+       FROM certificados WHERE course_id = ?${filtro} ORDER BY nome`,
+    filtro ? [courseId, status] : [courseId]
+  )
+  const data = (v) => (v ? new Date(v).toLocaleDateString('pt-BR') : '')
+  return {
+    nomeArquivo: `certificados-${String(curso.name).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w]+/g, '-').replace(/-+/g, '-').slice(0, 50)}${status ? `-${status}s` : ''}.xlsx`,
+    arquivo: criarPlanilha({
+      nomeAba: 'Certificados',
+      colunas: [
+        { titulo: 'CPF', valor: (l) => formatCpf(l.cpf) },
+        { titulo: 'NOME_COMPLETO', valor: (l) => l.nome },
+        { titulo: 'CODIGO_VALIDACAO', valor: (l) => l.codigo },
+        { titulo: 'SITUACAO', valor: (l) => (l.status === 'valido' ? 'Valido' : 'Revogado') },
+        { titulo: 'DOWNLOADS', valor: (l) => Number(l.downloads), numerica: true },
+        { titulo: 'PRIMEIRO_DOWNLOAD', valor: (l) => data(l.primeiro_download_em) },
+        { titulo: 'EMITIDO_EM', valor: (l) => data(l.emitido_em) },
+      ],
+      linhas,
+    }),
+  }
+}
+
+/**
+ * Apaga o certificado de vez. Diferente de revogar: o codigo deixa de existir
+ * e a validacao passa a responder "nao encontrado". Para lancamento errado;
+ * certificado que ja circulou deve ser revogado, nao excluido.
+ */
+async function excluir({ id, actor, req }) {
+  requireMysql()
+  const certificado = await buscarPorId(id)
+  await getPool().execute('DELETE FROM certificados WHERE id = ?', [id])
+  await registrar({
+    actorType: 'admin', actorId: actor?.id || null, actorLabel: actor?.name || null,
+    action: ACOES.CERTIFICADO_EXCLUIDO, req,
+    details: { certificadoId: id, courseId: certificado.course_id, codigo: certificado.codigo, cpf: maskCpf(certificado.cpf), downloads: certificado.downloads },
+  })
+  return { id, excluido: true }
 }
 
 // ---------------------------------------------------------------------------
@@ -636,7 +740,11 @@ module.exports = {
   arteDoCurso,
   previa,
   importarBase,
+  planilhaDeIgnorados,
+  adicionarManual,
   listarEmitidos,
+  exportarEmitidos,
+  excluir,
   pdfParaAdmin,
   alterarStatus,
   meusCertificados,

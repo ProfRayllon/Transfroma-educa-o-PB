@@ -123,11 +123,20 @@ module.exports = function criarRotasCertificados({ authInterna, requireRole, get
     enviarPdf(res, { pdf, nomeArquivo: 'previa-certificado.pdf' }, false)
   }))
 
+  const enviarXlsx = (res, nomeArquivo, arquivo) => {
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`)
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.send(arquivo)
+  }
+  // `completa=1` e o nome antigo do modo; continua aceito.
+  const modoDaRequisicao = (req) => (req.query.modo === 'completa' || req.query.completa === '1' ? 'completa' : 'adicionar')
+
   const importar = (gravar) => tratar(async (req, res) => {
     res.json(await service.importarBase({
       courseId: idDaRota(req.params.courseId),
       arquivo: req.body,
-      completa: req.query.completa === '1',
+      modo: modoDaRequisicao(req),
       gravar,
       actor: gravar ? await quem(req) : null,
       req,
@@ -135,6 +144,23 @@ module.exports = function criarRotasCertificados({ authInterna, requireRole, get
   })
   router.post('/admin/cursos/:courseId/base/conferir', ...soAdmin, receberPlanilha, importar(false))
   router.post('/admin/cursos/:courseId/base/enviar', ...soAdmin, receberPlanilha, importar(true))
+
+  // Reprocessa a mesma planilha (sem gravar) e devolve so as linhas ignoradas.
+  router.post('/admin/cursos/:courseId/base/ignorados', ...soAdmin, receberPlanilha, tratar(async (req, res) => {
+    const arquivo = await service.planilhaDeIgnorados({ courseId: idDaRota(req.params.courseId), arquivo: req.body, modo: modoDaRequisicao(req) })
+    enviarXlsx(res, 'linhas-ignoradas.xlsx', arquivo)
+  }))
+
+  router.post('/admin/cursos/:courseId/emitidos', ...soAdmin, tratar(async (req, res) => {
+    res.json(await service.adicionarManual({
+      courseId: idDaRota(req.params.courseId), cpf: req.body?.cpf, nome: req.body?.nome, actor: await quem(req), req,
+    }))
+  }))
+
+  router.get('/admin/cursos/:courseId/emitidos/exportar', ...soAdmin, tratar(async (req, res) => {
+    const { nomeArquivo, arquivo } = await service.exportarEmitidos({ courseId: idDaRota(req.params.courseId), status: req.query.status })
+    enviarXlsx(res, nomeArquivo, arquivo)
+  }))
 
   router.get('/admin/cursos/:courseId/emitidos', ...soAdmin, tratar(async (req, res) => {
     res.json(await service.listarEmitidos({
@@ -147,6 +173,10 @@ module.exports = function criarRotasCertificados({ authInterna, requireRole, get
 
   router.get('/admin/emitidos/:id/pdf', ...soAdmin, tratar(async (req, res) => {
     enviarPdf(res, await service.pdfParaAdmin(idDaRota(req.params.id)))
+  }))
+
+  router.delete('/admin/emitidos/:id', ...soAdmin, tratar(async (req, res) => {
+    res.json(await service.excluir({ id: idDaRota(req.params.id), actor: await quem(req), req }))
   }))
 
   router.patch('/admin/emitidos/:id', ...soAdmin, tratar(async (req, res) => {

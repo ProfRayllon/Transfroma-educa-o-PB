@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  AlertTriangle, Award, CheckCircle2, Download, Eye, FileSpreadsheet, ImagePlus, Loader2, RotateCcw, Search, Upload,
+  AlertTriangle, Award, CheckCircle2, Download, Eye, FileSpreadsheet, ImagePlus, Loader2, RotateCcw, Search, Trash2, Upload, UserPlus,
 } from 'lucide-react'
 import api, { getApiErrorMessage } from '../lib/api'
 import VisualizadorPdf from '../components/public/VisualizadorPdf'
@@ -17,7 +17,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog'
 
 const ABAS = [
   { chave: 'config', rotulo: 'Configuração' },
-  { chave: 'base', rotulo: 'Base de concluintes' },
+  { chave: 'base', rotulo: 'Adicionar concluintes' },
   { chave: 'emitidos', rotulo: 'Emitidos' },
 ]
 
@@ -230,16 +230,28 @@ function AbaConfiguracao({ curso, config, aoSalvar, aoVerPdf }) {
 
 // ---------------------------------------------------------------- base
 
-function Resumo({ resultado }) {
+const MODOS_DE_ENVIO = [
+  {
+    chave: 'adicionar',
+    titulo: 'Adicionar à base',
+    texto: 'Só entra quem é novo. Quem já tem certificado não é alterado.',
+  },
+  {
+    chave: 'completa',
+    titulo: 'Substituir pela lista completa',
+    texto: 'Atualiza os nomes e revoga o certificado de quem não estiver na planilha.',
+  },
+]
+
+function Resumo({ resultado, modo, aoBaixarIgnorados, baixandoIgnorados }) {
   const r = resultado.resumo
   const itens = [
     ['Linhas lidas', r.linhas],
     ['Novos certificados', r.novos],
-    ['Nome do cadastro', r.nomeDoCadastro || 0],
-    ['Nomes atualizados', r.atualizados],
+    [modo === 'completa' ? 'Sem alteração' : 'Já estavam na base', r.inalterados],
     ['Reativados', r.reativados],
-    ['Sem alteração', r.inalterados],
-    ['Revogados', r.revogados],
+    ...(modo === 'completa' ? [['Nomes atualizados', r.atualizados], ['Revogados', r.revogados]] : []),
+    ['Nome do cadastro', r.nomeDoCadastro || 0],
     ['Ignorados', r.ignorados],
   ]
   return (
@@ -257,15 +269,27 @@ function Resumo({ resultado }) {
       )}
       {resultado.totalProblemas > 0 && (
         <div className="overflow-hidden rounded-xl border border-amber-200">
-          <div className="bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
-            {numero(resultado.totalProblemas)} linha(s) ignorada(s){resultado.totalProblemas > resultado.problemas.length ? ` — mostrando as ${resultado.problemas.length} primeiras` : ''}
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-50 px-3 py-2">
+            <span className="text-xs font-semibold text-amber-800">
+              {numero(resultado.totalProblemas)} linha(s) ignorada(s){resultado.totalProblemas > resultado.problemas.length ? ` — mostrando as ${resultado.problemas.length} primeiras` : ''}
+            </span>
+            {aoBaixarIgnorados && (
+              <button type="button" onClick={aoBaixarIgnorados} disabled={baixandoIgnorados} className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-200 hover:bg-amber-100">
+                {baixandoIgnorados ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} Baixar linhas ignoradas (.xlsx)
+              </button>
+            )}
           </div>
           <div className="max-h-56 overflow-auto">
             <table className="w-full">
-              <thead><tr><th className="table-header">Linha</th><th className="table-header">CPF</th><th className="table-header">Motivo</th></tr></thead>
+              <thead><tr><th className="table-header">Linha</th><th className="table-header">CPF na planilha</th><th className="table-header">Nome</th><th className="table-header">Motivo</th></tr></thead>
               <tbody>
                 {resultado.problemas.map((p, i) => (
-                  <tr key={i} className="border-t border-gray-100"><td className="table-cell">{p.linha}</td><td className="table-cell">{p.cpf}</td><td className="table-cell">{p.motivo}</td></tr>
+                  <tr key={i} className="border-t border-gray-100">
+                    <td className="table-cell">{p.linha}</td>
+                    <td className="table-cell font-mono">{p.cpf || <span className="text-gray-400">(vazio)</span>}</td>
+                    <td className="table-cell">{p.nome || <span className="text-gray-400">—</span>}</td>
+                    <td className="table-cell">{p.motivo}</td>
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -276,27 +300,74 @@ function Resumo({ resultado }) {
   )
 }
 
+/** Uma pessoa por vez, sem planilha: entra sem mexer em mais ninguém. */
+function AdicionarManual({ curso, aoAtualizar }) {
+  const [cpf, setCpf] = useState('')
+  const [nome, setNome] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  const [aviso, setAviso] = useState(null)
+
+  const formatar = (v) => {
+    const d = v.replace(/\D/g, '').slice(0, 11)
+    return d.replace(/^(\d{3})(\d)/, '$1.$2').replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1-$2')
+  }
+
+  const adicionar = async (e) => {
+    e.preventDefault()
+    setSalvando(true)
+    setAviso(null)
+    try {
+      const { data } = await api.post(`/certificados/admin/cursos/${curso.id}/emitidos`, { cpf: cpf.replace(/\D/g, ''), nome: nome.trim() })
+      setAviso({ tipo: 'ok', texto: `${data.reativado ? 'Certificado reativado' : 'Certificado criado'} para ${data.nome} — código ${data.codigo}.` })
+      setCpf('')
+      setNome('')
+      aoAtualizar()
+    } catch (erro) {
+      setAviso({ tipo: 'erro', texto: getApiErrorMessage(erro, 'Não foi possível adicionar.') })
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <form onSubmit={adicionar} className="space-y-3 rounded-2xl border border-gray-200 p-4">
+      <div>
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-800"><UserPlus size={16} /> Adicionar uma pessoa</h3>
+        <p className="text-xs text-gray-500">Sem nome, vale o do cadastro do cursista no sistema.</p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-[180px_1fr_auto]">
+        <input className="input-field font-mono" placeholder="000.000.000-00" inputMode="numeric" value={formatar(cpf)} onChange={(e) => setCpf(e.target.value)} required />
+        <input className="input-field" placeholder="Nome completo (opcional)" value={nome} onChange={(e) => setNome(e.target.value)} maxLength={200} />
+        <button type="submit" className="btn-primary justify-center" disabled={salvando || cpf.replace(/\D/g, '').length !== 11}>
+          {salvando ? <Loader2 size={15} className="animate-spin" /> : <UserPlus size={15} />} Adicionar
+        </button>
+      </div>
+      {aviso && <Aviso tipo={aviso.tipo}>{aviso.texto}</Aviso>}
+    </form>
+  )
+}
+
 function AbaBase({ curso, aoAtualizar }) {
   const [arquivo, setArquivo] = useState(null)
-  const [completa, setCompleta] = useState(false)
+  const [modo, setModo] = useState('adicionar')
   const [conferencia, setConferencia] = useState(null)
   const [resultado, setResultado] = useState(null)
   const [ocupado, setOcupado] = useState(false)
+  const [baixandoIgnorados, setBaixandoIgnorados] = useState(false)
   const [erro, setErro] = useState('')
   const arquivoRef = useRef(null)
 
-  const enviar = async (gravar, alvo = arquivo, lista = completa) => {
+  const enviar = async (gravar, alvo = arquivo, modoAlvo = modo) => {
     setOcupado(true)
     setErro('')
     try {
       const { data } = await api.post(`/certificados/admin/cursos/${curso.id}/base/${gravar ? 'enviar' : 'conferir'}`, alvo, {
-        params: { completa: lista ? '1' : undefined },
+        params: { modo: modoAlvo },
         headers: { 'Content-Type': 'application/octet-stream' },
       })
       if (gravar) {
         setResultado(data)
         setConferencia(null)
-        setArquivo(null)
         aoAtualizar()
       } else {
         setConferencia(data)
@@ -309,6 +380,24 @@ function AbaBase({ curso, aoAtualizar }) {
     }
   }
 
+  // A lista inteira de ignorados sai da mesma planilha, reprocessada sem gravar.
+  const baixarIgnorados = async () => {
+    if (!arquivo) return
+    setBaixandoIgnorados(true)
+    try {
+      const { data } = await api.post(`/certificados/admin/cursos/${curso.id}/base/ignorados`, arquivo, {
+        params: { modo },
+        headers: { 'Content-Type': 'application/octet-stream' },
+        responseType: 'blob',
+      })
+      baixarBlob(data, `ignorados-${arquivo.name.replace(/\.(xlsx|csv)$/i, '')}.xlsx`)
+    } catch (e) {
+      setErro(await mensagemDoBlob(e, 'Não foi possível gerar a planilha de ignorados.'))
+    } finally {
+      setBaixandoIgnorados(false)
+    }
+  }
+
   const escolher = (e) => {
     const escolhido = e.target.files?.[0]
     e.target.value = ''
@@ -317,59 +406,72 @@ function AbaBase({ curso, aoAtualizar }) {
     enviar(false, escolhido)
   }
 
-  const alternarCompleta = (e) => {
-    setCompleta(e.target.checked)
-    if (arquivo) enviar(false, arquivo, e.target.checked)
+  const trocarModo = (novo) => {
+    setModo(novo)
+    setResultado(null)
+    if (arquivo) enviar(false, arquivo, novo)
   }
+
+  const algoAMudar = (r) => r.novos + r.atualizados + r.reativados + r.revogados > 0
 
   return (
     <div className="space-y-5">
-      <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600">
-        <p className="font-semibold text-gray-800">Planilha .xlsx ou .csv com a coluna <strong>CPF</strong> — basta ela.</p>
-        <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
-          <li><strong>CPF</strong> — com ou sem pontuação (obrigatória)</li>
-          <li><strong>NOME_COMPLETO</strong> — opcional; sem ela, vale o nome do cadastro do cursista no sistema</li>
-        </ul>
-        <p className="mt-2 text-xs text-gray-500">O código de validação é gerado pelo sistema, com o prefixo do curso. Pode reenviar quantas vezes precisar: quem já tem certificado mantém o código, e quem é novo ganha o seu. Outras colunas são ignoradas.</p>
-      </div>
+      <AdicionarManual curso={curso} aoAtualizar={aoAtualizar} />
 
-      <label className="flex items-start gap-3 rounded-xl border border-gray-200 px-4 py-3">
-        <input type="checkbox" className="mt-1 h-4 w-4 accent-brand-700" checked={completa} onChange={alternarCompleta} />
-        <span>
-          <span className="block text-sm font-semibold text-gray-800">Esta planilha é a lista completa</span>
-          <span className="block text-xs text-gray-500">Revoga o certificado de quem não estiver nela. Deixe desligado para enviar a base em partes.</span>
-        </span>
-      </label>
+      <div className="space-y-4 rounded-2xl border border-gray-200 p-4">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-800"><FileSpreadsheet size={16} /> Enviar planilha</h3>
+          <p className="mt-1 text-xs text-gray-500">
+            .xlsx ou .csv com a coluna <strong>CPF</strong> (obrigatória) e, se quiser, <strong>NOME_COMPLETO</strong> — sem ela, vale o nome do cadastro.
+            O código de validação é gerado pelo sistema. Outras colunas são ignoradas.
+          </p>
+        </div>
 
-      <input ref={arquivoRef} type="file" accept=".xlsx,.csv" className="hidden" onChange={escolher} />
-      <div className="flex flex-wrap items-center gap-3">
-        <button type="button" className="btn-secondary" onClick={() => arquivoRef.current?.click()} disabled={ocupado}>
-          <FileSpreadsheet size={15} /> {arquivo ? 'Escolher outra planilha' : 'Escolher planilha'}
-        </button>
-        {arquivo && <span className="text-sm text-gray-600">{arquivo.name}</span>}
-        {ocupado && <Loader2 size={16} className="animate-spin text-brand-700" />}
-      </div>
+        <div className="grid gap-2 sm:grid-cols-2" role="radiogroup">
+          {MODOS_DE_ENVIO.map((m) => (
+            <label
+              key={m.chave}
+              className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-3 transition ${modo === m.chave ? (m.chave === 'completa' ? 'border-red-300 bg-red-50' : 'border-brand-300 bg-brand-50') : 'border-gray-200 hover:bg-gray-50'}`}
+            >
+              <input type="radio" name="modo-envio" className="mt-1 accent-brand-700" checked={modo === m.chave} onChange={() => trocarModo(m.chave)} />
+              <span>
+                <span className="block text-sm font-semibold text-gray-800">{m.titulo}</span>
+                <span className="block text-xs text-gray-500">{m.texto}</span>
+              </span>
+            </label>
+          ))}
+        </div>
 
-      {erro && <Aviso>{erro}</Aviso>}
+        <input ref={arquivoRef} type="file" accept=".xlsx,.csv" className="hidden" onChange={escolher} />
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" className="btn-secondary" onClick={() => arquivoRef.current?.click()} disabled={ocupado}>
+            <FileSpreadsheet size={15} /> {arquivo ? 'Escolher outra planilha' : 'Escolher planilha'}
+          </button>
+          {arquivo && <span className="text-sm text-gray-600">{arquivo.name}</span>}
+          {ocupado && <Loader2 size={16} className="animate-spin text-brand-700" />}
+        </div>
 
-      {conferencia && (
-        <div className="space-y-3 rounded-2xl border border-brand-200 p-4">
-          <p className="text-sm font-semibold text-gray-800">Conferência — nada foi gravado ainda.</p>
-          <Resumo resultado={conferencia} />
-          <div className="flex justify-end">
-            <button type="button" className="btn-primary" onClick={() => enviar(true)} disabled={ocupado || (conferencia.resumo.novos + conferencia.resumo.atualizados + conferencia.resumo.reativados + conferencia.resumo.revogados) === 0}>
-              <Upload size={15} /> Confirmar envio
-            </button>
+        {erro && <Aviso>{erro}</Aviso>}
+
+        {conferencia && (
+          <div className="space-y-3 rounded-2xl border border-brand-200 p-4">
+            <p className="text-sm font-semibold text-gray-800">Conferência — nada foi gravado ainda.</p>
+            <Resumo resultado={conferencia} modo={modo} aoBaixarIgnorados={baixarIgnorados} baixandoIgnorados={baixandoIgnorados} />
+            <div className="flex justify-end">
+              <button type="button" className="btn-primary" onClick={() => enviar(true)} disabled={ocupado || !algoAMudar(conferencia.resumo)}>
+                <Upload size={15} /> {modo === 'completa' ? 'Confirmar substituição' : 'Confirmar e adicionar'}
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {resultado && (
-        <div className="space-y-3">
-          <Aviso tipo="ok">Base gravada. {numero(resultado.resumo.novos)} novo(s) certificado(s).</Aviso>
-          <Resumo resultado={resultado} />
-        </div>
-      )}
+        {resultado && (
+          <div className="space-y-3">
+            <Aviso tipo="ok">Base gravada. {numero(resultado.resumo.novos)} novo(s) certificado(s).</Aviso>
+            <Resumo resultado={resultado} modo={modo} aoBaixarIgnorados={baixarIgnorados} baixandoIgnorados={baixandoIgnorados} />
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -385,6 +487,8 @@ function AbaEmitidos({ curso, aoAtualizar }) {
   const [erro, setErro] = useState('')
   const [baixando, setBaixando] = useState(null)
   const [confirmar, setConfirmar] = useState(null)
+  const [excluindo, setExcluindo] = useState(null)
+  const [exportando, setExportando] = useState(false)
 
   const carregar = useCallback(async () => {
     try {
@@ -422,6 +526,31 @@ function AbaEmitidos({ curso, aoAtualizar }) {
     }
   }
 
+  const exportar = async () => {
+    setExportando(true)
+    try {
+      const { data, headers } = await api.get(`/certificados/admin/cursos/${curso.id}/emitidos/exportar`, { params: { status: status || undefined }, responseType: 'blob' })
+      const nome = /filename="([^"]+)"/.exec(headers?.['content-disposition'] || '')?.[1] || 'certificados.xlsx'
+      baixarBlob(data, nome)
+    } catch (e) {
+      setErro(await mensagemDoBlob(e, 'Não foi possível gerar a planilha.'))
+    } finally {
+      setExportando(false)
+    }
+  }
+
+  const excluir = async () => {
+    const item = excluindo
+    setExcluindo(null)
+    try {
+      await api.delete(`/certificados/admin/emitidos/${item.id}`)
+      await carregar()
+      aoAtualizar()
+    } catch (e) {
+      setErro(getApiErrorMessage(e, 'Não foi possível excluir.'))
+    }
+  }
+
   const totalPaginas = dados ? Math.max(1, Math.ceil(dados.total / dados.porPagina)) : 1
 
   return (
@@ -440,6 +569,9 @@ function AbaEmitidos({ curso, aoAtualizar }) {
           <option value="revogado">Revogados</option>
         </select>
         <button type="submit" className="btn-secondary justify-center">Buscar</button>
+        <button type="button" className="btn-secondary justify-center" onClick={exportar} disabled={exportando} title="Baixa a lista com o filtro de situação escolhido">
+          {exportando ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} Baixar lista
+        </button>
       </form>
 
       {erro && <Aviso>{erro}</Aviso>}
@@ -483,6 +615,9 @@ function AbaEmitidos({ curso, aoAtualizar }) {
                     >
                       {item.status === 'valido' ? <AlertTriangle size={15} /> : <RotateCcw size={15} />}
                     </button>
+                    <button type="button" title="Excluir" className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600" onClick={() => setExcluindo(item)}>
+                      <Trash2 size={15} />
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -512,6 +647,17 @@ function AbaEmitidos({ curso, aoAtualizar }) {
           : `O certificado de ${confirmar?.nome} volta a valer, com o mesmo código.`}
         confirmLabel={confirmar?.status === 'valido' ? 'Revogar' : 'Reativar'}
         variant={confirmar?.status === 'valido' ? 'danger' : 'primary'}
+      />
+
+      <ConfirmDialog
+        open={Boolean(excluindo)}
+        onClose={() => setExcluindo(null)}
+        onConfirm={excluir}
+        title="Excluir certificado?"
+        message={excluindo
+          ? `O certificado de ${excluindo.nome} (${excluindo.codigo}) será apagado e o código deixa de existir na validação.${excluindo.downloads > 0 ? ` Ele já foi baixado ${excluindo.downloads} vez(es): se já circulou, prefira revogar.` : ' Use para lançamento errado.'}`
+          : ''}
+        confirmLabel="Excluir"
       />
     </div>
   )
