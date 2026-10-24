@@ -96,7 +96,11 @@ export function CursistaProvider({ children }) {
       setCadastroPendente(!data.cursista?.cadastroConfirmado)
       return data
     } catch (error) {
-      throw new Error(getCursistaErrorMessage(error, 'CPF ou senha incorretos.'))
+      const falha = new Error(getCursistaErrorMessage(error, 'CPF ou senha incorretos.'))
+      // A tela decide o que oferecer: o botao de redefinir so aparece para quem
+      // esta na base e errou a senha.
+      falha.codigo = error.response?.data?.codigo || null
+      throw falha
     }
   }
 

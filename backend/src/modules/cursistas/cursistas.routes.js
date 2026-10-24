@@ -140,6 +140,11 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
     res.json(resultado)
   }))
 
+  // Sem login: e o caminho de quem esqueceu a senha.
+  router.post('/auth/redefinir-senha', tratar(async (req, res) => {
+    res.json(await auth.redefinirSenha({ cpf: req.body?.cpf, req }))
+  }))
+
   // Sem `exigirSenhaDefinida`: e exatamente esta a rota que o primeiro acesso usa.
   router.post('/auth/senha', autenticarCursista, tratar(async (req, res) => {
     const resultado = await auth.definirSenha({

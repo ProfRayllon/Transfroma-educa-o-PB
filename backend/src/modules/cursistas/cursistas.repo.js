@@ -122,6 +122,17 @@ async function resetPassword(id) {
   )
 }
 
+/** Redefinicoes feitas pelo proprio cursista nas ultimas 24 horas. */
+async function contarRedefinicoesRecentes(id, acao) {
+  requireMysql()
+  const [[linha]] = await getPool().execute(
+    `SELECT COUNT(*) AS total FROM cursista_auditoria
+      WHERE cursista_id = ? AND action = ? AND created_at >= NOW() - INTERVAL 1 DAY`,
+    [id, acao]
+  )
+  return Number(linha.total)
+}
+
 async function registerSuccessfulLogin(id) {
   requireMysql()
   await getPool().execute(
@@ -674,6 +685,7 @@ module.exports = {
   findByCpfForAuth,
   findByIdForAuth,
   findById,
+  contarRedefinicoesRecentes,
   listarVinculos,
   setPassword,
   resetPassword,

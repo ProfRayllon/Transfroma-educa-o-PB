@@ -55,9 +55,12 @@ function verificarToken(token) {
   return jwt.verify(token, JWT_SECRET, { audience: TOKEN_AUDIENCE })
 }
 
-function erro(statusCode, message) {
+function erro(statusCode, message, payload) {
   const error = new Error(message)
   error.statusCode = statusCode
+  // Dados extras que a tela usa para decidir o que oferecer (ex.: o botao de
+  // redefinir a senha). A rota os espalha na resposta de erro.
+  if (payload) error.payload = payload
   return error
 }
 
@@ -96,14 +99,20 @@ function validarNovaSenha(senha, cpf) {
 async function login({ cpf, senha, req }) {
   const cpfNormalizado = normalizeCpf(cpf)
 
-  // Mesma resposta para CPF invalido, inexistente ou senha errada: nao entregamos
-  // ao atacante a informacao de quais CPFs estao na base.
-  const credenciaisInvalidas = () => erro(401, 'CPF ou senha incorretos.')
+  /*
+   * A tela diz se o CPF esta ou nao na base, por decisao do programa: a maior
+   * parte dos chamados era de quem nao sabia se estava cadastrado ou se so
+   * tinha errado a senha. Isso entrega a quem tenta que um CPF e da base --
+   * o preco aceito em troca de o professor resolver o acesso sozinho. Quando
+   * o envio de e-mail estiver ativo, a redefinicao passa a confirmar por ele.
+   */
+  const foraDaBase = () => erro(401, 'Este CPF não faz parte da base do Transforma Educação PB.', { codigo: 'fora_da_base' })
+  const senhaIncorreta = () => erro(401, 'Você está cadastrado, porém a senha está incorreta.', { codigo: 'senha_incorreta', podeRedefinir: true })
 
-  if (!isValidCpf(cpfNormalizado)) throw credenciaisInvalidas()
+  if (!isValidCpf(cpfNormalizado)) throw foraDaBase()
 
   const conta = await repo.findByCpfForAuth(cpfNormalizado)
-  if (!conta) throw credenciaisInvalidas()
+  if (!conta) throw foraDaBase()
 
   const primeiroAcesso = !conta.password_hash
 
@@ -123,7 +132,7 @@ async function login({ cpf, senha, req }) {
       cursistaId: conta.id,
       req,
     })
-    throw credenciaisInvalidas()
+    throw senhaIncorreta()
   }
 
   // A partir daqui a senha confere, entao o titular provou ser dono da conta e
@@ -151,6 +160,44 @@ async function login({ cpf, senha, req }) {
     // cadastro em /me depois da troca, que e onde exigirSenhaDefinida ja protege.
     cursista: primeiroAcesso ? null : await repo.findById(conta.id, { fullCpf: true }),
   }
+}
+
+/** Quantas redefinicoes o proprio cursista pode fazer em 24 horas. */
+const MAX_REDEFINICOES_POR_DIA = 3
+
+/**
+ * O cursista redefine a propria senha so com o CPF: a conta volta ao primeiro
+ * acesso, e a resposta traz a senha padrao para ele entrar e criar uma nova.
+ *
+ * So o CPF por enquanto, por decisao do programa (sem servico de e-mail ainda).
+ * O que limita o estrago de quem usar o CPF de outra pessoa: no maximo
+ * MAX_REDEFINICOES_POR_DIA por conta, e cada uma fica na auditoria com o IP.
+ */
+async function redefinirSenha({ cpf, req }) {
+  const cpfNormalizado = normalizeCpf(cpf)
+  if (!isValidCpf(cpfNormalizado)) throw erro(404, 'Este CPF não faz parte da base do Transforma Educação PB.', { codigo: 'fora_da_base' })
+  const conta = await repo.findByCpfForAuth(cpfNormalizado)
+  if (!conta) throw erro(404, 'Este CPF não faz parte da base do Transforma Educação PB.', { codigo: 'fora_da_base' })
+  if (conta.status !== 'ativo') throw erro(403, 'Cadastro inativo. Procure a coordenação do programa pelo Suporte.')
+  if (!SENHA_PADRAO) throw erro(503, 'A redefinição está indisponível no momento. Procure o Suporte.')
+
+  // Conta que ja esta no primeiro acesso: nada a redefinir, so lembrar a senha.
+  if (conta.password_hash) {
+    const recentes = await repo.contarRedefinicoesRecentes(conta.id, ACOES.SENHA_RESETADA_CURSISTA)
+    if (recentes >= MAX_REDEFINICOES_POR_DIA) {
+      throw erro(429, 'A senha deste CPF já foi redefinida várias vezes hoje. Tente amanhã ou procure o Suporte.')
+    }
+    await repo.resetPassword(conta.id)
+    await registrar({
+      actorType: 'cursista',
+      actorId: conta.id,
+      action: ACOES.SENHA_RESETADA_CURSISTA,
+      cursistaId: conta.id,
+      req,
+    })
+  }
+
+  return { senhaPadrao: SENHA_PADRAO }
 }
 
 /** Definicao da senha no primeiro acesso e troca posterior usam o mesmo caminho. */
@@ -183,6 +230,7 @@ async function definirSenha({ cursistaId, senhaAtual, novaSenha, req }) {
 
 module.exports = {
   login,
+  redefinirSenha,
   definirSenha,
   verificarToken,
   assinarToken,

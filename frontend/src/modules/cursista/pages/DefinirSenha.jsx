@@ -151,6 +151,11 @@ export default function DefinirSenha() {
             ))}
           </ul>
 
+          <div className="rounded-xl border border-[#e9d5ff] bg-[#faf5ff] px-4 py-3 text-[13px] text-[#4c1d95]">
+            <strong>Guarde a sua nova senha.</strong> Anote em um lugar seguro: é com ela que você vai entrar daqui em diante.
+            Se esquecer, dá para redefinir na tela de entrada, mas será preciso criar outra.
+          </div>
+
           <button type="submit" disabled={!podeEnviar || enviando} className={`${BOTAO_PRINCIPAL} w-full`}>
             {enviando ? 'Salvando...' : 'Salvar senha'}
           </button>
