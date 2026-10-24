@@ -16,6 +16,12 @@ const cursistaApi = axios.create({
   baseURL: `${import.meta.env.VITE_API_BASE_URL || '/api'}/cursistas`,
 })
 
+/**
+ * Os certificados vivem em /api/certificados, mas o dono e o mesmo token do
+ * cursista: as chamadas passam por esta instancia so trocando a base.
+ */
+export const comBaseDeCertificados = { baseURL: `${import.meta.env.VITE_API_BASE_URL || '/api'}/certificados` }
+
 cursistaApi.interceptors.request.use((config) => {
   const token = localStorage.getItem(CURSISTA_TOKEN_KEY)
   if (token) config.headers.Authorization = `Bearer ${token}`

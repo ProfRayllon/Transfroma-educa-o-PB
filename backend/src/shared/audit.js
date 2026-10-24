@@ -43,6 +43,11 @@ const ACOES = {
   INSCRICAO_CANCELADA_ADMIN: 'inscricao_cancelada_admin',
   CURSO_OBRIGATORIO_LIGADO: 'curso_obrigatorio_ligado',
   CURSO_OBRIGATORIO_DESLIGADO: 'curso_obrigatorio_desligado',
+  // Certificados: quem mexeu na configuracao, mandou a base ou revogou.
+  CERTIFICADO_CONFIG_ALTERADA: 'certificado_config_alterada',
+  CERTIFICADO_BASE_ENVIADA: 'certificado_base_enviada',
+  CERTIFICADO_REVOGADO: 'certificado_revogado',
+  CERTIFICADO_REATIVADO: 'certificado_reativado',
 }
 
 function clientIp(req) {

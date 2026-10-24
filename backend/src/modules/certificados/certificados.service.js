@@ -1,0 +1,607 @@
+'use strict'
+
+const crypto = require('node:crypto')
+const { getPool, requireMysql } = require('../../shared/db')
+const { normalizeCpf, isValidCpf, maskCpf } = require('../../shared/cpf')
+const { lerPlanilha } = require('../../shared/xlsx')
+const { textoDoArquivo, descobrirSeparador, lerCsvComCabecalho } = require('../../shared/csvLeitura')
+const { registrar, ACOES } = require('../../shared/audit')
+const { gerarPdf, TEXTO_PADRAO } = require('./certificados.pdf')
+
+/**
+ * Certificados: configuracao por curso, base de quem tem direito, emissao do
+ * PDF e validacao publica pelo codigo.
+ */
+
+const MAX_LINHAS = 60000
+const TIPOS_DE_ARTE = ['image/jpeg', 'image/png']
+const MAX_ARTE = 6 * 1024 * 1024
+
+function erro(statusCode, message, payload) {
+  return Object.assign(new Error(message), { statusCode, payload })
+}
+
+const texto = (valor, limite) => String(valor ?? '').trim().replace(/\s+/g, ' ').slice(0, limite)
+
+function urlDeValidacao() {
+  const site = String(process.env.SITE_URL || 'https://transformaeducacaopb.com.br').replace(/\/+$/, '')
+  return `${site}/validar`
+}
+
+/** "123456789012" ou "1234 5678 9012" -> "1234-5678-9012"; outra coisa, null. */
+function normalizarCodigo(valor) {
+  const digitos = String(valor ?? '').replace(/\D/g, '')
+  if (digitos.length !== 12) return null
+  return `${digitos.slice(0, 4)}-${digitos.slice(4, 8)}-${digitos.slice(8)}`
+}
+
+/** Mesmo formato dos certificados que ja circulam: 9999-9999-9999. */
+function novoCodigo() {
+  let digitos = ''
+  for (let i = 0; i < 12; i += 1) digitos += crypto.randomInt(0, 10)
+  return normalizarCodigo(digitos)
+}
+
+async function cursoExiste(courseId) {
+  const [[curso]] = await getPool().execute('SELECT id, name, workload_hours FROM courses WHERE id = ?', [courseId])
+  if (!curso) throw erro(404, 'Curso nao encontrado.')
+  return curso
+}
+
+// ---------------------------------------------------------------------------
+// Configuracao
+// ---------------------------------------------------------------------------
+
+/** Cursos com o resumo do certificado de cada um, para a lista da tela. */
+async function listarCursos() {
+  requireMysql()
+  const [linhas] = await getPool().query(
+    `SELECT c.id, c.name, c.workload_hours,
+            cfg.liberado, cfg.arte_tamanho IS NOT NULL AS tem_arte,
+            COALESCE(t.validos, 0) AS validos, COALESCE(t.baixados, 0) AS baixados
+       FROM courses c
+       LEFT JOIN certificado_config cfg ON cfg.course_id = c.id
+       LEFT JOIN (SELECT course_id, SUM(status = 'valido') AS validos,
+                         SUM(status = 'valido' AND downloads > 0) AS baixados
+                    FROM certificados GROUP BY course_id) t ON t.course_id = c.id
+      ORDER BY c.name`
+  )
+  return linhas.map((l) => ({
+    id: l.id,
+    nome: l.name,
+    cargaHoraria: l.workload_hours ?? null,
+    liberado: Boolean(Number(l.liberado)),
+    temArte: Boolean(Number(l.tem_arte)),
+    validos: Number(l.validos),
+    baixados: Number(l.baixados),
+  }))
+}
+
+/** A configuracao de um curso, sem a arte (que vem por rota propria). */
+async function obterConfig(courseId) {
+  requireMysql()
+  const curso = await cursoExiste(courseId)
+  const [[cfg]] = await getPool().execute(
+    `SELECT liberado, nome_curso, periodo, carga_horaria, texto, arte_tipo, arte_nome, arte_tamanho,
+            atualizado_por, atualizado_em
+       FROM certificado_config WHERE course_id = ?`,
+    [courseId]
+  )
+  const [[totais]] = await getPool().execute(
+    `SELECT COUNT(*) AS total, COALESCE(SUM(status = 'valido'), 0) AS validos,
+            COALESCE(SUM(status = 'revogado'), 0) AS revogados,
+            COALESCE(SUM(status = 'valido' AND downloads > 0), 0) AS baixados
+       FROM certificados WHERE course_id = ?`,
+    [courseId]
+  )
+  return {
+    courseId,
+    cursoNoSistema: curso.name,
+    liberado: Boolean(cfg?.liberado),
+    nomeCurso: cfg?.nome_curso ?? curso.name,
+    periodo: cfg?.periodo ?? '',
+    cargaHoraria: cfg?.carga_horaria ?? curso.workload_hours ?? 30,
+    texto: cfg?.texto ?? TEXTO_PADRAO,
+    textoPadrao: TEXTO_PADRAO,
+    arte: cfg?.arte_tamanho ? { nome: cfg.arte_nome, tipo: cfg.arte_tipo, tamanho: cfg.arte_tamanho } : null,
+    atualizadoPor: cfg?.atualizado_por ?? null,
+    atualizadoEm: cfg?.atualizado_em ?? null,
+    totais: {
+      total: Number(totais.total),
+      validos: Number(totais.validos),
+      revogados: Number(totais.revogados),
+      baixados: Number(totais.baixados),
+    },
+  }
+}
+
+function lerCamposDaConfig(corpo = {}) {
+  const carga = Number(corpo.cargaHoraria)
+  if (!Number.isInteger(carga) || carga < 1 || carga > 999) throw erro(400, 'Informe a carga horaria em horas (1 a 999).')
+  const nomeCurso = texto(corpo.nomeCurso, 255)
+  if (!nomeCurso) throw erro(400, 'Informe o nome do curso como deve sair no certificado.')
+  const conteudo = String(corpo.texto ?? '').trim().slice(0, 2000)
+  if (!conteudo) throw erro(400, 'O texto do certificado nao pode ficar vazio.')
+  return { nomeCurso, periodo: texto(corpo.periodo, 150), cargaHoraria: carga, texto: conteudo }
+}
+
+async function salvarConfig({ courseId, corpo, actor, req }) {
+  requireMysql()
+  await cursoExiste(courseId)
+  const campos = lerCamposDaConfig(corpo)
+  const liberado = corpo.liberado ? 1 : 0
+
+  if (liberado) {
+    const [[cfg]] = await getPool().execute('SELECT arte_tamanho FROM certificado_config WHERE course_id = ?', [courseId])
+    if (!cfg?.arte_tamanho) throw erro(400, 'Envie a arte do certificado antes de liberar o download.')
+  }
+
+  await getPool().execute(
+    `INSERT INTO certificado_config (course_id, liberado, nome_curso, periodo, carga_horaria, texto, atualizado_por)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE liberado = VALUES(liberado), nome_curso = VALUES(nome_curso), periodo = VALUES(periodo),
+       carga_horaria = VALUES(carga_horaria), texto = VALUES(texto), atualizado_por = VALUES(atualizado_por)`,
+    [courseId, liberado, campos.nomeCurso, campos.periodo, campos.cargaHoraria, campos.texto, actor?.name || null]
+  )
+  await registrar({
+    actorType: 'admin', actorId: actor?.id || null, actorLabel: actor?.name || null,
+    action: ACOES.CERTIFICADO_CONFIG_ALTERADA, req, details: { courseId, liberado: Boolean(liberado) },
+  })
+  return obterConfig(courseId)
+}
+
+/** Os bytes dizem o tipo -- o cabecalho Content-Type do navegador nao e confiavel. */
+function tipoDaImagem(buffer) {
+  if (buffer[0] === 0xff && buffer[1] === 0xd8) return 'image/jpeg'
+  if (buffer.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png'
+  return null
+}
+
+async function salvarArte({ courseId, arquivo, nome, actor, req }) {
+  requireMysql()
+  const curso = await cursoExiste(courseId)
+  if (!Buffer.isBuffer(arquivo) || !arquivo.length) throw erro(400, 'Envie a imagem da arte.')
+  if (arquivo.length > MAX_ARTE) throw erro(400, 'A imagem passa de 6 MB. Exporte em JPEG para ficar menor.')
+  const tipo = tipoDaImagem(arquivo)
+  if (!TIPOS_DE_ARTE.includes(tipo)) throw erro(400, 'A arte precisa ser JPEG ou PNG.')
+
+  await getPool().execute(
+    `INSERT INTO certificado_config (course_id, nome_curso, carga_horaria, texto, arte, arte_tipo, arte_nome, arte_tamanho, atualizado_por)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE arte = VALUES(arte), arte_tipo = VALUES(arte_tipo), arte_nome = VALUES(arte_nome),
+       arte_tamanho = VALUES(arte_tamanho), atualizado_por = VALUES(atualizado_por)`,
+    [courseId, curso.name, curso.workload_hours ?? 30, TEXTO_PADRAO, arquivo, tipo,
+      texto(nome, 255) || 'arte', arquivo.length, actor?.name || null]
+  )
+  cacheDeArte.delete(courseId)
+  await registrar({
+    actorType: 'admin', actorId: actor?.id || null, actorLabel: actor?.name || null,
+    action: ACOES.CERTIFICADO_CONFIG_ALTERADA, req, details: { courseId, arte: true, tamanho: arquivo.length },
+  })
+  return obterConfig(courseId)
+}
+
+/**
+ * A arte guardada, para a miniatura da tela e para gerar o PDF. Fica na memoria
+ * do processo depois da primeira leitura: sao 1-2 MB por curso, e reler do
+ * banco a cada download, num dia de liberacao com milhares, seria o gargalo.
+ */
+const cacheDeArte = new Map()
+async function arteDoCurso(courseId) {
+  const [[versao]] = await getPool().execute(
+    'SELECT UNIX_TIMESTAMP(atualizado_em) AS v, arte_tamanho FROM certificado_config WHERE course_id = ?', [courseId]
+  )
+  if (!versao?.arte_tamanho) return null
+  const emCache = cacheDeArte.get(courseId)
+  if (emCache && emCache.versao === Number(versao.v)) return emCache
+  const [[linha]] = await getPool().execute('SELECT arte, arte_tipo FROM certificado_config WHERE course_id = ?', [courseId])
+  const arte = { versao: Number(versao.v), bytes: linha.arte, tipo: linha.arte_tipo }
+  cacheDeArte.set(courseId, arte)
+  return arte
+}
+
+// ---------------------------------------------------------------------------
+// Geracao do PDF
+// ---------------------------------------------------------------------------
+
+/**
+ * No maximo duas geracoes ao mesmo tempo por processo. Cada uma e rapida
+ * (~0,1 s, poucos MB), mas no dia da liberacao milhares clicam juntos, e a
+ * VPS tem menos de 1 GB: os demais esperam a vez em vez de disputar memoria.
+ */
+const MAX_SIMULTANEAS = 2
+let emAndamento = 0
+const fila = []
+async function naVez(tarefa) {
+  if (emAndamento >= MAX_SIMULTANEAS) await new Promise((resolve) => fila.push(resolve))
+  emAndamento += 1
+  try {
+    return await tarefa()
+  } finally {
+    emAndamento -= 1
+    const proximo = fila.shift()
+    if (proximo) proximo()
+  }
+}
+
+async function montarPdf({ courseId, nome, cpf, codigo, config }) {
+  const arte = await arteDoCurso(courseId)
+  if (!arte) throw erro(409, 'Este curso ainda nao tem a arte do certificado.')
+  return naVez(() => gerarPdf({
+    arte: arte.bytes,
+    tipoArte: arte.tipo,
+    nome,
+    cpf,
+    codigo,
+    curso: config.nomeCurso,
+    periodo: config.periodo,
+    cargaHoraria: config.cargaHoraria,
+    texto: config.texto,
+    urlValidacao: urlDeValidacao(),
+  }))
+}
+
+/** Previa com dados de exemplo, usando os campos do formulario (mesmo sem salvar). */
+async function previa({ courseId, corpo }) {
+  requireMysql()
+  await cursoExiste(courseId)
+  const config = lerCamposDaConfig(corpo)
+  return montarPdf({
+    courseId,
+    nome: 'Maria José da Silva Exemplo',
+    cpf: '12345678909',
+    codigo: '0000-0000-0000',
+    config,
+  })
+}
+
+async function configParaEmissao(courseId) {
+  const [[cfg]] = await getPool().execute(
+    `SELECT cfg.nome_curso, cfg.periodo, cfg.carga_horaria, cfg.texto, cfg.liberado, c.name, c.workload_hours
+       FROM courses c LEFT JOIN certificado_config cfg ON cfg.course_id = c.id
+      WHERE c.id = ?`,
+    [courseId]
+  )
+  if (!cfg) throw erro(404, 'Curso nao encontrado.')
+  return {
+    liberado: Boolean(Number(cfg.liberado)),
+    nomeCurso: cfg.nome_curso || cfg.name,
+    periodo: cfg.periodo || '',
+    cargaHoraria: cfg.carga_horaria || cfg.workload_hours || 30,
+    texto: cfg.texto || TEXTO_PADRAO,
+  }
+}
+
+async function pdfDoCertificado(certificado) {
+  const config = await configParaEmissao(certificado.course_id)
+  const pdf = await montarPdf({
+    courseId: certificado.course_id,
+    nome: certificado.nome,
+    cpf: certificado.cpf,
+    codigo: certificado.codigo,
+    config,
+  })
+  return { pdf, config }
+}
+
+const nomeDoArquivo = (codigo) => `certificado-${codigo}.pdf`
+
+// ---------------------------------------------------------------------------
+// Base de quem tem direito
+// ---------------------------------------------------------------------------
+
+/** "Nome completo" -> "NOME_COMPLETO", sem acento: o cabecalho vem de qualquer jeito. */
+const chaveDaColuna = (c) => String(c ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '')
+
+const COLUNAS = {
+  cpf: ['CPF'],
+  nome: ['NOME_COMPLETO', 'NOME', 'NOME_DO_CURSISTA', 'CURSISTA', 'DOCENTE'],
+  codigo: ['CODIGO_VALIDACAO', 'CODIGO_DE_VALIDACAO', 'CODIGO'],
+}
+
+function lerRegistrosDaBase(arquivo) {
+  if (!Buffer.isBuffer(arquivo) || !arquivo.length) throw erro(400, 'Envie a planilha da base (.xlsx ou .csv).')
+
+  let tabelas
+  if (arquivo[0] === 0x50 && arquivo[1] === 0x4b) {
+    tabelas = [...lerPlanilha(arquivo).values()].map((a) => ({ cabecalho: a.cabecalho, registros: a.registros }))
+  } else {
+    const conteudo = textoDoArquivo(arquivo)
+    const { colunas, registros } = lerCsvComCabecalho(conteudo, descobrirSeparador(conteudo))
+    tabelas = [{ cabecalho: colunas, registros }]
+  }
+
+  // A primeira aba que tenha CPF e nome.
+  for (const tabela of tabelas) {
+    const mapa = {}
+    for (const original of tabela.cabecalho) {
+      const chave = chaveDaColuna(original)
+      for (const [campo, aceitas] of Object.entries(COLUNAS)) {
+        if (!mapa[campo] && aceitas.includes(chave)) mapa[campo] = original
+      }
+    }
+    if (mapa.cpf && mapa.nome) {
+      if (tabela.registros.length > MAX_LINHAS) throw erro(400, `A planilha tem ${tabela.registros.length} linhas; o limite e ${MAX_LINHAS}.`)
+      return {
+        temCodigo: Boolean(mapa.codigo),
+        registros: tabela.registros.map((r, i) => ({
+          linha: i + 2,
+          cpfBruto: r[mapa.cpf],
+          nome: r[mapa.nome],
+          codigo: mapa.codigo ? r[mapa.codigo] : '',
+        })),
+      }
+    }
+  }
+  throw erro(400, 'A planilha precisa das colunas CPF e NOME_COMPLETO (CODIGO_VALIDACAO e opcional).')
+}
+
+/**
+ * Le a base e aplica (ou so simula, com `gravar: false`).
+ *
+ * Quem ja tinha certificado mantem o codigo; o nome e atualizado e, se estava
+ * revogado, volta a valer. Com `completa`, quem nao veio na planilha e
+ * revogado -- sem ela, a planilha so acrescenta, para dar para mandar a base
+ * em partes.
+ */
+async function importarBase({ courseId, arquivo, completa = false, gravar = false, actor, req }) {
+  requireMysql()
+  await cursoExiste(courseId)
+  const { registros, temCodigo } = lerRegistrosDaBase(arquivo)
+
+  const pool = getPool()
+  const [existentes] = await pool.execute('SELECT id, cpf, nome, codigo, status FROM certificados WHERE course_id = ?', [courseId])
+  const porCpf = new Map(existentes.map((e) => [e.cpf, e]))
+  const [todosOsCodigos] = await pool.query('SELECT codigo, course_id, cpf FROM certificados')
+  const donoDoCodigo = new Map(todosOsCodigos.map((c) => [c.codigo, `${c.course_id}:${c.cpf}`]))
+
+  const problemas = []
+  const vistos = new Set()
+  const gravacoes = []
+  const resumo = { linhas: registros.length, novos: 0, atualizados: 0, reativados: 0, inalterados: 0, revogados: 0, ignorados: 0, codigoMantido: 0 }
+
+  for (const r of registros) {
+    const cpf = normalizeCpf(r.cpfBruto)
+    const nome = texto(r.nome, 200)
+    const recusar = (motivo) => { resumo.ignorados += 1; problemas.push({ linha: r.linha, cpf: maskCpf(cpf) || String(r.cpfBruto ?? '').slice(0, 20), motivo }) }
+
+    if (!isValidCpf(cpf)) { recusar('CPF invalido'); continue }
+    if (!nome) { recusar('Nome vazio'); continue }
+    if (vistos.has(cpf)) { recusar('CPF repetido na planilha (vale a primeira linha)'); continue }
+    vistos.add(cpf)
+
+    const atual = porCpf.get(cpf)
+    let codigo = atual?.codigo || null
+    const codigoInformado = temCodigo && String(r.codigo ?? '').trim() ? normalizarCodigo(r.codigo) : null
+
+    if (!atual) {
+      if (temCodigo && String(r.codigo ?? '').trim() && !codigoInformado) { recusar('Codigo de validacao fora do formato 9999-9999-9999'); continue }
+      if (codigoInformado) {
+        const dono = donoDoCodigo.get(codigoInformado)
+        if (dono && dono !== `${courseId}:${cpf}`) { recusar('Codigo de validacao ja usado por outro certificado'); continue }
+        codigo = codigoInformado
+      } else {
+        do { codigo = novoCodigo() } while (donoDoCodigo.has(codigo))
+      }
+      donoDoCodigo.set(codigo, `${courseId}:${cpf}`)
+      resumo.novos += 1
+      gravacoes.push({ cpf, nome, codigo })
+      continue
+    }
+
+    if (codigoInformado && codigoInformado !== atual.codigo) resumo.codigoMantido += 1
+    if (atual.status === 'revogado') resumo.reativados += 1
+    else if (atual.nome !== nome) resumo.atualizados += 1
+    else { resumo.inalterados += 1; continue }
+    gravacoes.push({ cpf, nome, codigo })
+  }
+
+  const aRevogar = completa ? existentes.filter((e) => e.status === 'valido' && !vistos.has(e.cpf)).map((e) => e.id) : []
+  resumo.revogados = aRevogar.length
+
+  if (gravar) {
+    const conexao = await pool.getConnection()
+    try {
+      await conexao.beginTransaction()
+      for (let i = 0; i < gravacoes.length; i += 500) {
+        const lote = gravacoes.slice(i, i + 500)
+        await conexao.query(
+          `INSERT INTO certificados (course_id, cpf, nome, codigo) VALUES ?
+           ON DUPLICATE KEY UPDATE nome = VALUES(nome), status = 'valido'`,
+          [lote.map((g) => [courseId, g.cpf, g.nome, g.codigo])]
+        )
+      }
+      for (let i = 0; i < aRevogar.length; i += 1000) {
+        await conexao.query("UPDATE certificados SET status = 'revogado' WHERE id IN (?)", [aRevogar.slice(i, i + 1000)])
+      }
+      await conexao.commit()
+    } catch (e) {
+      await conexao.rollback()
+      throw e
+    } finally {
+      conexao.release()
+    }
+    await registrar({
+      actorType: 'admin', actorId: actor?.id || null, actorLabel: actor?.name || null,
+      action: ACOES.CERTIFICADO_BASE_ENVIADA, req,
+      details: { courseId, completa: Boolean(completa), ...resumo },
+    })
+  }
+
+  return { gravado: Boolean(gravar), completa: Boolean(completa), resumo, problemas: problemas.slice(0, 200), totalProblemas: problemas.length }
+}
+
+// ---------------------------------------------------------------------------
+// Lista de emitidos (administracao)
+// ---------------------------------------------------------------------------
+
+async function listarEmitidos({ courseId, busca = '', status = '', pagina = 1, porPagina = 25 }) {
+  requireMysql()
+  const onde = ['course_id = ?']
+  const params = [courseId]
+  const termo = texto(busca, 100)
+  if (termo) {
+    const digitos = termo.replace(/\D/g, '')
+    if (digitos.length === 11 && /^[\d.\-\s]+$/.test(termo)) { onde.push('cpf = ?'); params.push(normalizeCpf(digitos)) } else if (/^\d{4}-?\d{4}-?\d{4}$/.test(termo)) { onde.push('codigo = ?'); params.push(normalizarCodigo(termo)) } else { onde.push('nome LIKE ?'); params.push(`%${termo}%`) }
+  }
+  if (status === 'valido' || status === 'revogado') { onde.push('status = ?'); params.push(status) }
+  const tamanho = Math.min(100, Math.max(1, Number(porPagina) || 25))
+  const atual = Math.max(1, Number(pagina) || 1)
+  const where = onde.join(' AND ')
+  const [[{ total }]] = await getPool().query(`SELECT COUNT(*) AS total FROM certificados WHERE ${where}`, params)
+  const [linhas] = await getPool().query(
+    `SELECT id, cpf, nome, codigo, status, downloads, primeiro_download_em, emitido_em
+       FROM certificados WHERE ${where} ORDER BY nome LIMIT ? OFFSET ?`,
+    [...params, tamanho, (atual - 1) * tamanho]
+  )
+  return {
+    total: Number(total),
+    pagina: atual,
+    porPagina: tamanho,
+    itens: linhas.map((l) => ({
+      id: l.id,
+      cpf: maskCpf(l.cpf),
+      nome: l.nome,
+      codigo: l.codigo,
+      status: l.status,
+      downloads: l.downloads,
+      primeiroDownloadEm: l.primeiro_download_em,
+      emitidoEm: l.emitido_em,
+    })),
+  }
+}
+
+async function buscarPorId(id) {
+  const [[linha]] = await getPool().execute('SELECT * FROM certificados WHERE id = ?', [id])
+  if (!linha) throw erro(404, 'Certificado nao encontrado.')
+  return linha
+}
+
+async function pdfParaAdmin(id) {
+  requireMysql()
+  const certificado = await buscarPorId(id)
+  const { pdf } = await pdfDoCertificado(certificado)
+  return { pdf, nomeArquivo: nomeDoArquivo(certificado.codigo) }
+}
+
+async function alterarStatus({ id, status, actor, req }) {
+  requireMysql()
+  if (!['valido', 'revogado'].includes(status)) throw erro(400, 'Situacao invalida.')
+  const certificado = await buscarPorId(id)
+  await getPool().execute('UPDATE certificados SET status = ? WHERE id = ?', [status, id])
+  await registrar({
+    actorType: 'admin', actorId: actor?.id || null, actorLabel: actor?.name || null,
+    action: status === 'revogado' ? ACOES.CERTIFICADO_REVOGADO : ACOES.CERTIFICADO_REATIVADO,
+    req, details: { certificadoId: id, courseId: certificado.course_id, codigo: certificado.codigo },
+  })
+  return { id, status }
+}
+
+// ---------------------------------------------------------------------------
+// Area do cursista
+// ---------------------------------------------------------------------------
+
+/** O que o cursista pode baixar: certificado valido, de curso liberado e com arte. */
+const CONDICAO_DO_CURSISTA = `ce.cpf = ? AND ce.status = 'valido' AND cfg.liberado = 1 AND cfg.arte_tamanho IS NOT NULL`
+
+async function meusCertificados(cpf) {
+  requireMysql()
+  const [linhas] = await getPool().execute(
+    `SELECT ce.id, ce.codigo, ce.emitido_em, ce.course_id,
+            COALESCE(cfg.nome_curso, c.name) AS curso, c.name AS curso_no_sistema,
+            COALESCE(cfg.carga_horaria, c.workload_hours) AS carga_horaria, cfg.periodo,
+            c.secondary_trail, (c.image LIKE 'data:image/%') AS tem_imagem, UNIX_TIMESTAMP(c.updated_at) AS versao_capa
+       FROM certificados ce
+       JOIN certificado_config cfg ON cfg.course_id = ce.course_id
+       JOIN courses c ON c.id = ce.course_id
+      WHERE ${CONDICAO_DO_CURSISTA}
+      ORDER BY c.name`,
+    [cpf]
+  )
+  return linhas.map((l) => ({
+    id: l.id,
+    courseId: l.course_id,
+    curso: l.curso,
+    cursoNoSistema: l.curso_no_sistema,
+    cargaHoraria: l.carga_horaria,
+    periodo: l.periodo,
+    codigo: l.codigo,
+    emitidoEm: l.emitido_em,
+    trail: l.secondary_trail,
+    hasImage: Boolean(Number(l.tem_imagem)),
+    imageVersion: Number(l.versao_capa || 0),
+  }))
+}
+
+async function pdfDoCursista({ id, cpf }) {
+  requireMysql()
+  const [[certificado]] = await getPool().execute(
+    `SELECT ce.* FROM certificados ce JOIN certificado_config cfg ON cfg.course_id = ce.course_id
+      WHERE ce.id = ? AND ${CONDICAO_DO_CURSISTA}`,
+    [id, cpf]
+  )
+  // 404 tambem para o certificado de outra pessoa: nao confirma que o id existe.
+  if (!certificado) throw erro(404, 'Certificado nao encontrado.')
+  const { pdf } = await pdfDoCertificado(certificado)
+  await getPool().execute(
+    'UPDATE certificados SET downloads = downloads + 1, primeiro_download_em = COALESCE(primeiro_download_em, NOW()) WHERE id = ?',
+    [id]
+  )
+  return { pdf, nomeArquivo: nomeDoArquivo(certificado.codigo) }
+}
+
+// ---------------------------------------------------------------------------
+// Validacao publica
+// ---------------------------------------------------------------------------
+
+/**
+ * O que o certificado diz, conferido pelo codigo. CPF mascarado: quem tem o
+ * codigo tem o certificado na mao e ja ve o CPF la; a pagina so confirma.
+ * Curso ainda nao liberado responde como inexistente.
+ */
+async function validar(codigoBruto) {
+  requireMysql()
+  const codigo = normalizarCodigo(codigoBruto)
+  if (!codigo) return { encontrado: false }
+  const [[linha]] = await getPool().execute(
+    `SELECT ce.nome, ce.cpf, ce.status, ce.emitido_em, ce.codigo,
+            COALESCE(cfg.nome_curso, c.name) AS curso, COALESCE(cfg.carga_horaria, c.workload_hours) AS carga_horaria,
+            cfg.periodo
+       FROM certificados ce
+       JOIN certificado_config cfg ON cfg.course_id = ce.course_id AND cfg.liberado = 1
+       JOIN courses c ON c.id = ce.course_id
+      WHERE ce.codigo = ?`,
+    [codigo]
+  )
+  if (!linha) return { encontrado: false, codigo }
+  return {
+    encontrado: true,
+    codigo: linha.codigo,
+    valido: linha.status === 'valido',
+    status: linha.status,
+    nome: linha.nome,
+    cpf: maskCpf(linha.cpf),
+    curso: linha.curso,
+    cargaHoraria: linha.carga_horaria,
+    periodo: linha.periodo,
+    emitidoEm: linha.emitido_em,
+  }
+}
+
+module.exports = {
+  listarCursos,
+  obterConfig,
+  salvarConfig,
+  salvarArte,
+  arteDoCurso,
+  previa,
+  importarBase,
+  listarEmitidos,
+  pdfParaAdmin,
+  alterarStatus,
+  meusCertificados,
+  pdfDoCursista,
+  validar,
+  normalizarCodigo,
+}

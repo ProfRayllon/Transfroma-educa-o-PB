@@ -32,3 +32,5 @@ resultados-cursos/
 # Excecao: os modelos de planilha do painel, com dados ficticios, gerados por
 # backend/scripts/gerar-modelos-planilhas.js.
 !frontend/public/modelos/modelo-*.xlsx
+
+.claude/settings.local.json

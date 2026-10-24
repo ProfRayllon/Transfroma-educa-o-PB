@@ -8,6 +8,8 @@ import Layout from './components/layout/Layout'
 import Home from './pages/Home'
 import PublicCourses from './pages/PublicCourses'
 import Suporte from './pages/Suporte'
+import ValidarCertificado from './pages/ValidarCertificado'
+import Certificados from './pages/Certificados'
 import Atendimentos from './pages/Atendimentos'
 import Login from './pages/Login'
 import Painel from './pages/Painel'
@@ -76,6 +78,9 @@ export default function App() {
           <Route path="/catalogo-cursos" element={<PublicCourses />} />
           {/* Publico: quem mais precisa de suporte e quem nao consegue entrar. */}
           <Route path="/suporte" element={<Suporte />} />
+          {/* Validacao publica do certificado: o QR Code abre /validar/<codigo>. */}
+          <Route path="/validar" element={<ValidarCertificado />} />
+          <Route path="/validar/:codigo" element={<ValidarCertificado />} />
           <Route path="/inscricoes" element={<Navigate to="/" replace />} />
           <Route path="/guia" element={<Navigate to="/" replace />} />
           {/* Login da equipe interna. Alcancado pelo rodape do site, nao pelo menu:
@@ -113,6 +118,7 @@ export default function App() {
             <Route path="minhas-avaliacoes" element={<MinhasAvaliacoes />} />
             <Route path="acessos" element={<Acessos />} />
             <Route path="cursistas" element={<CursistasAdmin />} />
+            <Route path="certificados" element={<Certificados />} />
             {/* A fila de chamados de Suporte. O publico abre em /suporte. */}
             <Route path="atendimentos" element={<Atendimentos />} />
             <Route path="notificacoes" element={<Notificacoes />} />
