@@ -639,31 +639,56 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── CTA + Video ── */}
-        <section className="bg-gradient-to-r from-[#3b1d7a] via-[#6f35b5] to-[#a855f7]">
-          <div className="mx-auto max-w-[860px] px-[22px] py-20 text-center">
-            <span className="mb-4 inline-block rounded-full bg-white/15 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-white/80 ring-1 ring-white/25">
-              Formação continuada
-            </span>
-            <h2 className="mb-4 text-[40px] font-black uppercase leading-tight tracking-tight text-white">
-              Transforme sua prática
-            </h2>
-            <p className="mx-auto max-w-[560px] text-[17px] leading-relaxed text-white/80">
-              Participe de formações alinhadas à realidade da rede com intenção, método e resultado.
-            </p>
-            <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <Link
-                className="inline-flex min-h-[48px] items-center justify-center rounded-xl bg-white px-7 py-3 text-[15px] font-black text-[#6f35b5] shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl"
-                to="/catalogo-cursos"
-              >
-                Acessar cursos
-              </Link>
-              <a
-                className="inline-flex min-h-[48px] items-center justify-center rounded-xl border border-white/50 bg-white/15 px-7 py-3 text-[15px] font-black text-white backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-white/25"
-                href={avaUrl} target="_blank" rel="noreferrer"
-              >
-                Entrar no AVA
-              </a>
+        {/* ── Certificado ── A antiga chamada "Transforme sua pratica" virou o
+            anuncio do certificado na area do cursista: e o que o cursista que
+            concluiu precisa saber agora. A foto (recorte com fundo transparente)
+            encosta na base da faixa. */}
+        <section className="overflow-hidden bg-gradient-to-r from-[#3b1d7a] via-[#6f35b5] to-[#a855f7]">
+          <div className="mx-auto grid max-w-[1180px] items-end gap-6 px-[22px] pt-16 md:grid-cols-[1.05fr_0.95fr] md:pt-12">
+            <div className="pb-4 text-center md:pb-16 md:text-left">
+              <span className="mb-4 inline-block rounded-full bg-white/15 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-white/85 ring-1 ring-white/25">
+                Novidade · Certificados
+              </span>
+              <h2 className="mb-4 text-[34px] font-black uppercase leading-[1.05] tracking-tight text-white sm:text-[40px]">
+                Seu certificado agora está na Área do Cursista
+              </h2>
+              <p className="mx-auto max-w-[520px] text-[17px] leading-relaxed text-white/85 md:mx-0">
+                Concluiu um curso do Transforma? Entre com o seu CPF, abra <strong className="text-white">Meus cursos</strong> e
+                baixe o certificado na hora, em PDF. Cada certificado tem um código e um QR Code para qualquer pessoa
+                conferir a autenticidade aqui no site.
+              </p>
+              <ol className="mx-auto mt-6 grid max-w-[520px] gap-2 text-left text-[14.5px] text-white/90 md:mx-0">
+                {['Entre na Área do Cursista com o seu CPF', 'Clique no ícone de certificado do curso concluído', 'Baixe o PDF e guarde ou imprima'].map((passo, i) => (
+                  <li key={passo} className="flex items-center gap-3">
+                    <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-white text-[13px] font-black text-[#6f35b5]">{i + 1}</span>
+                    {passo}
+                  </li>
+                ))}
+              </ol>
+              <div className="mt-8 flex flex-wrap justify-center gap-3 md:justify-start">
+                <Link
+                  className="inline-flex min-h-[48px] items-center justify-center rounded-xl bg-white px-7 py-3 text-[15px] font-black text-[#6f35b5] shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl"
+                  to="/area-do-cursista"
+                >
+                  Acessar meus certificados
+                </Link>
+                <Link
+                  className="inline-flex min-h-[48px] items-center justify-center rounded-xl border border-white/50 bg-white/15 px-7 py-3 text-[15px] font-black text-white backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-white/25"
+                  to="/validar"
+                >
+                  Validar um certificado
+                </Link>
+              </div>
+            </div>
+            <div className="flex justify-center md:justify-end">
+              <img
+                src="/imagens/certificado-cursista.webp"
+                alt="Professor segurando o certificado do Transforma Educação PB"
+                width="720"
+                height="900"
+                loading="lazy"
+                className="block h-auto w-full max-w-[340px] drop-shadow-[0_20px_40px_rgba(28,16,51,.35)] sm:max-w-[400px] md:max-w-[460px]"
+              />
             </div>
           </div>
         </section>
