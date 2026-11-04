@@ -113,6 +113,8 @@ module.exports = function criarRotasPublicas() {
               END AS resumo
          FROM courses c
          LEFT JOIN ementas e ON e.course_id = c.id
+        -- So o que foi publicado pela tela de Cursos vai ao site.
+        WHERE c.publicado_home = 1
         ORDER BY c.primary_trail, c.name`
     )
 

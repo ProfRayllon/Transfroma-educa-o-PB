@@ -859,6 +859,31 @@ app.patch('/api/courses/:id/status-ava', auth, async (req, res) => {
 })
 
 /**
+ * Publicar o curso no site (home e catalogo) ou retira-lo de la.
+ *
+ * Mesmo poder de excluir e criar: administrador e gerencia. O que vai para a
+ * vitrine publica e decisao institucional, nao de quem produz o curso.
+ */
+app.patch('/api/courses/:id/publicacao', auth, async (req, res) => {
+  const actor = await store.getUserById(req.user.id)
+  if (!mandaEmCursos(actor)) {
+    return res.status(403).json({ message: 'Apenas administradores e a gerencia podem publicar cursos no site.' })
+  }
+  if (typeof req.body.publicado !== 'boolean') {
+    return res.status(400).json({ message: 'Informe publicado como true ou false.' })
+  }
+
+  const current = await store.getCourseById(req.params.id)
+  if (!current) return res.status(404).json({ message: 'Curso nao encontrado.' })
+
+  try {
+    res.json(await store.updateCoursePublicacao(req.params.id, req.body.publicado))
+  } catch {
+    res.status(500).json({ message: 'Erro ao atualizar a publicacao do curso.' })
+  }
+})
+
+/**
  * Excluir curso: administrador e gerencia.
  *
  * Segue `mandaEmCursos` como o resto do modulo. Ate aqui era a unica operacao

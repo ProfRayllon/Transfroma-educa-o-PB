@@ -112,6 +112,7 @@ function mapCourseRow(row) {
     enrollmentClosesAt: row.enrollment_closes_at ? formatDate(row.enrollment_closes_at, true) : null,
     image: row.image,
     statusAva: row.status_ava || 'nao_publicado',
+    publicadoHome: Boolean(Number(row.publicado_home)),
     createdAt: formatDate(row.created_at, true),
   }
 }
@@ -370,7 +371,7 @@ async function ensureMysqlSchema() {
      FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE()
        AND TABLE_NAME = 'courses'
-       AND COLUMN_NAME IN ('supervisor_id', 'coordinator_id', 'status_ava', 'workload_hours')`
+       AND COLUMN_NAME IN ('supervisor_id', 'coordinator_id', 'status_ava', 'workload_hours', 'publicado_home')`
   )
   const existingCourseColumns = new Set(courseColumns.map((column) => column.COLUMN_NAME))
 
@@ -384,6 +385,16 @@ async function ensureMysqlSchema() {
 
   if (!existingCourseColumns.has('status_ava')) {
     await pool.execute("ALTER TABLE courses ADD COLUMN status_ava ENUM('nao_publicado','publicado') NOT NULL DEFAULT 'nao_publicado'")
+  }
+
+  /*
+   * Publicado no site (home e catalogo). Os cursos que ja existiam continuam
+   * aparecendo -- a coluna nasce com 1 para eles --, e so depois o padrao passa
+   * a 0: curso novo fica fora do site ate alguem publicar.
+   */
+  if (!existingCourseColumns.has('publicado_home')) {
+    await pool.execute('ALTER TABLE courses ADD COLUMN publicado_home TINYINT(1) NOT NULL DEFAULT 1')
+    await pool.execute('ALTER TABLE courses ALTER COLUMN publicado_home SET DEFAULT 0')
   }
 
   // Carga horaria do curso. Fica NULL enquanto a equipe nao informar -- o site
@@ -1228,6 +1239,18 @@ async function updateCourseStatusAva(id, statusAva) {
   }
 
   await pool.execute('UPDATE courses SET status_ava = ? WHERE id = ?', [statusAva, id])
+  return getCourseById(id)
+}
+
+async function updateCoursePublicacao(id, publicado) {
+  if (!isMysqlMode()) {
+    const idx = courses.findIndex((course) => course.id === Number(id))
+    if (idx === -1) return null
+    courses[idx] = { ...courses[idx], publicadoHome: Boolean(publicado) }
+    return courses[idx]
+  }
+
+  await pool.execute('UPDATE courses SET publicado_home = ? WHERE id = ?', [publicado ? 1 : 0, id])
   return getCourseById(id)
 }
 
@@ -2270,6 +2293,7 @@ module.exports = {
   createCourse,
   updateCourse,
   updateCourseStatusAva,
+  updateCoursePublicacao,
   deleteCourse,
   listCourseParticipants,
   listMaterialAssignees,

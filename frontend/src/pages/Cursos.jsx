@@ -11,7 +11,9 @@ import {
   Clock,
   FileText,
   Eye,
+  Globe,
   Pencil,
+  Play,
   Plus,
   Search,
   SlidersHorizontal,
@@ -272,7 +274,7 @@ function InscricaoObrigatoria({ course, obrigatorio, onAlternar }) {
   )
 }
 
-function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, ementaStatus, obrigatorio = false, onAlternarObrigatorio = null }) {
+function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, ementaStatus, obrigatorio = false, onAlternarObrigatorio = null, onPublicar = null }) {
   const navigate = useNavigate()
   const { user } = useAuth()
   const color = getTrailColor(course.primaryTrail)
@@ -328,6 +330,14 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
             {inscricao.label}
           </span>
         </div>
+
+        {course.publicadoHome && (
+          <div className="absolute top-3 left-3">
+            <span className="inline-flex items-center gap-1 rounded-full bg-green-600/95 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
+              <Globe size={10} /> No site
+            </span>
+          </div>
+        )}
 
         {alert && (
           <div className="absolute top-3 right-3">
@@ -474,6 +484,19 @@ function CourseCard({ course, materials, onEdit, onDelete, onUpdateStatusAva, em
           >
             {ementaApproved ? <CheckCircle size={13} /> : <FileText size={13} />}
           </button>
+          {/* Publicar na home: verde vazado quando o curso esta fora do site,
+              verde cheio quando ja esta la. A confirmacao fica na pagina. */}
+          {onPublicar && (
+            <button
+              onClick={() => onPublicar(course)}
+              title={course.publicadoHome ? 'Publicado na página principal — clique para retirar' : 'Publicar na página principal'}
+              className={`w-9 h-9 flex items-center justify-center rounded-lg border transition-colors ${course.publicadoHome
+                ? 'bg-green-600 border-green-600 text-white hover:bg-green-700'
+                : 'bg-white border-green-300 text-green-600 hover:bg-green-50'}`}
+            >
+              {course.publicadoHome ? <Globe size={14} /> : <Play size={14} />}
+            </button>
+          )}
           <button
             onClick={() => onEdit(course)}
             title="Editar curso"
@@ -1034,6 +1057,21 @@ export default function Cursos() {
     }).catch(() => {})
   }, [])
 
+  // Publicacao no site (home e catalogo): administrador e gerencia, como no backend.
+  const { updateCoursePublicacao } = useData()
+  const podePublicar = mandaEmCursos(user)
+  const [publicando, setPublicando] = useState(null)
+  const [erroPublicacao, setErroPublicacao] = useState('')
+  const confirmarPublicacao = async () => {
+    const curso = publicando
+    setErroPublicacao('')
+    try {
+      await updateCoursePublicacao(curso.id, !curso.publicadoHome)
+    } catch (error) {
+      setErroPublicacao(error.message)
+    }
+  }
+
   // Cursos de inscricao obrigatoria: so o administrador ve e altera.
   const ehAdministrador = user?.role === 'administrador'
   const [obrigatorios, setObrigatorios] = useState(new Set())
@@ -1318,6 +1356,7 @@ export default function Cursos() {
               ementaStatus={ementaStatuses[course.id]}
               obrigatorio={obrigatorios.has(course.id)}
               onAlternarObrigatorio={ehAdministrador ? alternarObrigatorio : null}
+              onPublicar={podePublicar ? setPublicando : null}
             />
           ))}
         </div>
@@ -1334,6 +1373,22 @@ export default function Cursos() {
         error={saveError}
       />
 
+      {erroPublicacao && (
+        <div className="fixed bottom-4 right-4 z-50 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-lg" onClick={() => setErroPublicacao('')}>
+          {erroPublicacao}
+        </div>
+      )}
+      <ConfirmDialog
+        open={Boolean(publicando)}
+        onClose={() => setPublicando(null)}
+        onConfirm={confirmarPublicacao}
+        title={publicando?.publicadoHome ? 'Retirar da página principal?' : 'Publicar na página principal?'}
+        message={publicando?.publicadoHome
+          ? `"${publicando?.name}" deixa de aparecer na página principal e no catálogo do site. Nada do curso é apagado.`
+          : `Confirma a liberação de "${publicando?.name}" na página principal? O curso passa a aparecer na home e no catálogo do site.`}
+        confirmLabel={publicando?.publicadoHome ? 'Retirar do site' : 'Publicar'}
+        variant={publicando?.publicadoHome ? 'danger' : 'success'}
+      />
       <ConfirmDialog
         open={!!confirmDeleteCourse}
         onClose={() => setConfirmDeleteCourse(null)}

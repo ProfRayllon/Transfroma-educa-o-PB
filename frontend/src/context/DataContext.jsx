@@ -78,6 +78,16 @@ export function DataProvider({ children }) {
     }
   }
 
+  const updateCoursePublicacao = async (courseId, publicado) => {
+    try {
+      const { data } = await api.patch(`/courses/${courseId}/publicacao`, { publicado })
+      setCourses((current) => current.map((item) => (item.id === data.id ? data : item)))
+      return data
+    } catch (error) {
+      throw new Error(getApiErrorMessage(error, 'Erro ao publicar o curso.'))
+    }
+  }
+
   const deleteCourse = async (courseId) => {
     try {
       await api.delete(`/courses/${courseId}`)
@@ -170,6 +180,7 @@ export function DataProvider({ children }) {
       loadCourses,
       saveCourse,
       updateCourseStatusAva,
+      updateCoursePublicacao,
       deleteCourse,
       saveMaterial,
       approveMaterial,
