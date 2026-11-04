@@ -84,6 +84,8 @@ async function listarCursosAbertos(cursistaId) {
      WHERE c.enrollment_opens_at IS NOT NULL
        AND c.enrollment_closes_at IS NOT NULL
        AND NOW() BETWEEN c.enrollment_opens_at AND c.enrollment_closes_at
+       -- Mesmo criterio do site: curso fora da home e do catalogo nao e oferecido.
+       AND c.publicado_home = 1
      ORDER BY c.name`,
     [cursistaId, EDICAO_ATUAL]
   )
@@ -159,13 +161,15 @@ async function inscrever({ cursistaId, courseId, req }) {
   requireMysql()
 
   const [rows] = await getPool().execute(
-    `SELECT id, name, enrollment_opens_at, enrollment_closes_at,
+    `SELECT id, name, enrollment_opens_at, enrollment_closes_at, publicado_home,
             (NOW() BETWEEN enrollment_opens_at AND enrollment_closes_at) AS aberto
      FROM courses WHERE id = ? LIMIT 1`,
     [courseId]
   )
   const curso = rows[0]
-  if (!curso) throw erro(404, 'Curso nao encontrado.')
+  // Curso fora do site responde como inexistente: a inscricao pelo cursista so
+  // vale para o que esta publicado. (O administrador inscreve por outra rota.)
+  if (!curso || !Number(curso.publicado_home)) throw erro(404, 'Curso nao encontrado.')
   if (!curso.enrollment_opens_at || !curso.enrollment_closes_at || !Number(curso.aberto)) {
     throw erro(400, 'As inscricoes para este curso nao estao abertas.')
   }
