@@ -33,9 +33,9 @@ const timeline = [
 ]
 
 const stats = [
-  { value: 200, prefix: '+', suffix: 'h', label: 'de formação' },
+  { value: 240, prefix: '+', suffix: 'h', label: 'de formação' },
   { value: 100, suffix: '%', label: 'certificados emitidos para concluintes' },
-  { value: 13000, prefix: '+', label: 'cursistas' },
+  { value: 14000, prefix: '+', label: 'cursistas' },
   { value: 95, prefix: '+', suffix: '%', label: 'de satisfação' },
 ]
 
@@ -120,8 +120,8 @@ function CountUp({ value, prefix = '', suffix = '', label }) {
 function HeroStats() {
   const [counts, setCounts] = useState([0, 0, 0])
   const items = [
-    { target: 13000, prefix: '+', suffix: '', label: 'cursistas', decimals: false },
-    { target: 200,   prefix: '+', suffix: 'h', label: 'de formação', decimals: false },
+    { target: 14000, prefix: '+', suffix: '', label: 'cursistas', decimals: false },
+    { target: 240,   prefix: '+', suffix: 'h', label: 'de formação', decimals: false },
     { target: 95,    prefix: '+', suffix: '%', label: 'de satisfação', decimals: false },
   ]
 
