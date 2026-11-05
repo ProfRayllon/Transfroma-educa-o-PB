@@ -10,6 +10,7 @@ const admin = require('./cursistas.admin')
 const inscricoesAdmin = require('./cursistas.inscricoesAdmin')
 const obrigatorios = require('./cursistas.obrigatorios')
 const importacao = require('./cursistas.import')
+const diretores = require('./cursistas.diretores')
 const {
   exportarInscritos,
   exportarCadastros,
@@ -218,6 +219,7 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
       status: req.body?.status || '',
       situacao: req.body?.situacao || '',
       origem: req.body?.origem || '',
+      perfil: req.body?.perfil || '',
       page: req.body?.page,
       perPage: req.body?.perPage,
     }))
@@ -336,6 +338,32 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
     type: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/octet-stream'],
     limit: '25mb',
   })
+
+  // Diretores escolares: planilha por GRE (modelo-importacao-diretores.xlsx).
+  // O nome do arquivo vai na query: e de la que sai a GRE quando a aba nao a traz.
+  const importarDiretores = (gravar) => tratar(async (req, res) => {
+    res.json(await diretores.importar({
+      arquivo: req.body,
+      nomeDoArquivo: String(req.query.arquivo || ''),
+      gravar,
+      actor: gravar ? await getUsuarioInterno(req.user.id) : null,
+      req,
+    }))
+  })
+  router.post('/admin/diretores/importar/validar', ...soAdmin, receberPlanilha, importarDiretores(false))
+  router.post('/admin/diretores/importar', ...soAdmin, limiteImportacao, receberPlanilha, importarDiretores(true))
+
+  router.get('/admin/diretores/resumo', ...soAdmin, tratar(async (_req, res) => {
+    res.json(await diretores.resumoPorGre())
+  }))
+
+  router.get('/admin/diretores/exportar', ...soAdmin, tratar(async (req, res) => {
+    const arquivo = await diretores.exportar({ gre: String(req.query.gre || '') })
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', 'attachment; filename="diretores.xlsx"')
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.send(arquivo)
+  }))
 
   router.post('/admin/cursistas/importar/validar', ...soAdmin, receberPlanilha, tratar(async (req, res) => {
     if (!Buffer.isBuffer(req.body) || req.body.length === 0) {

@@ -7,6 +7,7 @@ import {
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import Modal from '../components/ui/Modal'
 import FormularioCursista from '../components/cursistas/FormularioCursista'
+import DiretoresPorGre from '../components/cursistas/DiretoresPorGre'
 import api, { getApiErrorMessage } from '../lib/api'
 
 const SITUACOES = [
@@ -217,6 +218,7 @@ export default function Cursistas() {
   const [situacao, setSituacao] = useState('')
   const [statusConta, setStatusConta] = useState('')
   const [origem, setOrigem] = useState('')
+  const [perfil, setPerfil] = useState('')
   const [pagina, setPagina] = useState(1)
   const [carregando, setCarregando] = useState(true)
   const [aviso, setAviso] = useState(null)
@@ -264,7 +266,7 @@ export default function Cursistas() {
       // POST, e nao GET com query string: o termo pode ser um CPF, e a URL
       // completa iria para o access.log do nginx e para o historico do navegador.
       const { data } = await api.post('/cursistas/admin/cursistas/buscar', {
-        search: busca, situacao, status: statusConta, origem, page: pagina, perPage: 50,
+        search: busca, situacao, status: statusConta, origem, perfil, page: pagina, perPage: 50,
       })
       setLista(data)
     } catch (error) {
@@ -272,7 +274,7 @@ export default function Cursistas() {
     } finally {
       setCarregando(false)
     }
-  }, [busca, situacao, statusConta, origem, pagina])
+  }, [busca, situacao, statusConta, origem, perfil, pagina])
 
   const carregarResumoCursos = useCallback(async () => {
     try {
@@ -615,6 +617,8 @@ export default function Cursistas() {
         </>
       )}
 
+      <DiretoresPorGre aoImportar={carregarLista} />
+
       {/* Lista */}
       <div className="card p-0 overflow-hidden">
         <div className="flex items-center justify-between flex-wrap gap-3 px-5 py-4 border-b border-gray-100">
@@ -659,6 +663,15 @@ export default function Cursistas() {
             >
               {ORIGENS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
+            <select
+              value={perfil}
+              onChange={(e) => { setPerfil(e.target.value); setPagina(1) }}
+              className="select-field text-xs py-2 w-40"
+              aria-label="Perfil"
+            >
+              <option value="">Todos os perfis</option>
+              <option value="diretor">Só diretores</option>
+            </select>
           </div>
         </div>
 
@@ -682,9 +695,9 @@ export default function Cursistas() {
                   <td colSpan={6} className="table-cell text-center py-12">
                     <Users size={28} className="mx-auto text-gray-300 mb-2" />
                     <p className="text-sm text-gray-500">
-                      {busca || situacao || statusConta || origem ? 'Nenhum cursista encontrado com esses filtros.' : 'Nenhum cursista na base ainda.'}
+                      {busca || situacao || statusConta || origem || perfil ? 'Nenhum cursista encontrado com esses filtros.' : 'Nenhum cursista na base ainda.'}
                     </p>
-                    {!busca && !situacao && !statusConta && !origem && (
+                    {!busca && !situacao && !statusConta && !origem && !perfil && (
                       <p className="text-xs text-gray-400 mt-1">
                         Use "Importar base (.xlsx)" para carregar os cadastros, ou "Novo cursista" para criar um a um.
                       </p>
@@ -700,6 +713,11 @@ export default function Cursistas() {
                         <span className="text-gray-800 truncate max-w-xs" title={c.name}>{c.name}</span>
                         {/* So o cadastro manual ganha etiqueta: marcar os treze mil
                             importados seria ruido em cada linha da tabela. */}
+                        {c.diretor && (
+                          <span className="badge border border-amber-200 bg-amber-50 text-amber-700 flex-shrink-0" title="Está na base de diretores escolares">
+                            Diretor(a)
+                          </span>
+                        )}
                         {c.origem === 'manual' && (
                           <span className="badge border border-brand-200 bg-brand-50 text-brand-700 flex-shrink-0" title="Criado à mão pela coordenação">
                             manual

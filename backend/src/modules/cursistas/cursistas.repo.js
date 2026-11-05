@@ -554,7 +554,7 @@ async function substituirVinculos(records, connection) {
   )
 }
 
-async function list({ search = '', status = '', situacao = '', origem = '', page = 1, perPage = 50 }) {
+async function list({ search = '', status = '', situacao = '', origem = '', perfil = '', page = 1, perPage = 50 }) {
   requireMysql()
   const filters = []
   const params = []
@@ -585,6 +585,8 @@ async function list({ search = '', status = '', situacao = '', origem = '', page
   // fecharem. O caso que quebra isso e real: o reset de senha pelo admin zera o
   // password_hash mas mantem o cadastro confirmado, entao "completo" tambem exige
   // ter senha definida -- quem foi resetado volta a contar como primeiro acesso.
+  // Diretores escolares: vem da base de diretores, nao da funcao do cadastro.
+  if (perfil === 'diretor') filters.push('EXISTS (SELECT 1 FROM diretores d WHERE d.cpf = cursistas.cpf)')
   if (situacao === 'pendente_primeiro_acesso') filters.push('password_hash IS NULL')
   if (situacao === 'pendente_confirmacao') filters.push('password_hash IS NOT NULL AND cadastro_confirmado = 0')
   if (situacao === 'completo') filters.push('password_hash IS NOT NULL AND cadastro_confirmado = 1')
@@ -594,7 +596,8 @@ async function list({ search = '', status = '', situacao = '', origem = '', page
   const offset = (Math.max(Number(page) || 1, 1) - 1) * limit
 
   const [rows] = await getPool().query(
-    `SELECT * FROM cursistas ${where} ORDER BY name LIMIT ? OFFSET ?`,
+    `SELECT cursistas.*, EXISTS (SELECT 1 FROM diretores d WHERE d.cpf = cursistas.cpf) AS eh_diretor
+       FROM cursistas ${where} ORDER BY name LIMIT ? OFFSET ?`,
     [...params, limit, offset]
   )
   const [[{ total }]] = await getPool().query(
@@ -602,7 +605,12 @@ async function list({ search = '', status = '', situacao = '', origem = '', page
     params
   )
 
-  return { items: rows.map((row) => mapCursista(row)), total, page: Number(page) || 1, perPage: limit }
+  return {
+    items: rows.map((row) => ({ ...mapCursista(row), diretor: Boolean(Number(row.eh_diretor)) })),
+    total,
+    page: Number(page) || 1,
+    perPage: limit,
+  }
 }
 
 /**

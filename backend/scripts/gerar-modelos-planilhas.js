@@ -77,3 +77,15 @@ gravar('modelo-escolas-municipios.xlsx',
     ['25000003', 'EEEFM Escola Teste', 'Sousa', 'PB', 'Rural', 'Pequeno', -6.7593, -38.2316],
   ],
   'Escolas')
+
+// Diretores escolares: uma aba por GRE, com o nome da regional ("15ª GRE") --
+// e de la que o importador tira a GRE. A coluna GRE e opcional e, se vier,
+// vale mais que o nome da aba. Ver src/modules/cursistas/cursistas.diretores.js.
+gravar('modelo-importacao-diretores.xlsx',
+  ['MATRÍCULA', 'CPF', 'NOME DO(A) DIRETOR(A)', 'CÓDIGO INEP', 'ESCOLA', 'GRE'],
+  [
+    ['123.456-7', '111.111.111-11', 'Maria Exemplo da Silva', '25000001', 'EEEF Escola Exemplo', '15ª GRE'],
+    ['234.567-8', '222.222.222-22', 'João Exemplo Souza', '25000002', 'ECIT Escola Modelo', '15ª GRE'],
+    ['345.678-9', '333.333.333-33', 'Ana Exemplo Lima', '25000003', 'EEEFM Escola Teste', '15ª GRE'],
+  ],
+  '15ª GRE')

@@ -66,6 +66,9 @@ async function garantirEsquema() {
   }
 
   await padronizarGresGravadas(pool, 'cursista_vinculos')
+
+  // Base de diretores escolares, ligada aos cursistas pelo CPF.
+  await require('./cursistas.diretores').garantirEsquema(pool)
 }
 
 module.exports = { garantirEsquema }
