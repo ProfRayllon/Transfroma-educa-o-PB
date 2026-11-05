@@ -4,19 +4,48 @@ import { ArrowRight, Clock, FileBadge2, KeyRound, X } from 'lucide-react'
 import CapaCurso from './CapaCurso'
 
 /**
- * Alerta de abertura da Home: as novidades do programa e, quando ha curso com
- * inscricao aberta, a contagem regressiva para o fim das inscricoes com as
- * capas dos cursos.
+ * Alerta de abertura da Home.
  *
- * Aparece uma vez por sessao do navegador -- quem fecha nao o ve de novo a cada
- * volta para a Home. A chave muda quando o conteudo muda (v2: certificados e
- * redefinicao de senha), para quem ja tinha fechado a versao antiga ver a nova.
+ * Ate o prazo final (20/11), e o aviso do encerramento: cronometro unico para
+ * todos os cursos e os cursos agrupados por trilha, cada um com a sua situacao
+ * (reaberto, em andamento, em enturmacao). Depois do prazo, volta a ser so o
+ * aviso das novidades da Area do Cursista.
  *
- * A contagem mira o curso que fecha PRIMEIRO: e o prazo que alguem pode perder.
- * Sem curso aberto, o alerta mostra so as novidades.
+ * Aparece uma vez por sessao do navegador. A chave muda quando o conteudo muda,
+ * para quem fechou a versao anterior ver a nova uma vez.
+ *
+ * Os cursos e as situacoes ficam fixos aqui, e nao no banco: e um comunicado
+ * com data para acabar, escrito pela coordenacao. Passado o prazo, sai sozinho.
  */
 
-const CHAVE_SESSAO = 'transforma:alerta-inscricoes-visto-v2'
+const CHAVE_SESSAO = 'transforma:alerta-inscricoes-visto-v3'
+
+// 20 de novembro, fim do dia, no horario de Brasilia.
+const PRAZO_FINAL = new Date('2026-11-20T23:59:59-03:00').getTime()
+
+const SITUACOES = {
+  reaberto: { rotulo: 'Reaberto', classe: 'bg-green-100 text-green-800 ring-green-200' },
+  andamento: { rotulo: 'Em andamento', classe: 'bg-[#f3e8ff] text-[#6f35b5] ring-[#e9d5ff]' },
+  enturmacao: { rotulo: 'Em enturmação', classe: 'bg-amber-100 text-amber-800 ring-amber-200' },
+}
+
+const TRILHAS = [
+  {
+    titulo: 'Trilha Institucional',
+    cursos: [
+      { id: 10, nome: 'Google for Education', situacao: 'reaberto', texto: 'Curso reaberto para quem já estava inscrito.' },
+      { id: 11, nome: 'Legislação Educacional', situacao: 'reaberto', texto: 'Curso reaberto para quem já estava inscrito.' },
+      { id: 15, nome: 'Análise de dados e gestão da aprendizagem', situacao: 'enturmacao', texto: 'Enturmação de professores e diretores.' },
+    ],
+  },
+  {
+    titulo: 'Trilhas Transversais',
+    cursos: [
+      { id: 2, nome: 'BNCC Computação na prática docente', situacao: 'andamento', texto: 'Prazo de conclusão estendido.' },
+      { id: 8, nome: 'Educação inclusiva: fundamentos, estratégias e acessibilidade', situacao: 'enturmacao', texto: 'Enturmação em andamento.' },
+    ],
+  },
+]
 
 /** O que mudou para o cursista. Tirar daqui quando deixar de ser novidade. */
 const NOVIDADES = [
@@ -55,7 +84,7 @@ const doisDigitos = (n) => String(n).padStart(2, '0')
 function Bloco({ valor, rotulo }) {
   return (
     <div className="flex flex-col items-center rounded-2xl bg-white/10 px-2 py-3 ring-1 ring-white/20 backdrop-blur-sm sm:py-4">
-      <span key={valor} className="text-[34px] font-black leading-none tabular-nums text-white sm:text-[46px] animate-fade-in">
+      <span key={valor} className="text-[32px] font-black leading-none tabular-nums text-white sm:text-[44px] animate-fade-in">
         {doisDigitos(valor)}
       </span>
       <span className="mt-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-purple-200 sm:text-[11px]">{rotulo}</span>
@@ -63,19 +92,36 @@ function Bloco({ valor, rotulo }) {
   )
 }
 
-function Novidades() {
+/** Card de um curso no aviso: capa pequena, nome, situacao e o que esta acontecendo. */
+function CursoDoAviso({ curso, dadosDoCurso }) {
+  const situacao = SITUACOES[curso.situacao]
   return (
-    <div className="grid gap-2.5 sm:grid-cols-2">
+    <div className="flex gap-3 rounded-2xl border border-[#ede7f6] bg-white p-2.5 text-left">
+      <div className="h-[68px] w-[68px] flex-shrink-0 overflow-hidden rounded-xl ring-1 ring-[#e9d5ff]">
+        <CapaCurso curso={dadosDoCurso || { id: curso.id, hasImage: true, trail: '' }} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <span className={`inline-block rounded-full px-2 py-0.5 text-[10.5px] font-black ring-1 ${situacao.classe}`}>{situacao.rotulo}</span>
+        <span className="mt-1 block text-[13px] font-black leading-snug text-[#1c1033]">{curso.nome}</span>
+        <span className="mt-0.5 block text-[11.5px] leading-snug text-[#566176]">{curso.texto}</span>
+      </div>
+    </div>
+  )
+}
+
+function Novidades({ compacto = false }) {
+  return (
+    <div className={`grid gap-2.5 ${compacto ? 'md:grid-cols-2' : 'sm:grid-cols-2'}`}>
       {NOVIDADES.map(({ icone: Icone, titulo, texto }) => (
-        <div key={titulo} className="flex items-start gap-3 rounded-2xl border border-[#ede7f6] bg-[#fcfaff] p-3.5 text-left">
+        <div key={titulo} className="flex items-start gap-3 rounded-2xl border border-[#ede7f6] bg-[#fcfaff] p-3 text-left">
           {/* Icone de traco fino sobre fundo suave: mais sobrio que o bloco
               roxo chapado, e nao compete com o botao principal. */}
-          <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-white to-[#f3e8ff] text-[#6f35b5] shadow-[0_2px_8px_rgba(111,53,181,.12)] ring-1 ring-[#e9d5ff]">
-            <Icone size={21} strokeWidth={1.6} />
+          <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-white to-[#f3e8ff] text-[#6f35b5] shadow-[0_2px_8px_rgba(111,53,181,.12)] ring-1 ring-[#e9d5ff]">
+            <Icone size={20} strokeWidth={1.6} />
           </span>
           <span>
-            <span className="block text-[13.5px] font-black leading-tight text-[#1c1033]">{titulo}</span>
-            <span className="mt-1 block text-[12px] leading-snug text-[#566176]">{texto}</span>
+            <span className="block text-[13px] font-black leading-tight text-[#1c1033]">{titulo}</span>
+            <span className="mt-1 block text-[11.5px] leading-snug text-[#566176]">{texto}</span>
           </span>
         </div>
       ))}
@@ -84,18 +130,12 @@ function Novidades() {
 }
 
 export default function AlertaInscricoes({ cursos }) {
-  const abertos = useMemo(
-    () => cursos.filter((c) => c.situacao === 'aberto' && c.enrollmentClosesAt),
-    [cursos],
-  )
-  const prazo = useMemo(() => {
-    const tempos = abertos.map((c) => new Date(c.enrollmentClosesAt).getTime()).filter(Number.isFinite)
-    const futuro = tempos.filter((t) => t > Date.now())
-    return futuro.length ? Math.min(...futuro) : null
-  }, [abertos])
+  // Dados dos cursos (capa) vindos da lista publica, pelo id.
+  const porId = useMemo(() => new Map(cursos.map((c) => [c.id, c])), [cursos])
 
   const [aberto, setAberto] = useState(false)
   const [agora, setAgora] = useState(() => Date.now())
+  const comPrazo = PRAZO_FINAL - agora > 0
 
   // Abre um instante depois da pagina, para nao competir com o carregamento.
   useEffect(() => {
@@ -106,18 +146,18 @@ export default function AlertaInscricoes({ cursos }) {
 
   useEffect(() => {
     if (!aberto) return undefined
-    const intervalo = prazo ? setInterval(() => setAgora(Date.now()), 1000) : null
+    const intervalo = setInterval(() => setAgora(Date.now()), 1000)
     const aoTeclar = (e) => { if (e.key === 'Escape') fechar() }
     document.addEventListener('keydown', aoTeclar)
     const overflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
-      if (intervalo) clearInterval(intervalo)
+      clearInterval(intervalo)
       document.removeEventListener('keydown', aoTeclar)
       document.body.style.overflow = overflow
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aberto, prazo])
+  }, [aberto])
 
   const fechar = () => {
     marcarVisto()
@@ -125,24 +165,17 @@ export default function AlertaInscricoes({ cursos }) {
   }
 
   if (!aberto) return null
-  // A contagem so existe enquanto falta tempo; zerou, o alerta segue so com as novidades.
-  const restante = prazo ? prazo - agora : 0
-  const comContagem = restante > 0
-  const { dias, horas, minutos, segundos } = partes(restante)
-
-  const dataDoPrazo = comContagem
-    ? new Date(prazo).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-    : null
+  const { dias, horas, minutos, segundos } = partes(PRAZO_FINAL - agora)
 
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="alerta-inscricoes-titulo"
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-[#1c1033]/70 p-4 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-[#1c1033]/70 p-3 backdrop-blur-sm animate-fade-in sm:p-4"
       onClick={(e) => { if (e.target === e.currentTarget) fechar() }}
     >
-      <div className="relative max-h-[94vh] w-full max-w-[640px] overflow-y-auto rounded-3xl bg-white shadow-[0_30px_80px_rgba(28,16,51,.45)]">
+      <div className={`relative max-h-[94vh] w-full overflow-y-auto rounded-3xl bg-white shadow-[0_30px_80px_rgba(28,16,51,.45)] ${comPrazo ? 'max-w-[980px]' : 'max-w-[640px]'}`}>
         <button
           type="button"
           onClick={fechar}
@@ -152,21 +185,20 @@ export default function AlertaInscricoes({ cursos }) {
           <X size={18} />
         </button>
 
-        {/* Topo: com curso aberto, o anuncio e o tempo; sem, o titulo das novidades. */}
-        <div className="relative bg-gradient-to-br from-[#3b1d7a] via-[#5b2a9e] to-[#a855f7] px-6 pb-7 pt-8 text-center text-white sm:px-8">
+        <div className="relative bg-gradient-to-br from-[#3b1d7a] via-[#5b2a9e] to-[#a855f7] px-6 pb-7 pt-8 text-center text-white sm:px-10">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(255,255,255,.18)_0%,_transparent_55%)]" />
-          {comContagem ? (
+          {comPrazo ? (
             <div className="relative">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] ring-1 ring-white/25">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-green-300" /> Inscrições abertas
+                <Clock size={12} /> Prazo final
               </span>
-              <h2 id="alerta-inscricoes-titulo" className="mt-3 text-[26px] font-black leading-tight sm:text-[30px]">
-                {abertos.length > 1 ? 'Novos cursos com inscrições abertas!' : 'Novo curso com inscrições abertas!'}
+              <h2 id="alerta-inscricoes-titulo" className="mt-3 text-[24px] font-black leading-tight sm:text-[32px]">
+                Todos os cursos encerram em 20 de novembro
               </h2>
-              <p className="mt-1.5 flex items-center justify-center gap-1.5 text-[14px] text-white/80">
-                <Clock size={14} /> As inscrições encerram em <strong className="text-white">{dataDoPrazo}</strong>
+              <p className="mx-auto mt-2 max-w-[680px] text-[14px] leading-relaxed text-white/85">
+                Os cursos estão abertos <strong className="text-white">apenas para quem já está inscrito</strong>.
+                Google for Education e Legislação Educacional foram reabertos, e o BNCC Computação teve o prazo de conclusão estendido.
               </p>
-
               <div className="mx-auto mt-5 grid max-w-[460px] grid-cols-4 gap-2 sm:gap-3">
                 <Bloco valor={dias} rotulo={dias === 1 ? 'dia' : 'dias'} />
                 <Bloco valor={horas} rotulo="horas" />
@@ -186,55 +218,31 @@ export default function AlertaInscricoes({ cursos }) {
           )}
         </div>
 
-        <div className="px-6 pb-6 pt-5 sm:px-8">
-          {/* Capas, pequenas, so para reconhecer os cursos abertos. */}
-          {comContagem && (
-            <>
-              <p className="mb-3 text-center text-[12px] font-black uppercase tracking-[0.16em] text-[#6f35b5]">
-                {abertos.length > 1 ? `${abertos.length} cursos esperando por você` : 'Curso esperando por você'}
-              </p>
-              <div className="flex justify-center gap-3 overflow-x-auto pb-1">
-                {abertos.slice(0, 6).map((c) => (
-                  <Link
-                    key={c.id}
-                    to="/catalogo-cursos"
-                    onClick={fechar}
-                    title={c.name}
-                    className="group w-[84px] shrink-0 text-center"
-                  >
-                    <div className="aspect-square overflow-hidden rounded-xl ring-1 ring-[#e9d5ff] transition group-hover:-translate-y-0.5 group-hover:shadow-md">
-                      <CapaCurso curso={c} />
-                    </div>
-                    <span className="mt-1.5 line-clamp-2 block text-[10.5px] font-bold leading-tight text-[#1c1033]">{c.name}</span>
-                  </Link>
-                ))}
-              </div>
-              {abertos.length > 6 && (
-                <p className="mt-1 text-center text-[11px] text-[#566176]">e mais {abertos.length - 6} no catálogo</p>
-              )}
-              <p className="mb-2.5 mt-5 text-center text-[12px] font-black uppercase tracking-[0.16em] text-[#6f35b5]">Novidades</p>
-            </>
+        <div className="px-5 pb-6 pt-5 sm:px-8">
+          {comPrazo && (
+            <div className="mb-5 grid gap-5 md:grid-cols-[1.15fr_0.85fr]">
+              {TRILHAS.map((trilha) => (
+                <section key={trilha.titulo}>
+                  <h3 className="mb-2.5 text-[12px] font-black uppercase tracking-[0.16em] text-[#6f35b5]">{trilha.titulo}</h3>
+                  <div className="grid gap-2.5">
+                    {trilha.cursos.map((c) => <CursoDoAviso key={c.id} curso={c} dadosDoCurso={porId.get(c.id)} />)}
+                  </div>
+                </section>
+              ))}
+            </div>
           )}
 
-          <Novidades />
+          {comPrazo && <p className="mb-2.5 text-[12px] font-black uppercase tracking-[0.16em] text-[#6f35b5]">Novidades</p>}
+          <Novidades compacto={comPrazo} />
 
           <div className="mt-5 flex flex-col gap-2 sm:flex-row-reverse">
             <Link
-              to={comContagem ? '/catalogo-cursos' : '/area-do-cursista'}
+              to="/area-do-cursista"
               onClick={fechar}
               className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#6f35b5] px-6 py-3.5 text-[15px] font-black text-white shadow-md transition hover:bg-[#5a2b94]"
             >
-              {comContagem ? 'Inscreva-se agora' : 'Acessar a Área do Cursista'} <ArrowRight size={16} />
+              Acessar a Área do Cursista <ArrowRight size={16} />
             </Link>
-            {comContagem && (
-              <Link
-                to="/area-do-cursista"
-                onClick={fechar}
-                className="inline-flex items-center justify-center rounded-xl border border-[#e9d5ff] px-5 py-3.5 text-[14px] font-bold text-[#6f35b5] transition hover:bg-[#faf5ff]"
-              >
-                Área do Cursista
-              </Link>
-            )}
             <button
               type="button"
               onClick={fechar}
