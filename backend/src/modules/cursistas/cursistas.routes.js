@@ -220,6 +220,7 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
       situacao: req.body?.situacao || '',
       origem: req.body?.origem || '',
       perfil: req.body?.perfil || '',
+      gre: req.body?.gre || '',
       page: req.body?.page,
       perPage: req.body?.perPage,
     }))
@@ -237,6 +238,10 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
   // (que e o login) e se apaga cadastro com inscricao, as duas operacoes de
   // maior alcance do modulo.
   // ---------------------------------------------------------------------------
+
+  router.get('/admin/cursistas-gres', ...soAdmin, tratar(async (_req, res) => {
+    res.json(await repo.listarGres())
+  }))
 
   router.get('/admin/cursistas-opcoes', ...soAdmin, tratar(async (_req, res) => {
     res.json(await repo.listarOpcoesFormulario())
@@ -352,6 +357,10 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
   })
   router.post('/admin/diretores/importar/validar', ...soAdmin, receberPlanilha, importarDiretores(false))
   router.post('/admin/diretores/importar', ...soAdmin, limiteImportacao, receberPlanilha, importarDiretores(true))
+
+  router.post('/admin/diretores', ...soAdmin, tratar(async (req, res) => {
+    res.json(await diretores.adicionarManual({ dados: req.body || {}, actor: await getUsuarioInterno(req.user.id), req }))
+  }))
 
   router.get('/admin/diretores/resumo', ...soAdmin, tratar(async (_req, res) => {
     res.json(await diretores.resumoPorGre())

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertTriangle, CheckCircle, Download, FileSpreadsheet, Loader2, School, Upload } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Download, FileSpreadsheet, Loader2, School, Upload, UserPlus } from 'lucide-react'
+import Modal from '../ui/Modal'
 import api, { getApiErrorMessage } from '../../lib/api'
 
 /**
@@ -88,6 +89,96 @@ function Conferencia({ dados, aoConfirmar, aoCancelar, gravando }) {
   )
 }
 
+const GRES = Array.from({ length: 16 }, (_, i) => `${i + 1}ª GRE`)
+
+const formatarCpf = (v) => {
+  const d = String(v).replace(/\D/g, '').slice(0, 11)
+  return d.replace(/^(\d{3})(\d)/, '$1.$2').replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1-$2')
+}
+
+/**
+ * Um diretor por vez. Mesma regra da planilha: CPF que ja e cursista so e
+ * marcado como diretor; CPF novo ganha a conta. Nome, escola e GRE podem vir
+ * em branco quando o sistema ja os conhece (cadastro e vinculos pelo INEP).
+ */
+function AdicionarDiretor({ aberto, aoFechar, aoSalvar }) {
+  const vazio = { cpf: '', nome: '', matricula: '', inep: '', escola: '', gre: '' }
+  const [form, setForm] = useState(vazio)
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState('')
+
+  useEffect(() => { if (aberto) { setForm(vazio); setErro('') } }, [aberto]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const mudar = (campo) => (e) => setForm((f) => ({ ...f, [campo]: e.target.value }))
+
+  const salvar = async (e) => {
+    e.preventDefault()
+    setSalvando(true)
+    setErro('')
+    try {
+      const { data } = await api.post('/cursistas/admin/diretores', { ...form, cpf: form.cpf.replace(/\D/g, '') })
+      aoSalvar(data)
+    } catch (error) {
+      setErro(getApiErrorMessage(error, 'Não foi possível adicionar o diretor.'))
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <Modal open={aberto} onClose={aoFechar} title="Adicionar diretor(a)" size="md">
+      <form onSubmit={salvar} className="space-y-3">
+        <p className="text-xs text-gray-500">
+          Se o CPF já for cursista, ele só é marcado como diretor e o cadastro não muda. Se não for, a conta é criada
+          e a pessoa entra com o CPF e a senha padrão.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-gray-600">CPF *</span>
+            <input className="input-field font-mono" inputMode="numeric" placeholder="000.000.000-00" value={formatarCpf(form.cpf)} onChange={mudar('cpf')} required />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-gray-600">Matrícula</span>
+            <input className="input-field" value={form.matricula} onChange={mudar('matricula')} maxLength={30} />
+          </label>
+        </div>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-gray-600">Nome do(a) diretor(a)</span>
+          <input className="input-field" value={form.nome} onChange={mudar('nome')} maxLength={150} placeholder="Em branco: usa o nome do cadastro, se já for cursista" />
+        </label>
+        <div className="grid gap-3 sm:grid-cols-[140px_1fr]">
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-gray-600">Código INEP</span>
+            <input className="input-field font-mono" inputMode="numeric" value={form.inep} onChange={(e) => setForm((f) => ({ ...f, inep: e.target.value.replace(/\D/g, '').slice(0, 12) }))} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-gray-600">Escola</span>
+            <input className="input-field" value={form.escola} onChange={mudar('escola')} maxLength={200} placeholder="Em branco: vem do INEP, se a escola já estiver na base" />
+          </label>
+        </div>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-gray-600">GRE</span>
+          <select className="select-field" value={form.gre} onChange={mudar('gre')}>
+            <option value="">{form.inep ? 'Pelo INEP (se a escola já estiver na base)' : 'Escolha a GRE'}</option>
+            {GRES.map((g) => <option key={g} value={g}>{g}</option>)}
+          </select>
+        </label>
+        {erro && (
+          <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
+            <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" /> {erro}
+          </div>
+        )}
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" className="btn-secondary" onClick={aoFechar} disabled={salvando}>Cancelar</button>
+          <button type="submit" className="btn-primary" disabled={salvando || form.cpf.replace(/\D/g, '').length !== 11}>
+            {salvando ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />} Adicionar
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
 export default function DiretoresPorGre({ aoImportar }) {
   const [resumo, setResumo] = useState(null)
   const [arquivo, setArquivo] = useState(null)
@@ -95,6 +186,8 @@ export default function DiretoresPorGre({ aoImportar }) {
   const [ocupado, setOcupado] = useState(false)
   const [exportando, setExportando] = useState(false)
   const [erro, setErro] = useState('')
+  const [adicionando, setAdicionando] = useState(false)
+  const [avisoManual, setAvisoManual] = useState('')
   const arquivoRef = useRef(null)
 
   const carregar = useCallback(async () => {
@@ -165,6 +258,9 @@ export default function DiretoresPorGre({ aoImportar }) {
           <a href="/modelos/modelo-importacao-diretores.xlsx" download className="btn-secondary text-sm">
             <FileSpreadsheet size={14} /> Modelo de diretores
           </a>
+          <button type="button" className="btn-secondary text-sm" onClick={() => { setAvisoManual(''); setAdicionando(true) }}>
+            <UserPlus size={14} /> Adicionar diretor
+          </button>
           <input ref={arquivoRef} type="file" accept=".xlsx" className="hidden" onChange={escolher} />
           <button type="button" className="btn-secondary text-sm" onClick={() => arquivoRef.current?.click()} disabled={ocupado}>
             {ocupado ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Importar diretores
@@ -180,6 +276,23 @@ export default function DiretoresPorGre({ aoImportar }) {
           <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" /> {erro}
         </div>
       )}
+
+      {avisoManual && (
+        <div className="mt-3 flex items-start gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2.5 text-sm text-green-700">
+          <CheckCircle size={15} className="mt-0.5 flex-shrink-0" /> {avisoManual}
+        </div>
+      )}
+
+      <AdicionarDiretor
+        aberto={adicionando}
+        aoFechar={() => setAdicionando(false)}
+        aoSalvar={(d) => {
+          setAdicionando(false)
+          setAvisoManual(`${d.nome} ${d.novo ? 'adicionado(a)' : 'atualizado(a)'} como diretor(a) — ${d.gre}${d.escola ? `, ${d.escola}` : ''}.${d.contaCriada ? ' A conta de cursista foi criada (entra com o CPF e a senha padrão).' : ''}`)
+          carregar()
+          aoImportar?.()
+        }}
+      />
 
       {conferencia && (
         <Conferencia

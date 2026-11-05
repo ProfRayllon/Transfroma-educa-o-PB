@@ -246,6 +246,18 @@ async function gerarUsuarioIdManual(id, connection) {
 }
 
 /** Valores ja usados na base para preencher o formulario manual sem digitacao livre. */
+/** As GREs que existem na base (vinculos e diretores), em ordem: 1ª, 2ª ... 16ª. */
+async function listarGres() {
+  requireMysql()
+  const [linhas] = await getPool().query(
+    `SELECT gre FROM cursista_vinculos WHERE gre IS NOT NULL AND TRIM(gre) <> ''
+     UNION
+     SELECT gre FROM diretores WHERE gre IS NOT NULL AND TRIM(gre) <> ''`
+  )
+  const numero = (g) => Number(String(g).match(/^(\d+)/)?.[1] ?? 99)
+  return linhas.map((l) => l.gre).sort((a, b) => numero(a) - numero(b) || String(a).localeCompare(String(b), 'pt-BR'))
+}
+
 async function listarOpcoesFormulario() {
   requireMysql()
   const pool = getPool()
@@ -554,7 +566,7 @@ async function substituirVinculos(records, connection) {
   )
 }
 
-async function list({ search = '', status = '', situacao = '', origem = '', perfil = '', page = 1, perPage = 50 }) {
+async function list({ search = '', status = '', situacao = '', origem = '', perfil = '', gre = '', page = 1, perPage = 50 }) {
   requireMysql()
   const filters = []
   const params = []
@@ -586,7 +598,16 @@ async function list({ search = '', status = '', situacao = '', origem = '', perf
   // password_hash mas mantem o cadastro confirmado, entao "completo" tambem exige
   // ter senha definida -- quem foi resetado volta a contar como primeiro acesso.
   // Diretores escolares: vem da base de diretores, nao da funcao do cadastro.
+  // "Professor" e o resto da base -- quem nao esta na base de diretores.
   if (perfil === 'diretor') filters.push('EXISTS (SELECT 1 FROM diretores d WHERE d.cpf = cursistas.cpf)')
+  if (perfil === 'professor') filters.push('NOT EXISTS (SELECT 1 FROM diretores d WHERE d.cpf = cursistas.cpf)')
+  // GRE: a de qualquer vinculo do cursista, ou a da base de diretores (o diretor
+  // que ja era professor pode ter o vinculo antigo em outra regional).
+  if (gre) {
+    filters.push(`(EXISTS (SELECT 1 FROM cursista_vinculos v WHERE v.cursista_id = cursistas.id AND v.gre = ?)
+                OR EXISTS (SELECT 1 FROM diretores d WHERE d.cpf = cursistas.cpf AND d.gre = ?))`)
+    params.push(gre, gre)
+  }
   if (situacao === 'pendente_primeiro_acesso') filters.push('password_hash IS NULL')
   if (situacao === 'pendente_confirmacao') filters.push('password_hash IS NOT NULL AND cadastro_confirmado = 0')
   if (situacao === 'completo') filters.push('password_hash IS NOT NULL AND cadastro_confirmado = 1')
@@ -709,6 +730,7 @@ module.exports = {
   criarManual,
   gerarUsuarioIdManual,
   listarOpcoesFormulario,
+  listarGres,
   atualizarPeloAdmin,
   definirVinculos,
   contarDependencias,

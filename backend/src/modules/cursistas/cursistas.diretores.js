@@ -151,6 +151,50 @@ function classificar(registros) {
 async function importar({ arquivo, nomeDoArquivo, gravar = false, actor, req }) {
   requireMysql()
   const { registros, linhasDeTotal } = lerRegistros(arquivo, nomeDoArquivo)
+  return aplicar({ registros, linhasDeTotal, gravar, actor, req, origem: texto(nomeDoArquivo, 120) })
+}
+
+/**
+ * Um diretor por vez, pelo formulario. Mesmo caminho da planilha: quem ja e
+ * cursista so e marcado; quem nao e ganha a conta.
+ *
+ * Para poupar digitacao: sem nome, vale o do cadastro do cursista; com o INEP
+ * e sem escola/GRE, elas vem dos vinculos que ja existem para aquela escola.
+ */
+async function adicionarManual({ dados = {}, actor, req }) {
+  requireMysql()
+  const pool = getPool()
+  const cpf = normalizeCpf(dados.cpf)
+  let nome = texto(dados.nome, 150)
+  const inep = texto(dados.inep, 12).replace(/\D/g, '')
+  let escola = texto(dados.escola, 200)
+  let gre = padronizarGre(texto(dados.gre, 60))
+
+  if (!nome && isValidCpf(cpf)) {
+    const [[cad]] = await pool.query('SELECT name FROM cursistas WHERE cpf = ?', [cpf])
+    if (cad) nome = texto(cad.name, 150)
+  }
+  if (inep && (!escola || !gre)) {
+    const [[esc]] = await pool.query(
+      `SELECT MAX(escola) AS escola, MAX(gre) AS gre FROM cursista_vinculos WHERE inep = ?`, [inep]
+    )
+    if (!escola && esc?.escola) escola = texto(esc.escola, 200)
+    if (!gre && esc?.gre) gre = padronizarGre(esc.gre)
+  }
+
+  const resultado = await aplicar({
+    registros: [{ aba: 'Formulario', linha: 1, cpfBruto: String(dados.cpf ?? '').trim(), nome, matricula: texto(dados.matricula, 30), inep, escola, gre }],
+    linhasDeTotal: 0, gravar: true, actor, req, origem: 'manual',
+  })
+  if (resultado.problemas.length) {
+    const motivo = resultado.problemas[0].motivo
+    throw erro(400, motivo === 'Nome vazio' ? 'Informe o nome: este CPF ainda nao e cursista.' : motivo.replace(': inclua a coluna GRE ou nomeie a aba como "15ª GRE"', ': escolha a GRE.'))
+  }
+  const r = resultado.resumo
+  return { nome, gre, escola, novo: r.novos > 0, contaCriada: r.contasCriadas > 0 }
+}
+
+async function aplicar({ registros, linhasDeTotal, gravar, actor, req, origem }) {
   const { validos, problemas } = classificar(registros)
   const pool = getPool()
 
@@ -221,7 +265,7 @@ async function importar({ arquivo, nomeDoArquivo, gravar = false, actor, req }) 
 
     await registrar({
       actorType: 'admin', actorId: actor?.id || null, actorLabel: actor?.name || null,
-      action: ACOES.DIRETORES_IMPORTADOS, req, details: { arquivo: texto(nomeDoArquivo, 120), ...resumo, porGre },
+      action: ACOES.DIRETORES_IMPORTADOS, req, details: { origem, ...resumo, porGre },
     })
   }
 
@@ -292,4 +336,4 @@ async function exportar({ gre = '' } = {}) {
   })
 }
 
-module.exports = { garantirEsquema, importar, resumoPorGre, exportar, FUNCAO_DIRETOR }
+module.exports = { garantirEsquema, importar, adicionarManual, resumoPorGre, exportar, FUNCAO_DIRETOR }

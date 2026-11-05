@@ -219,6 +219,8 @@ export default function Cursistas() {
   const [statusConta, setStatusConta] = useState('')
   const [origem, setOrigem] = useState('')
   const [perfil, setPerfil] = useState('')
+  const [gre, setGre] = useState('')
+  const [gres, setGres] = useState([])
   const [pagina, setPagina] = useState(1)
   const [carregando, setCarregando] = useState(true)
   const [aviso, setAviso] = useState(null)
@@ -266,7 +268,7 @@ export default function Cursistas() {
       // POST, e nao GET com query string: o termo pode ser um CPF, e a URL
       // completa iria para o access.log do nginx e para o historico do navegador.
       const { data } = await api.post('/cursistas/admin/cursistas/buscar', {
-        search: busca, situacao, status: statusConta, origem, perfil, page: pagina, perPage: 50,
+        search: busca, situacao, status: statusConta, origem, perfil, gre, page: pagina, perPage: 50,
       })
       setLista(data)
     } catch (error) {
@@ -274,7 +276,11 @@ export default function Cursistas() {
     } finally {
       setCarregando(false)
     }
-  }, [busca, situacao, statusConta, origem, perfil, pagina])
+  }, [busca, situacao, statusConta, origem, perfil, gre, pagina])
+
+  useEffect(() => {
+    api.get('/cursistas/admin/cursistas-gres').then(({ data }) => setGres(Array.isArray(data) ? data : [])).catch(() => setGres([]))
+  }, [])
 
   const carregarResumoCursos = useCallback(async () => {
     try {
@@ -622,9 +628,18 @@ export default function Cursistas() {
       {/* Lista */}
       <div className="card p-0 overflow-hidden">
         <div className="flex items-center justify-between flex-wrap gap-3 px-5 py-4 border-b border-gray-100">
-          <h3 className="text-sm font-semibold text-gray-800">
-            Cursistas {lista.total > 0 && <span className="font-normal text-gray-400">· {lista.total.toLocaleString('pt-BR')}</span>}
-          </h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-semibold text-gray-800">Cursistas</h3>
+            {/* A contagem segue os filtros: e o numero para conferir o recorte. */}
+            <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-bold text-brand-700 ring-1 ring-brand-200">
+              {carregando ? '…' : lista.total.toLocaleString('pt-BR')}
+            </span>
+            {(perfil || gre || situacao || statusConta || origem || busca) && !carregando && (
+              <span className="text-xs text-gray-500">
+                {[perfil === 'diretor' ? 'diretores' : perfil === 'professor' ? 'professores' : null, gre || null].filter(Boolean).join(' · ') || 'com os filtros aplicados'}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-2 flex-wrap">
             <div className="relative">
               <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -670,7 +685,17 @@ export default function Cursistas() {
               aria-label="Perfil"
             >
               <option value="">Todos os perfis</option>
-              <option value="diretor">Só diretores</option>
+              <option value="professor">Professores</option>
+              <option value="diretor">Diretores</option>
+            </select>
+            <select
+              value={gre}
+              onChange={(e) => { setGre(e.target.value); setPagina(1) }}
+              className="select-field text-xs py-2 w-36"
+              aria-label="GRE"
+            >
+              <option value="">Todas as GREs</option>
+              {gres.map((g) => <option key={g} value={g}>{g}</option>)}
             </select>
           </div>
         </div>
@@ -695,9 +720,9 @@ export default function Cursistas() {
                   <td colSpan={6} className="table-cell text-center py-12">
                     <Users size={28} className="mx-auto text-gray-300 mb-2" />
                     <p className="text-sm text-gray-500">
-                      {busca || situacao || statusConta || origem || perfil ? 'Nenhum cursista encontrado com esses filtros.' : 'Nenhum cursista na base ainda.'}
+                      {busca || situacao || statusConta || origem || perfil || gre ? 'Nenhum cursista encontrado com esses filtros.' : 'Nenhum cursista na base ainda.'}
                     </p>
-                    {!busca && !situacao && !statusConta && !origem && !perfil && (
+                    {!busca && !situacao && !statusConta && !origem && !perfil && !gre && (
                       <p className="text-xs text-gray-400 mt-1">
                         Use "Importar base (.xlsx)" para carregar os cadastros, ou "Novo cursista" para criar um a um.
                       </p>
