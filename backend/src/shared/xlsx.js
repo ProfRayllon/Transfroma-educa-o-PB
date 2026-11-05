@@ -270,9 +270,19 @@ function normalizarData(valor) {
 function lerPlanilha(buffer) {
   const arquivos = lerZip(buffer)
 
+  /*
+   * Tira o prefixo de namespace das tags: `<x:row>` vira `<row>`.
+   *
+   * O Excel grava as tags sem prefixo, mas planilhas geradas por outros
+   * programas (OpenXML SDK, exportadores de sistemas) gravam `<x:sheetData>`,
+   * `<x:row>`, `<x:c>`... -- e o arquivo abre normalmente no Excel. Sem isto os
+   * padroes abaixo nao achavam linha nenhuma e a planilha parecia vazia (foi o
+   * caso da base de diretores das GREs). So o nome da TAG perde o prefixo; os
+   * atributos (`r:id`) ficam como estao.
+   */
   const ler = (caminho) => {
     const conteudo = arquivos.get(caminho)
-    return conteudo ? conteudo.toString('utf8') : ''
+    return conteudo ? conteudo.toString('utf8').replace(/<(\/?)[A-Za-z][\w.-]*:/g, '<$1') : ''
   }
 
   // Strings compartilhadas: as celulas de texto guardam so o indice.
@@ -287,12 +297,19 @@ function lerPlanilha(buffer) {
 
   // Nome da aba -> arquivo da planilha, via workbook + rels.
   const relacoes = new Map()
-  for (const m of ler('xl/_rels/workbook.xml.rels').matchAll(/Id="([^"]*)"[^>]*Target="([^"]*)"/g)) {
-    relacoes.set(m[1], m[2].replace(/^\/?xl\//, ''))
+  // Atributos lidos um a um, em qualquer ordem: o Excel grava Id antes de
+  // Target, mas outros geradores gravam Target antes de Id.
+  const atributo = (tag, nome) => (tag.match(new RegExp(`\\s${nome}="([^"]*)"`)) || [])[1]
+  for (const [tag] of ler('xl/_rels/workbook.xml.rels').matchAll(/<Relationship\b[^>]*>/g)) {
+    const id = atributo(tag, 'Id')
+    const alvo = atributo(tag, 'Target')
+    if (id && alvo) relacoes.set(id, alvo.replace(/^\/?xl\//, ''))
   }
 
   const abas = new Map()
-  for (const m of ler('xl/workbook.xml').matchAll(/<sheet[^>]*name="([^"]*)"[^>]*r:id="([^"]*)"/g)) {
+  for (const [tag] of ler('xl/workbook.xml').matchAll(/<sheet\b[^>]*>/g)) {
+    const m = [tag, atributo(tag, 'name'), atributo(tag, 'r:id')]
+    if (!m[1] || !m[2]) continue
     const alvo = relacoes.get(m[2])
     if (alvo) abas.set(decodificarXml(m[1]), alvo)
   }
