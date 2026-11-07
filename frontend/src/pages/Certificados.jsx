@@ -5,6 +5,7 @@ import {
 import api, { getApiErrorMessage } from '../lib/api'
 import VisualizadorPdf from '../components/public/VisualizadorPdf'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
+import Modal from '../components/ui/Modal'
 
 /**
  * Certificados por curso, so para o administrador.
@@ -478,7 +479,65 @@ function AbaBase({ curso, aoAtualizar }) {
 
 // ---------------------------------------------------------------- emitidos
 
-function AbaEmitidos({ curso, aoAtualizar }) {
+/**
+ * Apaga todos os certificados do curso. Pede para digitar EXCLUIR: sao
+ * milhares de linhas e nao tem volta (os codigos somem da validacao).
+ */
+function ExcluirBase({ curso, totais, aberto, aoFechar, aoExcluir }) {
+  const [digitado, setDigitado] = useState('')
+  const [excluindo, setExcluindo] = useState(false)
+  const [erro, setErro] = useState('')
+
+  useEffect(() => { if (aberto) { setDigitado(''); setErro('') } }, [aberto])
+
+  const confirmar = async () => {
+    setExcluindo(true)
+    setErro('')
+    try {
+      const { data } = await api.delete(`/certificados/admin/cursos/${curso.id}/emitidos`)
+      aoExcluir(data)
+    } catch (e) {
+      setErro(getApiErrorMessage(e, 'Não foi possível excluir a base.'))
+    } finally {
+      setExcluindo(false)
+    }
+  }
+
+  const pode = digitado.trim().toUpperCase() === 'EXCLUIR' && !excluindo
+
+  return (
+    <Modal open={aberto} onClose={excluindo ? () => {} : aoFechar} title="Excluir toda a base?" size="md" closable={!excluindo}>
+      <div className="space-y-3 text-sm text-gray-600">
+        <p>
+          Todos os <strong>{numero(totais?.total)}</strong> certificado(s) de <strong>{curso.nome}</strong> serão apagados
+          {totais?.revogados ? ` (${numero(totais.revogados)} revogados incluídos)` : ''}. Os códigos deixam de existir na validação.
+        </p>
+        {totais?.baixados > 0 && (
+          <Aviso>{numero(totais.baixados)} pessoa(s) já baixaram o certificado deste curso. Se ele já circulou, prefira revogar.</Aviso>
+        )}
+        <p>Use para planilha enviada no curso errado. Depois, é só mandar a base certa em “Adicionar concluintes”.</p>
+        <label className="block">
+          <span className="mb-1 block font-medium text-gray-700">Digite EXCLUIR para confirmar</span>
+          <input className="input-field" value={digitado} onChange={(e) => setDigitado(e.target.value)} autoFocus disabled={excluindo} />
+        </label>
+        {erro && <Aviso>{erro}</Aviso>}
+      </div>
+      <div className="mt-6 flex justify-end gap-3">
+        <button type="button" onClick={aoFechar} className="btn-secondary" disabled={excluindo}>Cancelar</button>
+        <button
+          type="button"
+          onClick={confirmar}
+          disabled={!pode}
+          className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {excluindo ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />} Excluir base
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
+function AbaEmitidos({ curso, totais, aoAtualizar }) {
   const [busca, setBusca] = useState('')
   const [termo, setTermo] = useState('')
   const [status, setStatus] = useState('')
@@ -489,6 +548,8 @@ function AbaEmitidos({ curso, aoAtualizar }) {
   const [confirmar, setConfirmar] = useState(null)
   const [excluindo, setExcluindo] = useState(null)
   const [exportando, setExportando] = useState(false)
+  const [excluirBase, setExcluirBase] = useState(false)
+  const [aviso, setAviso] = useState('')
 
   const carregar = useCallback(async () => {
     try {
@@ -575,6 +636,7 @@ function AbaEmitidos({ curso, aoAtualizar }) {
       </form>
 
       {erro && <Aviso>{erro}</Aviso>}
+      {aviso && <Aviso tipo="ok">{aviso}</Aviso>}
 
       <div className="overflow-x-auto rounded-xl border border-gray-100">
         <table className="w-full min-w-[720px]">
@@ -625,6 +687,33 @@ function AbaEmitidos({ curso, aoAtualizar }) {
           </tbody>
         </table>
       </div>
+
+      {totais?.total > 0 && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
+            onClick={() => { setAviso(''); setExcluirBase(true) }}
+            title="Apaga todos os certificados deste curso (planilha enviada no curso errado)"
+          >
+            <Trash2 size={15} /> Excluir toda a base ({numero(totais.total)})
+          </button>
+        </div>
+      )}
+
+      <ExcluirBase
+        curso={curso}
+        totais={totais}
+        aberto={excluirBase}
+        aoFechar={() => setExcluirBase(false)}
+        aoExcluir={async (r) => {
+          setExcluirBase(false)
+          setAviso(`${numero(r.excluidos)} certificado(s) excluído(s). A base deste curso está vazia.`)
+          setPagina(1)
+          await carregar()
+          aoAtualizar()
+        }}
+      />
 
       {dados && dados.total > 0 && (
         <div className="flex items-center justify-between text-sm text-gray-500">
@@ -796,7 +885,7 @@ export default function Certificados() {
               ) : aba === 'base' ? (
                 <AbaBase curso={selecionado} aoAtualizar={atualizar} />
               ) : (
-                <AbaEmitidos curso={selecionado} aoAtualizar={atualizar} />
+                <AbaEmitidos curso={selecionado} totais={config.totais} aoAtualizar={atualizar} />
               )}
             </>
           )}

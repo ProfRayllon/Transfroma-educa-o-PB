@@ -157,6 +157,11 @@ module.exports = function criarRotasCertificados({ authInterna, requireRole, get
     }))
   }))
 
+  // A base inteira do curso, de uma vez (planilha enviada no curso errado).
+  router.delete('/admin/cursos/:courseId/emitidos', ...soAdmin, tratar(async (req, res) => {
+    res.json(await service.excluirBase({ courseId: idDaRota(req.params.courseId), actor: await quem(req), req }))
+  }))
+
   router.get('/admin/cursos/:courseId/emitidos/exportar', ...soAdmin, tratar(async (req, res) => {
     const { nomeArquivo, arquivo } = await service.exportarEmitidos({ courseId: idDaRota(req.params.courseId), status: req.query.status })
     enviarXlsx(res, nomeArquivo, arquivo)

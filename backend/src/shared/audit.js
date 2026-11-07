@@ -52,6 +52,7 @@ const ACOES = {
   CERTIFICADO_REATIVADO: 'certificado_reativado',
   CERTIFICADO_ADICIONADO_MANUAL: 'certificado_adicionado_manual',
   CERTIFICADO_EXCLUIDO: 'certificado_excluido',
+  CERTIFICADO_BASE_EXCLUIDA: 'certificado_base_excluida',
   // Planilha de diretores escolares importada (por GRE).
   DIRETORES_IMPORTADOS: 'diretores_importados',
 }

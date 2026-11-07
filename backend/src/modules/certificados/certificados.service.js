@@ -645,6 +645,40 @@ async function excluir({ id, actor, req }) {
   return { id, excluido: true }
 }
 
+/**
+ * Apaga a base inteira de um curso, de uma vez: para planilha enviada no curso
+ * errado. Mesmo efeito de `excluir` em cada linha (os codigos deixam de existir
+ * na validacao). Como `excluir`, nao desfaz as inscricoes criadas pela base.
+ */
+async function excluirBase({ courseId, actor, req }) {
+  requireMysql()
+  await cursoExiste(courseId)
+  const conexao = await getPool().getConnection()
+  let resumo
+  try {
+    await conexao.beginTransaction()
+    const [[totais]] = await conexao.execute(
+      `SELECT COUNT(*) AS total, COALESCE(SUM(status = 'valido'), 0) AS validos,
+              COALESCE(SUM(downloads > 0), 0) AS baixados
+         FROM certificados WHERE course_id = ? FOR UPDATE`,
+      [courseId]
+    )
+    const [resultado] = await conexao.execute('DELETE FROM certificados WHERE course_id = ?', [courseId])
+    await conexao.commit()
+    resumo = { excluidos: resultado.affectedRows, validos: Number(totais.validos), baixados: Number(totais.baixados) }
+  } catch (e) {
+    await conexao.rollback()
+    throw e
+  } finally {
+    conexao.release()
+  }
+  await registrar({
+    actorType: 'admin', actorId: actor?.id || null, actorLabel: actor?.name || null,
+    action: ACOES.CERTIFICADO_BASE_EXCLUIDA, req, details: { courseId, ...resumo },
+  })
+  return { courseId, ...resumo }
+}
+
 // ---------------------------------------------------------------------------
 // Area do cursista
 // ---------------------------------------------------------------------------
@@ -749,6 +783,7 @@ module.exports = {
   listarEmitidos,
   exportarEmitidos,
   excluir,
+  excluirBase,
   pdfParaAdmin,
   alterarStatus,
   meusCertificados,
