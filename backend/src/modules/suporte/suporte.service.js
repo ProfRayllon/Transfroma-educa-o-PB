@@ -6,8 +6,10 @@
  * Dois papeis:
  *   - quem GERE o suporte (perfil `suporte` e o administrador): ve todos os
  *     chamados, encaminha, cancela e reabre;
- *   - quem RECEBE um encaminhamento: ve so os chamados mandados para o perfil
- *     dele ou para ele mesmo, e trabalha neles -- responde, anota, resolve.
+ *   - quem RECEBE um encaminhamento: ve so os chamados mandados para ele
+ *     mesmo, ou para o perfil dele sem pessoa escolhida, e trabalha neles --
+ *     responde, anota, resolve. Chamado mandado a um colega do mesmo perfil
+ *     nao aparece.
  *
  * Espelhado em frontend/src/lib/suporte.js. Quem vale e este arquivo.
  */
@@ -35,14 +37,14 @@ const STATUS_PENDENTES = ['aberto', 'em_andamento', 'aguardando_solicitante']
 const PERFIS_QUE_GEREM = ['suporte', 'administrador']
 
 /**
- * Perfis que podem receber um encaminhamento. Todos os da equipe: quem resolve
- * um problema de certificado nao e quem resolve um de acesso, e a lista certa
- * so o suporte sabe no momento de encaminhar.
+ * Perfis que recebem casos encaminhados e tem o Suporte sempre no menu (com
+ * os proprios casos, nao a fila inteira). Professor, tutor, revisor e gestao
+ * ficam de fora.
  */
-const PERFIS_DESTINO = [
-  'suporte', 'administrador', 'gerencia', 'coordenador', 'supervisor', 'supervisor_tutoria',
-  'professor', 'tutor', 'revisor', 'tecnico', 'gestao', 'ti',
-]
+const PERFIS_QUE_RECEBEM = ['gerencia', 'coordenador', 'supervisor', 'supervisor_tutoria', 'tecnico', 'ti']
+
+/** Para quem o suporte pode encaminhar: quem gere e quem recebe. */
+const PERFIS_DESTINO = [...PERFIS_QUE_GEREM, ...PERFIS_QUE_RECEBEM]
 
 /** Status que quem recebeu o encaminhamento pode aplicar. */
 const STATUS_DE_QUEM_RECEBE = ['em_andamento', 'aguardando_solicitante', 'resolvido']
@@ -57,10 +59,19 @@ function gereSuporte(ator) {
   return PERFIS_QUE_GEREM.includes(ator?.role)
 }
 
-/** O chamado foi encaminhado a esta pessoa, ou ao perfil dela. */
+/** O Suporte aparece no menu mesmo sem caso pendente. */
+function temSuporteNoMenu(ator) {
+  return gereSuporte(ator) || PERFIS_QUE_RECEBEM.includes(ator?.role)
+}
+
+/**
+ * O chamado foi encaminhado a esta pessoa, ou ao perfil dela sem pessoa
+ * escolhida. Com responsavel definido, so ele ve -- os colegas do perfil nao.
+ * Espelha `clausulaDeEscopo` em suporte.repo.js.
+ */
 function recebeuOChamado(ator, chamado) {
   if (!ator || !chamado) return false
-  if (chamado.responsavelId != null && Number(chamado.responsavelId) === Number(ator.id)) return true
+  if (chamado.responsavelId != null) return Number(chamado.responsavelId) === Number(ator.id)
   return Boolean(chamado.encaminhadoPerfil) && chamado.encaminhadoPerfil === ator.role
 }
 
@@ -88,8 +99,10 @@ module.exports = {
   STATUS,
   STATUS_PENDENTES,
   PERFIS_DESTINO,
+  PERFIS_QUE_RECEBEM,
   erro,
   gereSuporte,
+  temSuporteNoMenu,
   recebeuOChamado,
   podeVer,
   podeExcluir,

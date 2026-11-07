@@ -403,7 +403,7 @@ export default function Atendimentos() {
           <p className="page-subtitle">
             {dados.gere
               ? 'Todos os chamados abertos pelo formulário público de suporte.'
-              : 'Chamados de suporte encaminhados a você ou ao seu perfil.'}
+              : 'Os chamados de suporte encaminhados a você: quantos chegaram, quantos estão pendentes e quantos você resolveu.'}
           </p>
         </div>
         <div className="flex gap-2">

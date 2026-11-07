@@ -83,12 +83,13 @@ async function buscar(id, opcoes) {
 
 /**
  * O WHERE do escopo. `todos` para quem gere o suporte; senao, o que foi
- * encaminhado para a pessoa ou para o perfil dela.
+ * encaminhado para a pessoa, ou para o perfil dela sem pessoa escolhida.
+ * Espelha `recebeuOChamado` em suporte.service.js.
  */
 function clausulaDeEscopo(escopo) {
   if (escopo.todos) return { sql: '1 = 1', params: [] }
   return {
-    sql: '(c.responsavel_id = ? OR c.encaminhado_perfil = ?)',
+    sql: '(c.responsavel_id = ? OR (c.responsavel_id IS NULL AND c.encaminhado_perfil = ?))',
     params: [escopo.usuarioId, escopo.perfil],
   }
 }

@@ -187,13 +187,13 @@ module.exports = function criarRotasSuporte({ authInterna, getUsuarioInterno, li
 
   /**
    * O que a lateral precisa: se mostra o item e quantos esperam. Responde para
-   * qualquer pessoa da equipe -- quem nao gere so aparece no menu se tiver
-   * chamado encaminhado.
+   * qualquer pessoa da equipe. Quem gere e os perfis que recebem casos veem
+   * o item sempre; os demais, so se tiverem chamado encaminhado pendente.
    */
   router.get('/resumo', tratar(async (req, res) => {
     const gere = service.gereSuporte(req.ator)
     const pendentes = await repo.contarPendentes(escopoDe(req.ator))
-    res.json({ gere, pendentes, mostrar: gere || pendentes > 0 })
+    res.json({ gere, pendentes, mostrar: service.temSuporteNoMenu(req.ator) || pendentes > 0 })
   }))
 
   router.get('/chamados', tratar(async (req, res) => {
