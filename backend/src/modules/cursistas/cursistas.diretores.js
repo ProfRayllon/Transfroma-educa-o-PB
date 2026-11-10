@@ -279,8 +279,40 @@ const ordemDaGre = (gre) => {
 }
 
 /**
- * O cruzamento por GRE: quantos diretores, de quantas escolas, quantos ja
- * entraram na plataforma e quantos estao inscritos em algum curso. So numeros.
+ * Escolas de cada GRE segundo o SIAGE (levantamento de 10/11/2026). E a meta:
+ * cada escola precisa de um diretor cadastrado. Total: 600 escolas.
+ */
+const ESCOLAS_SIAGE = {
+  '1ª GRE': 90, '2ª GRE': 58, '3ª GRE': 83, '4ª GRE': 19, '5ª GRE': 26, '6ª GRE': 43,
+  '7ª GRE': 30, '8ª GRE': 21, '9ª GRE': 33, '10ª GRE': 30, '11ª GRE': 16, '12ª GRE': 23,
+  '13ª GRE': 15, '14ª GRE': 31, '15ª GRE': 22, '16ª GRE': 60,
+}
+
+/**
+ * Remove um diretor da base de diretores, pelo CPF. A conta de cursista (se
+ * houver) continua: ele so deixa de contar como diretor da escola.
+ */
+async function remover({ cpf: cpfBruto, actor, req }) {
+  requireMysql()
+  const cpf = normalizeCpf(cpfBruto)
+  if (!isValidCpf(cpf)) throw erro(400, 'CPF invalido.')
+  const pool = getPool()
+  const [[atual]] = await pool.query('SELECT nome, gre, escola, cursista_id FROM diretores WHERE cpf = ?', [cpf])
+  if (!atual) throw erro(404, 'Este CPF nao esta na base de diretores.')
+  await pool.query('DELETE FROM diretores WHERE cpf = ?', [cpf])
+  await registrar({
+    actorType: 'admin', actorId: actor?.id || null, actorLabel: actor?.name || null,
+    action: ACOES.DIRETOR_REMOVIDO, cursistaId: atual.cursista_id || null, req,
+    details: { nome: atual.nome, gre: atual.gre, escola: atual.escola },
+  })
+  return { nome: atual.nome, gre: atual.gre, escola: atual.escola }
+}
+
+/**
+ * O cruzamento por GRE: escolas do SIAGE, quantas ja tem diretor cadastrado
+ * (e quantas faltam), quantos diretores, quantos ja entraram na plataforma e
+ * quantos estao inscritos em algum curso. So numeros, calculados na hora --
+ * adicionar, importar ou remover diretor ja muda a tabela.
  */
 async function resumoPorGre() {
   requireMysql()
@@ -294,17 +326,27 @@ async function resumoPorGre() {
        LEFT JOIN cursistas cu ON cu.id = d.cursista_id
       GROUP BY d.gre`
   )
-  const gres = linhas.map((l) => ({
-    gre: l.gre || 'Sem GRE',
-    diretores: Number(l.diretores),
-    escolas: Number(l.escolas),
-    acessaram: Number(l.acessaram || 0),
-    inscritos: Number(l.inscritos || 0),
-  })).sort((a, b) => ordemDaGre(a.gre) - ordemDaGre(b.gre))
+  const porGre = new Map(linhas.map((l) => [l.gre || 'Sem GRE', l]))
+  // Toda GRE do SIAGE aparece, mesmo sem nenhum diretor ainda (13ª, 16ª...).
+  for (const gre of Object.keys(ESCOLAS_SIAGE)) if (!porGre.has(gre)) porGre.set(gre, {})
+  const gres = [...porGre].map(([gre, l]) => {
+    const escolas = Number(l.escolas || 0)
+    const siage = ESCOLAS_SIAGE[gre] ?? null
+    return {
+      gre,
+      siage,
+      pendentes: siage === null ? null : Math.max(0, siage - escolas),
+      diretores: Number(l.diretores || 0),
+      escolas,
+      acessaram: Number(l.acessaram || 0),
+      inscritos: Number(l.inscritos || 0),
+    }
+  }).sort((a, b) => ordemDaGre(a.gre) - ordemDaGre(b.gre))
   const total = gres.reduce((t, g) => ({
+    siage: t.siage + (g.siage || 0), pendentes: t.pendentes + (g.pendentes || 0),
     diretores: t.diretores + g.diretores, escolas: t.escolas + g.escolas,
     acessaram: t.acessaram + g.acessaram, inscritos: t.inscritos + g.inscritos,
-  }), { diretores: 0, escolas: 0, acessaram: 0, inscritos: 0 })
+  }), { siage: 0, pendentes: 0, diretores: 0, escolas: 0, acessaram: 0, inscritos: 0 })
   return { gres, total }
 }
 
@@ -336,4 +378,4 @@ async function exportar({ gre = '' } = {}) {
   })
 }
 
-module.exports = { garantirEsquema, importar, adicionarManual, resumoPorGre, exportar, FUNCAO_DIRETOR }
+module.exports = { garantirEsquema, importar, adicionarManual, remover, resumoPorGre, exportar, FUNCAO_DIRETOR, ESCOLAS_SIAGE }

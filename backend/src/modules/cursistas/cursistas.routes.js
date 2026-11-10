@@ -362,6 +362,10 @@ module.exports = function criarRotasCursistas({ authInterna, requireRole, getUsu
     res.json(await diretores.adicionarManual({ dados: req.body || {}, actor: await getUsuarioInterno(req.user.id), req }))
   }))
 
+  router.delete('/admin/diretores/:cpf', ...soAdmin, tratar(async (req, res) => {
+    res.json(await diretores.remover({ cpf: req.params.cpf, actor: await getUsuarioInterno(req.user.id), req }))
+  }))
+
   router.get('/admin/diretores/resumo', ...soAdmin, tratar(async (_req, res) => {
     res.json(await diretores.resumoPorGre())
   }))

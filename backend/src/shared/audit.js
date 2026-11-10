@@ -55,6 +55,8 @@ const ACOES = {
   CERTIFICADO_BASE_EXCLUIDA: 'certificado_base_excluida',
   // Planilha de diretores escolares importada (por GRE).
   DIRETORES_IMPORTADOS: 'diretores_importados',
+  // Diretor tirado da base de diretores (a conta de cursista continua).
+  DIRETOR_REMOVIDO: 'diretor_removido',
 }
 
 function clientIp(req) {

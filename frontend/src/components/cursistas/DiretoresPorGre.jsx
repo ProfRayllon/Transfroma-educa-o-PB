@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertTriangle, CheckCircle, Download, FileSpreadsheet, Loader2, School, Upload, UserPlus } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Download, FileSpreadsheet, Loader2, School, Upload, UserMinus, UserPlus } from 'lucide-react'
 import Modal from '../ui/Modal'
 import api, { getApiErrorMessage } from '../../lib/api'
 
@@ -179,6 +179,55 @@ function AdicionarDiretor({ aberto, aoFechar, aoSalvar }) {
   )
 }
 
+/** Tira um diretor da base pelo CPF. A conta de cursista dele continua. */
+function RemoverDiretor({ aberto, aoFechar, aoRemover }) {
+  const [cpf, setCpf] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState('')
+
+  useEffect(() => { if (aberto) { setCpf(''); setErro('') } }, [aberto])
+
+  const remover = async (e) => {
+    e.preventDefault()
+    setSalvando(true)
+    setErro('')
+    try {
+      const { data } = await api.delete(`/cursistas/admin/diretores/${cpf.replace(/\D/g, '')}`)
+      aoRemover(data)
+    } catch (error) {
+      setErro(getApiErrorMessage(error, 'Não foi possível remover o diretor.'))
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <Modal open={aberto} onClose={aoFechar} title="Remover diretor(a)" size="md">
+      <form onSubmit={remover} className="space-y-3">
+        <p className="text-xs text-gray-500">
+          O CPF sai da base de diretores e a escola volta a contar como pendente na GRE. A conta de cursista e as
+          inscrições da pessoa não mudam.
+        </p>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-gray-600">CPF do(a) diretor(a) *</span>
+          <input className="input-field font-mono" inputMode="numeric" placeholder="000.000.000-00" value={formatarCpf(cpf)} onChange={(e) => setCpf(e.target.value)} required />
+        </label>
+        {erro && (
+          <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
+            <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" /> {erro}
+          </div>
+        )}
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" className="btn-secondary" onClick={aoFechar} disabled={salvando}>Cancelar</button>
+          <button type="submit" className="btn-primary bg-red-600 hover:bg-red-700" disabled={salvando || cpf.replace(/\D/g, '').length !== 11}>
+            {salvando ? <Loader2 size={14} className="animate-spin" /> : <UserMinus size={14} />} Remover
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
 export default function DiretoresPorGre({ aoImportar }) {
   const [resumo, setResumo] = useState(null)
   const [arquivo, setArquivo] = useState(null)
@@ -187,6 +236,7 @@ export default function DiretoresPorGre({ aoImportar }) {
   const [exportando, setExportando] = useState(false)
   const [erro, setErro] = useState('')
   const [adicionando, setAdicionando] = useState(false)
+  const [removendo, setRemovendo] = useState(false)
   const [avisoManual, setAvisoManual] = useState('')
   const arquivoRef = useRef(null)
 
@@ -261,6 +311,9 @@ export default function DiretoresPorGre({ aoImportar }) {
           <button type="button" className="btn-secondary text-sm" onClick={() => { setAvisoManual(''); setAdicionando(true) }}>
             <UserPlus size={14} /> Adicionar diretor
           </button>
+          <button type="button" className="btn-secondary text-sm" onClick={() => { setAvisoManual(''); setRemovendo(true) }} disabled={!total?.diretores}>
+            <UserMinus size={14} /> Remover diretor
+          </button>
           <input ref={arquivoRef} type="file" accept=".xlsx" className="hidden" onChange={escolher} />
           <button type="button" className="btn-secondary text-sm" onClick={() => arquivoRef.current?.click()} disabled={ocupado}>
             {ocupado ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Importar diretores
@@ -294,6 +347,17 @@ export default function DiretoresPorGre({ aoImportar }) {
         }}
       />
 
+      <RemoverDiretor
+        aberto={removendo}
+        aoFechar={() => setRemovendo(false)}
+        aoRemover={(d) => {
+          setRemovendo(false)
+          setAvisoManual(`${d.nome} saiu da base de diretores — ${d.gre || 'sem GRE'}${d.escola ? `, ${d.escola}` : ''}. A conta de cursista continua.`)
+          carregar()
+          aoImportar?.()
+        }}
+      />
+
       {conferencia && (
         <Conferencia
           dados={conferencia}
@@ -308,38 +372,58 @@ export default function DiretoresPorGre({ aoImportar }) {
         </div>
       )}
 
-      {/* Cruzamento por GRE: so contagens. */}
+      {/* Cruzamento por GRE: so contagens. A meta e o numero de escolas do SIAGE. */}
       <div className="mt-5 overflow-x-auto rounded-xl border border-gray-100">
-        <table className="w-full min-w-[560px]">
+        <table className="w-full min-w-[760px]">
           <thead>
             <tr>
               <th className="table-header">GRE</th>
+              <th className="table-header text-right" title="Escolas da GRE segundo o SIAGE">Escolas (SIAGE)</th>
+              <th className="table-header text-right" title="Escolas com diretor cadastrado no sistema">Com diretor</th>
+              <th className="table-header text-right" title="Escolas do SIAGE ainda sem diretor cadastrado">Pendentes</th>
               <th className="table-header text-right">Diretores</th>
-              <th className="table-header text-right">Escolas</th>
               <th className="table-header text-right">Já acessaram</th>
               <th className="table-header text-right">Inscritos em curso</th>
             </tr>
           </thead>
           <tbody>
             {!resumo ? (
-              <tr><td colSpan={5} className="table-cell py-5 text-center text-gray-400">Carregando...</td></tr>
+              <tr><td colSpan={7} className="table-cell py-5 text-center text-gray-400">Carregando...</td></tr>
             ) : gres.length === 0 ? (
-              <tr><td colSpan={5} className="table-cell py-5 text-center text-gray-400">Nenhum diretor importado ainda. Baixe o modelo, preencha e importe.</td></tr>
+              <tr><td colSpan={7} className="table-cell py-5 text-center text-gray-400">Nenhum diretor importado ainda. Baixe o modelo, preencha e importe.</td></tr>
             ) : (
               <>
-                {gres.map((g) => (
-                  <tr key={g.gre} className="border-t border-gray-100">
-                    <td className="table-cell font-medium text-gray-800">{g.gre}</td>
-                    <td className="table-cell text-right">{numero(g.diretores)}</td>
-                    <td className="table-cell text-right">{numero(g.escolas)}</td>
-                    <td className="table-cell text-right">{numero(g.acessaram)} <span className="text-gray-400">({pct(g.acessaram, g.diretores)}%)</span></td>
-                    <td className="table-cell text-right">{numero(g.inscritos)} <span className="text-gray-400">({pct(g.inscritos, g.diretores)}%)</span></td>
-                  </tr>
-                ))}
+                {gres.map((g) => {
+                  const acima = g.siage !== null && g.escolas > g.siage
+                  return (
+                    <tr key={g.gre} className="border-t border-gray-100">
+                      <td className="table-cell font-medium text-gray-800">{g.gre}</td>
+                      <td className="table-cell text-right">{g.siage === null ? '—' : numero(g.siage)}</td>
+                      <td className="table-cell text-right">
+                        {numero(g.escolas)}{' '}
+                        {g.siage ? (
+                          <span className={acima ? 'text-amber-600' : 'text-gray-400'} title={acima ? 'Mais escolas cadastradas que o SIAGE informa: confira a lista desta GRE' : undefined}>
+                            ({pct(g.escolas, g.siage)}%)
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="table-cell text-right">
+                        {g.pendentes === null ? '—' : g.pendentes > 0
+                          ? <span className="font-semibold text-amber-600">{numero(g.pendentes)}</span>
+                          : <span className="inline-flex items-center gap-1 text-green-600"><CheckCircle size={13} /> 0</span>}
+                      </td>
+                      <td className="table-cell text-right">{numero(g.diretores)}</td>
+                      <td className="table-cell text-right">{numero(g.acessaram)} <span className="text-gray-400">({pct(g.acessaram, g.diretores)}%)</span></td>
+                      <td className="table-cell text-right">{numero(g.inscritos)} <span className="text-gray-400">({pct(g.inscritos, g.diretores)}%)</span></td>
+                    </tr>
+                  )
+                })}
                 <tr className="border-t-2 border-gray-200 bg-gray-50 font-semibold">
                   <td className="table-cell">Total</td>
+                  <td className="table-cell text-right">{numero(total.siage)}</td>
+                  <td className="table-cell text-right">{numero(total.escolas)} <span className="font-normal text-gray-400">({pct(total.escolas, total.siage)}%)</span></td>
+                  <td className={`table-cell text-right ${total.pendentes ? 'text-amber-600' : 'text-green-600'}`}>{numero(total.pendentes)}</td>
                   <td className="table-cell text-right">{numero(total.diretores)}</td>
-                  <td className="table-cell text-right">{numero(total.escolas)}</td>
                   <td className="table-cell text-right">{numero(total.acessaram)} <span className="font-normal text-gray-400">({pct(total.acessaram, total.diretores)}%)</span></td>
                   <td className="table-cell text-right">{numero(total.inscritos)} <span className="font-normal text-gray-400">({pct(total.inscritos, total.diretores)}%)</span></td>
                 </tr>
