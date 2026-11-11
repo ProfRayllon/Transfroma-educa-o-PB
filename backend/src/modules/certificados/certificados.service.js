@@ -104,6 +104,16 @@ async function listarCursos() {
   }))
 }
 
+/**
+ * Inscricao que a base de certificados criou (inscreverPelaBase), e nao o
+ * cursista nem o administrador: so ali ela nasce com `exported_at` = NOW() no
+ * mesmo INSERT que preenche `enrolled_at`, e as duas datas ficam iguais. A
+ * exportacao para o AVA so marca `exported_at` depois, entao uma inscricao
+ * comum nunca tem as duas iguais. Se uma exportacao posterior remarcar a linha,
+ * ela deixa de casar aqui: na duvida, a inscricao fica.
+ */
+const INSCRICAO_DA_BASE = `i.status = 'inscrito' AND i.exported_at = i.enrolled_at`
+
 /** A configuracao de um curso, sem a arte (que vem por rota propria). */
 async function obterConfig(courseId) {
   requireMysql()
@@ -119,6 +129,10 @@ async function obterConfig(courseId) {
             COALESCE(SUM(status = 'revogado'), 0) AS revogados,
             COALESCE(SUM(status = 'valido' AND downloads > 0), 0) AS baixados
        FROM certificados WHERE course_id = ?`,
+    [courseId]
+  )
+  const [[deixadas]] = await getPool().execute(
+    `SELECT COUNT(*) AS total FROM inscricoes i WHERE i.course_id = ? AND ${INSCRICAO_DA_BASE}`,
     [courseId]
   )
   return {
@@ -139,6 +153,7 @@ async function obterConfig(courseId) {
       validos: Number(totais.validos),
       revogados: Number(totais.revogados),
       baixados: Number(totais.baixados),
+      inscricoesDaBase: Number(deixadas.total),
     },
   }
 }
@@ -648,7 +663,13 @@ async function excluir({ id, actor, req }) {
 /**
  * Apaga a base inteira de um curso, de uma vez: para planilha enviada no curso
  * errado. Mesmo efeito de `excluir` em cada linha (os codigos deixam de existir
- * na validacao). Como `excluir`, nao desfaz as inscricoes criadas pela base.
+ * na validacao).
+ *
+ * Diferente de `excluir`, cancela tambem as inscricoes que a base criou neste
+ * curso (INSCRICAO_DA_BASE): se a planilha foi para o curso errado, ninguem dela
+ * fez o curso, e o curso nao pode seguir aparecendo em "Meus cursos". Cancelar,
+ * e nao apagar, deixa o historico e permite reativar. Com a base ja vazia, a
+ * chamada serve so para isso: limpar o que uma exclusao anterior deixou.
  */
 async function excluirBase({ courseId, actor, req }) {
   requireMysql()
@@ -664,8 +685,18 @@ async function excluirBase({ courseId, actor, req }) {
       [courseId]
     )
     const [resultado] = await conexao.execute('DELETE FROM certificados WHERE course_id = ?', [courseId])
+    const [canceladas] = await conexao.execute(
+      `UPDATE inscricoes i SET i.status = 'cancelado', i.cancelled_at = NOW()
+        WHERE i.course_id = ? AND ${INSCRICAO_DA_BASE}`,
+      [courseId]
+    )
     await conexao.commit()
-    resumo = { excluidos: resultado.affectedRows, validos: Number(totais.validos), baixados: Number(totais.baixados) }
+    resumo = {
+      excluidos: resultado.affectedRows,
+      validos: Number(totais.validos),
+      baixados: Number(totais.baixados),
+      inscricoesCanceladas: canceladas.affectedRows,
+    }
   } catch (e) {
     await conexao.rollback()
     throw e

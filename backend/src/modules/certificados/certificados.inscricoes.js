@@ -16,7 +16,10 @@ const { getPool } = require('../../shared/db')
  * - `exported_at` ja preenchido: a exportacao de inscricoes alimenta a
  *   matricula no AVA, e curso concluido nao deve gerar matricula nova.
  * - Revogar ou excluir o certificado NAO desfaz a inscricao: a pessoa fez o
- *   curso; so o documento deixou de valer.
+ *   curso; so o documento deixou de valer. A excecao e excluir a base inteira
+ *   (planilha no curso errado): ali `excluirBase` cancela estas inscricoes.
+ * - `exported_at` igual a `enrolled_at` e a marca de que a inscricao nasceu
+ *   aqui (INSCRICAO_DA_BASE em certificados.service); nao mude um sem o outro.
  *
  * @returns {Promise<number>} linhas afetadas (novas contam 1, reativadas 2)
  */

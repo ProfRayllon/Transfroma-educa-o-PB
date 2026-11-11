@@ -504,18 +504,28 @@ function ExcluirBase({ curso, totais, aberto, aoFechar, aoExcluir }) {
   }
 
   const pode = digitado.trim().toUpperCase() === 'EXCLUIR' && !excluindo
+  const soInscricoes = !(totais?.total > 0)
+  const deixadas = totais?.inscricoesDaBase || 0
 
   return (
-    <Modal open={aberto} onClose={excluindo ? () => {} : aoFechar} title="Excluir toda a base?" size="md" closable={!excluindo}>
+    <Modal open={aberto} onClose={excluindo ? () => {} : aoFechar} title={soInscricoes ? 'Remover inscrições deixadas pela base?' : 'Excluir toda a base?'} size="md" closable={!excluindo}>
       <div className="space-y-3 text-sm text-gray-600">
-        <p>
-          Todos os <strong>{numero(totais?.total)}</strong> certificado(s) de <strong>{curso.nome}</strong> serão apagados
-          {totais?.revogados ? ` (${numero(totais.revogados)} revogados incluídos)` : ''}. Os códigos deixam de existir na validação.
-        </p>
+        {soInscricoes ? (
+          <p>
+            A base de <strong>{curso.nome}</strong> já está vazia, mas <strong>{numero(deixadas)}</strong> cursista(s) seguem
+            inscritos neste curso por causa dela. As inscrições serão canceladas e o curso sai de “Meus cursos” dessas pessoas.
+          </p>
+        ) : (
+          <p>
+            Todos os <strong>{numero(totais?.total)}</strong> certificado(s) de <strong>{curso.nome}</strong> serão apagados
+            {totais?.revogados ? ` (${numero(totais.revogados)} revogados incluídos)` : ''}. Os códigos deixam de existir na validação.
+            {deixadas > 0 && <> As <strong>{numero(deixadas)}</strong> inscrição(ões) que a base criou neste curso também serão canceladas.</>}
+          </p>
+        )}
         {totais?.baixados > 0 && (
           <Aviso>{numero(totais.baixados)} pessoa(s) já baixaram o certificado deste curso. Se ele já circulou, prefira revogar.</Aviso>
         )}
-        <p>Use para planilha enviada no curso errado. Depois, é só mandar a base certa em “Adicionar concluintes”.</p>
+        <p>Use para planilha enviada no curso errado. Inscrições feitas pelo cursista ou pelo administrador não são alteradas.</p>
         <label className="block">
           <span className="mb-1 block font-medium text-gray-700">Digite EXCLUIR para confirmar</span>
           <input className="input-field" value={digitado} onChange={(e) => setDigitado(e.target.value)} autoFocus disabled={excluindo} />
@@ -530,7 +540,7 @@ function ExcluirBase({ curso, totais, aberto, aoFechar, aoExcluir }) {
           disabled={!pode}
           className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {excluindo ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />} Excluir base
+          {excluindo ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />} {soInscricoes ? 'Remover inscrições' : 'Excluir base'}
         </button>
       </div>
     </Modal>
@@ -688,15 +698,20 @@ function AbaEmitidos({ curso, totais, aoAtualizar }) {
         </table>
       </div>
 
-      {totais?.total > 0 && (
+      {(totais?.total > 0 || totais?.inscricoesDaBase > 0) && (
         <div className="flex justify-end">
           <button
             type="button"
             className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
             onClick={() => { setAviso(''); setExcluirBase(true) }}
-            title="Apaga todos os certificados deste curso (planilha enviada no curso errado)"
+            title={totais.total > 0
+              ? 'Apaga todos os certificados deste curso (planilha enviada no curso errado)'
+              : 'Cancela as inscrições que a base apagada deixou neste curso'}
           >
-            <Trash2 size={15} /> Excluir toda a base ({numero(totais.total)})
+            <Trash2 size={15} />
+            {totais.total > 0
+              ? `Excluir toda a base (${numero(totais.total)})`
+              : `Remover inscrições deixadas pela base (${numero(totais.inscricoesDaBase)})`}
           </button>
         </div>
       )}
@@ -708,7 +723,10 @@ function AbaEmitidos({ curso, totais, aoAtualizar }) {
         aoFechar={() => setExcluirBase(false)}
         aoExcluir={async (r) => {
           setExcluirBase(false)
-          setAviso(`${numero(r.excluidos)} certificado(s) excluído(s). A base deste curso está vazia.`)
+          const partes = []
+          if (r.excluidos > 0) partes.push(`${numero(r.excluidos)} certificado(s) excluído(s)`)
+          if (r.inscricoesCanceladas > 0) partes.push(`${numero(r.inscricoesCanceladas)} inscrição(ões) cancelada(s)`)
+          setAviso(`${partes.join(' e ') || 'Nada a remover'}. A base deste curso está vazia.`)
           setPagina(1)
           await carregar()
           aoAtualizar()
