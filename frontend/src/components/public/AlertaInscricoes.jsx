@@ -5,8 +5,8 @@ import CapaCurso from './CapaCurso'
 /**
  * Alerta de abertura da Home: o aviso de encerramento (25/11).
  *
- * Cronometro unico e os cinco cursos das trilhas Institucional e Transversal,
- * que encerram no mesmo dia. So informacao -- sem botoes: fecha no X, no Esc
+ * Cronometro unico e os oito cursos das tres trilhas, que encerram no mesmo
+ * dia. So informacao -- sem botoes: fecha no X, no Esc
  * ou clicando fora. Passado o prazo, o alerta deixa de aparecer.
  *
  * Aparece toda vez que a Home e carregada (inclusive ao atualizar a pagina).
@@ -25,6 +25,14 @@ const TRILHAS = [
       { id: 10, nome: 'Google for Education' },
       { id: 11, nome: 'Legislação Educacional' },
       { id: 15, nome: 'Análise de dados e gestão da aprendizagem' },
+    ],
+  },
+  {
+    titulo: 'Trilha da BNCC',
+    cursos: [
+      { id: 4, nome: 'Aprendizagens essenciais e recomposição em Matemática e Ciências da Natureza' },
+      { id: 5, nome: 'Leitura, produção textual e recomposição em Linguagens' },
+      { id: 3, nome: 'Territórios, cultura e identidade no ensino de Ciências Humanas' },
     ],
   },
   {
@@ -118,7 +126,7 @@ export default function AlertaInscricoes({ cursos }) {
       className="fixed inset-0 z-[70] flex items-center justify-center bg-[#1c1033]/70 p-3 backdrop-blur-sm animate-fade-in sm:p-4"
       onClick={(e) => { if (e.target === e.currentTarget) fechar() }}
     >
-      <div className="relative max-h-[94vh] w-full max-w-[880px] overflow-y-auto rounded-3xl bg-white shadow-[0_30px_80px_rgba(28,16,51,.45)]">
+      <div className="relative max-h-[94vh] w-full max-w-[1120px] overflow-y-auto rounded-3xl bg-white shadow-[0_30px_80px_rgba(28,16,51,.45)]">
         <button
           type="button"
           onClick={fechar}
@@ -135,11 +143,10 @@ export default function AlertaInscricoes({ cursos }) {
               <Clock size={12} /> Prazo final
             </span>
             <h2 id="alerta-inscricoes-titulo" className="mt-3 text-[24px] font-black leading-tight sm:text-[32px]">
-              Os cursos encerram em 25 de novembro
+              Todos os cursos encerram em 25 de novembro
             </h2>
             <p className="mx-auto mt-2 max-w-[700px] text-[14px] leading-relaxed text-white/85">
-              Os cinco cursos das trilhas <strong className="text-white">Institucional</strong> e{' '}
-              <strong className="text-white">Transversal</strong> encerram no dia 25. Garanta a conclusão
+              Os <strong className="text-white">oito cursos</strong> das trilhas Institucional, da BNCC e Transversal encerram no dia 25. Garanta a conclusão
               das atividades antes do prazo.
             </p>
             <div className="mx-auto mt-5 grid max-w-[460px] grid-cols-4 gap-2 sm:gap-3">
@@ -151,8 +158,8 @@ export default function AlertaInscricoes({ cursos }) {
           </div>
         </div>
 
-        {/* As duas trilhas, lado a lado no computador e empilhadas no celular. */}
-        <div className="grid gap-5 px-5 pb-7 pt-6 sm:px-8 md:grid-cols-2">
+        {/* As tres trilhas, lado a lado no computador e empilhadas no celular. */}
+        <div className="grid gap-5 px-5 pb-7 pt-6 sm:px-8 lg:grid-cols-3">
           {TRILHAS.map((trilha) => (
             <section key={trilha.titulo}>
               <h3 className="mb-2.5 flex items-center justify-between text-[12px] font-black uppercase tracking-[0.16em] text-[#6f35b5]">
