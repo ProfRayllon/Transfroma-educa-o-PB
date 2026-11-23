@@ -3,64 +3,38 @@ import { Clock, X } from 'lucide-react'
 import CapaCurso from './CapaCurso'
 
 /**
- * Alerta de abertura da Home: o aviso do prazo final (20/11).
+ * Alerta de abertura da Home: o aviso de encerramento (25/11).
  *
- * Cronometro unico para todos os cursos e os oito cursos nas tres trilhas,
- * cada um com a sua situacao (reaberto, em andamento, em enturmacao). So
- * informacao -- sem botoes: fecha no X, no Esc ou clicando fora. Passado o
- * prazo, o alerta deixa de aparecer.
+ * Cronometro unico e os cinco cursos das trilhas Institucional e Transversal,
+ * que encerram no mesmo dia. So informacao -- sem botoes: fecha no X, no Esc
+ * ou clicando fora. Passado o prazo, o alerta deixa de aparecer.
  *
- * Aparece uma vez por sessao do navegador. A chave muda quando o conteudo muda,
- * para quem fechou a versao anterior ver a nova uma vez.
+ * Aparece toda vez que a Home e carregada (inclusive ao atualizar a pagina).
  *
- * Os cursos e as situacoes ficam fixos aqui, e nao no banco: e um comunicado
- * com data para acabar, escrito pela coordenacao. Passado o prazo, sai sozinho.
+ * Os cursos ficam fixos aqui, e nao no banco: e um comunicado com data para
+ * acabar, escrito pela coordenacao. Passado o prazo, sai sozinho.
  */
 
-const CHAVE_SESSAO = 'transforma:alerta-inscricoes-visto-v4'
-
-// 20 de novembro, fim do dia, no horario de Brasilia.
-const PRAZO_FINAL = new Date('2026-11-20T23:59:59-03:00').getTime()
-
-const SITUACOES = {
-  reaberto: { rotulo: 'Reaberto', classe: 'bg-green-100 text-green-800 ring-green-200' },
-  andamento: { rotulo: 'Em andamento', classe: 'bg-[#f3e8ff] text-[#6f35b5] ring-[#e9d5ff]' },
-  enturmacao: { rotulo: 'Em enturmação', classe: 'bg-amber-100 text-amber-800 ring-amber-200' },
-}
+// 25 de novembro, fim do dia, no horario de Brasilia.
+const PRAZO_FINAL = new Date('2026-11-25T23:59:59-03:00').getTime()
 
 const TRILHAS = [
   {
     titulo: 'Trilha Institucional',
     cursos: [
-      { id: 10, nome: 'Google for Education', situacao: 'reaberto', texto: 'Curso reaberto para quem já estava inscrito.' },
-      { id: 11, nome: 'Legislação Educacional', situacao: 'reaberto', texto: 'Curso reaberto para quem já estava inscrito.' },
-      { id: 15, nome: 'Análise de dados e gestão da aprendizagem', situacao: 'enturmacao', texto: 'Enturmação de professores e diretores.' },
-    ],
-  },
-  {
-    titulo: 'Trilha da BNCC',
-    cursos: [
-      { id: 4, nome: 'Aprendizagens essenciais e recomposição em Matemática e Ciências da Natureza', situacao: 'andamento', texto: 'Curso em andamento até 20/11.' },
-      { id: 5, nome: 'Leitura, produção textual e recomposição em Linguagens', situacao: 'andamento', texto: 'Curso em andamento até 20/11.' },
-      { id: 3, nome: 'Territórios, cultura e identidade no ensino de Ciências Humanas', situacao: 'andamento', texto: 'Curso em andamento até 20/11.' },
+      { id: 10, nome: 'Google for Education' },
+      { id: 11, nome: 'Legislação Educacional' },
+      { id: 15, nome: 'Análise de dados e gestão da aprendizagem' },
     ],
   },
   {
     titulo: 'Trilha Transversal',
     cursos: [
-      { id: 8, nome: 'Educação inclusiva: fundamentos, estratégias e acessibilidade', situacao: 'enturmacao', texto: 'Enturmação em andamento.' },
-      { id: 2, nome: 'BNCC Computação na prática docente', situacao: 'enturmacao', texto: 'Enturmação em andamento.' },
+      { id: 8, nome: 'Educação inclusiva: fundamentos, estratégias e acessibilidade' },
+      { id: 2, nome: 'BNCC Computação na prática docente' },
     ],
   },
 ]
-
-function jaVisto() {
-  try { return sessionStorage.getItem(CHAVE_SESSAO) === '1' } catch { return false }
-}
-
-function marcarVisto() {
-  try { sessionStorage.setItem(CHAVE_SESSAO, '1') } catch { /* navegador sem armazenamento: so nao lembra */ }
-}
 
 function partes(ms) {
   const total = Math.max(0, Math.floor(ms / 1000))
@@ -85,18 +59,17 @@ function Bloco({ valor, rotulo }) {
   )
 }
 
-/** Card de um curso no aviso: capa pequena, nome, situacao e o que esta acontecendo. */
+/** Card de um curso no aviso: capa pequena, nome e a data de encerramento. */
 function CursoDoAviso({ curso, dadosDoCurso }) {
-  const situacao = SITUACOES[curso.situacao]
   return (
     <div className="flex gap-3 rounded-2xl border border-[#ede7f6] bg-white p-2.5 text-left">
       <div className="h-[68px] w-[68px] flex-shrink-0 overflow-hidden rounded-xl ring-1 ring-[#e9d5ff]">
         <CapaCurso curso={dadosDoCurso || { id: curso.id, hasImage: true, trail: '' }} />
       </div>
       <div className="min-w-0 flex-1">
-        <span className={`inline-block rounded-full px-2 py-0.5 text-[10.5px] font-black ring-1 ${situacao.classe}`}>{situacao.rotulo}</span>
+        <span className="inline-block rounded-full bg-red-100 px-2 py-0.5 text-[10.5px] font-black text-red-700 ring-1 ring-red-200">Encerra em 25/11</span>
         <span className="mt-1 block text-[13px] font-black leading-snug text-[#1c1033]">{curso.nome}</span>
-        <span className="mt-0.5 block text-[11.5px] leading-snug text-[#566176]">{curso.texto}</span>
+        <span className="mt-0.5 block text-[11.5px] leading-snug text-[#566176]">Conclua as atividades até o fim do dia 25.</span>
       </div>
     </div>
   )
@@ -112,7 +85,7 @@ export default function AlertaInscricoes({ cursos }) {
 
   // Abre um instante depois da pagina, para nao competir com o carregamento.
   useEffect(() => {
-    if (jaVisto() || Date.now() >= PRAZO_FINAL) return undefined
+    if (Date.now() >= PRAZO_FINAL) return undefined
     const t = setTimeout(() => setAberto(true), 700)
     return () => clearTimeout(t)
   }, [])
@@ -132,10 +105,7 @@ export default function AlertaInscricoes({ cursos }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberto])
 
-  const fechar = () => {
-    marcarVisto()
-    setAberto(false)
-  }
+  const fechar = () => setAberto(false)
 
   if (!aberto || !comPrazo) return null
   const { dias, horas, minutos, segundos } = partes(PRAZO_FINAL - agora)
@@ -148,7 +118,7 @@ export default function AlertaInscricoes({ cursos }) {
       className="fixed inset-0 z-[70] flex items-center justify-center bg-[#1c1033]/70 p-3 backdrop-blur-sm animate-fade-in sm:p-4"
       onClick={(e) => { if (e.target === e.currentTarget) fechar() }}
     >
-      <div className="relative max-h-[94vh] w-full max-w-[1120px] overflow-y-auto rounded-3xl bg-white shadow-[0_30px_80px_rgba(28,16,51,.45)]">
+      <div className="relative max-h-[94vh] w-full max-w-[880px] overflow-y-auto rounded-3xl bg-white shadow-[0_30px_80px_rgba(28,16,51,.45)]">
         <button
           type="button"
           onClick={fechar}
@@ -165,11 +135,12 @@ export default function AlertaInscricoes({ cursos }) {
               <Clock size={12} /> Prazo final
             </span>
             <h2 id="alerta-inscricoes-titulo" className="mt-3 text-[24px] font-black leading-tight sm:text-[32px]">
-              Todos os cursos encerram em 20 de novembro
+              Os cursos encerram em 25 de novembro
             </h2>
             <p className="mx-auto mt-2 max-w-[700px] text-[14px] leading-relaxed text-white/85">
-              Os cursos estão abertos <strong className="text-white">apenas para quem já está inscrito</strong>.
-              Google for Education e Legislação Educacional foram reabertos; os demais seguem até o mesmo prazo.
+              Os cinco cursos das trilhas <strong className="text-white">Institucional</strong> e{' '}
+              <strong className="text-white">Transversal</strong> encerram no dia 25. Garanta a conclusão
+              das atividades antes do prazo.
             </p>
             <div className="mx-auto mt-5 grid max-w-[460px] grid-cols-4 gap-2 sm:gap-3">
               <Bloco valor={dias} rotulo={dias === 1 ? 'dia' : 'dias'} />
@@ -180,8 +151,8 @@ export default function AlertaInscricoes({ cursos }) {
           </div>
         </div>
 
-        {/* As tres trilhas, lado a lado no computador e empilhadas no celular. */}
-        <div className="grid gap-5 px-5 pb-7 pt-6 sm:px-8 lg:grid-cols-3">
+        {/* As duas trilhas, lado a lado no computador e empilhadas no celular. */}
+        <div className="grid gap-5 px-5 pb-7 pt-6 sm:px-8 md:grid-cols-2">
           {TRILHAS.map((trilha) => (
             <section key={trilha.titulo}>
               <h3 className="mb-2.5 flex items-center justify-between text-[12px] font-black uppercase tracking-[0.16em] text-[#6f35b5]">
