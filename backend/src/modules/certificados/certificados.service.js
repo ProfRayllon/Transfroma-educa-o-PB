@@ -318,11 +318,25 @@ async function configParaEmissao(courseId) {
   }
 }
 
+/**
+ * Nome que sai no certificado: o do cadastro do cursista no sistema, cruzado
+ * pelo CPF. A planilha da base so serve para dizer QUEM tem direito; o nome
+ * dela (certificados.nome) fica guardado como veio e so vale para quem nao tem
+ * cadastro. Nada e regravado: e so leitura na hora de emitir/validar.
+ */
+const NOME_NO_CERTIFICADO = `COALESCE(NULLIF(TRIM(cu.name), ''), ce.nome)`
+const JOIN_CADASTRO = 'LEFT JOIN cursistas cu ON cu.cpf = ce.cpf'
+
+async function nomeParaCertificado(certificado) {
+  const [[cadastro]] = await getPool().execute('SELECT name FROM cursistas WHERE cpf = ?', [certificado.cpf])
+  return texto(cadastro?.name, 200) || certificado.nome
+}
+
 async function pdfDoCertificado(certificado) {
   const config = await configParaEmissao(certificado.course_id)
   const pdf = await montarPdf({
     courseId: certificado.course_id,
-    nome: certificado.nome,
+    nome: await nomeParaCertificado(certificado),
     cpf: certificado.cpf,
     codigo: certificado.codigo,
     config,
@@ -553,21 +567,22 @@ async function adicionarManual({ courseId, cpf, nome, actor, req }) {
 
 async function listarEmitidos({ courseId, busca = '', status = '', pagina = 1, porPagina = 25 }) {
   requireMysql()
-  const onde = ['course_id = ?']
+  const onde = ['ce.course_id = ?']
   const params = [courseId]
   const termo = texto(busca, 100)
   if (termo) {
     const digitos = termo.replace(/\D/g, '')
-    if (digitos.length === 11 && /^[\d.\-\s]+$/.test(termo)) { onde.push('cpf = ?'); params.push(normalizeCpf(digitos)) } else if (normalizarCodigo(termo)) { onde.push('codigo = ?'); params.push(normalizarCodigo(termo)) } else { onde.push('nome LIKE ?'); params.push(`%${termo}%`) }
+    if (digitos.length === 11 && /^[\d.\-\s]+$/.test(termo)) { onde.push('ce.cpf = ?'); params.push(normalizeCpf(digitos)) } else if (normalizarCodigo(termo)) { onde.push('ce.codigo = ?'); params.push(normalizarCodigo(termo)) } else { onde.push('(ce.nome LIKE ? OR cu.name LIKE ?)'); params.push(`%${termo}%`, `%${termo}%`) }
   }
-  if (status === 'valido' || status === 'revogado') { onde.push('status = ?'); params.push(status) }
+  if (status === 'valido' || status === 'revogado') { onde.push('ce.status = ?'); params.push(status) }
   const tamanho = Math.min(100, Math.max(1, Number(porPagina) || 25))
   const atual = Math.max(1, Number(pagina) || 1)
   const where = onde.join(' AND ')
-  const [[{ total }]] = await getPool().query(`SELECT COUNT(*) AS total FROM certificados WHERE ${where}`, params)
+  const [[{ total }]] = await getPool().query(`SELECT COUNT(*) AS total FROM certificados ce ${JOIN_CADASTRO} WHERE ${where}`, params)
   const [linhas] = await getPool().query(
-    `SELECT id, cpf, nome, codigo, status, downloads, primeiro_download_em, emitido_em
-       FROM certificados WHERE ${where} ORDER BY nome LIMIT ? OFFSET ?`,
+    `SELECT ce.id, ce.cpf, ce.nome AS nome_na_base, ${NOME_NO_CERTIFICADO} AS nome, ce.codigo, ce.status, ce.downloads,
+            ce.primeiro_download_em, ce.emitido_em
+       FROM certificados ce ${JOIN_CADASTRO} WHERE ${where} ORDER BY nome LIMIT ? OFFSET ?`,
     [...params, tamanho, (atual - 1) * tamanho]
   )
   return {
@@ -578,6 +593,7 @@ async function listarEmitidos({ courseId, busca = '', status = '', pagina = 1, p
       id: l.id,
       cpf: maskCpf(l.cpf),
       nome: l.nome,
+      nomeNaBase: l.nome_na_base,
       codigo: l.codigo,
       status: l.status,
       downloads: l.downloads,
@@ -618,10 +634,11 @@ async function alterarStatus({ id, status, actor, req }) {
 async function exportarEmitidos({ courseId, status = '' }) {
   requireMysql()
   const curso = await cursoExiste(courseId)
-  const filtro = status === 'valido' || status === 'revogado' ? ' AND status = ?' : ''
+  const filtro = status === 'valido' || status === 'revogado' ? ' AND ce.status = ?' : ''
   const [linhas] = await getPool().query(
-    `SELECT cpf, nome, codigo, status, downloads, primeiro_download_em, emitido_em
-       FROM certificados WHERE course_id = ?${filtro} ORDER BY nome`,
+    `SELECT ce.cpf, ce.nome, ${NOME_NO_CERTIFICADO} AS nome_no_certificado, ce.codigo, ce.status, ce.downloads,
+            ce.primeiro_download_em, ce.emitido_em
+       FROM certificados ce ${JOIN_CADASTRO} WHERE ce.course_id = ?${filtro} ORDER BY ce.nome`,
     filtro ? [courseId, status] : [courseId]
   )
   const data = (v) => (v ? new Date(v).toLocaleDateString('pt-BR') : '')
@@ -632,6 +649,7 @@ async function exportarEmitidos({ courseId, status = '' }) {
       colunas: [
         { titulo: 'CPF', valor: (l) => formatCpf(l.cpf) },
         { titulo: 'NOME_COMPLETO', valor: (l) => l.nome },
+        { titulo: 'NOME_NO_CERTIFICADO', valor: (l) => l.nome_no_certificado },
         { titulo: 'CODIGO_VALIDACAO', valor: (l) => l.codigo },
         { titulo: 'SITUACAO', valor: (l) => (l.status === 'valido' ? 'Valido' : 'Revogado') },
         { titulo: 'DOWNLOADS', valor: (l) => Number(l.downloads), numerica: true },
@@ -777,12 +795,13 @@ async function validar(codigoBruto) {
   const codigo = normalizarCodigo(codigoBruto)
   if (!codigo) return { encontrado: false }
   const [[linha]] = await getPool().execute(
-    `SELECT ce.nome, ce.cpf, ce.status, ce.emitido_em, ce.codigo,
+    `SELECT ${NOME_NO_CERTIFICADO} AS nome, ce.cpf, ce.status, ce.emitido_em, ce.codigo,
             COALESCE(cfg.nome_curso, c.name) AS curso, COALESCE(cfg.carga_horaria, c.workload_hours) AS carga_horaria,
             cfg.periodo
        FROM certificados ce
        JOIN certificado_config cfg ON cfg.course_id = ce.course_id AND cfg.liberado = 1
        JOIN courses c ON c.id = ce.course_id
+       ${JOIN_CADASTRO}
       WHERE ce.codigo = ?`,
     [codigo]
   )

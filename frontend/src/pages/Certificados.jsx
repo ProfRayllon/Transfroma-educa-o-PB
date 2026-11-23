@@ -652,7 +652,7 @@ function AbaEmitidos({ curso, totais, aoAtualizar }) {
         <table className="w-full min-w-[720px]">
           <thead>
             <tr>
-              <th className="table-header">Nome</th>
+              <th className="table-header">Nome no certificado</th>
               <th className="table-header">CPF</th>
               <th className="table-header">Código</th>
               <th className="table-header">Situação</th>
@@ -667,7 +667,14 @@ function AbaEmitidos({ curso, totais, aoAtualizar }) {
               <tr><td colSpan={6} className="table-cell py-6 text-center text-gray-400">Nenhum certificado {termo || status ? 'encontrado' : 'nesta base ainda'}.</td></tr>
             ) : dados.itens.map((item) => (
               <tr key={item.id} className="border-t border-gray-100">
-                <td className="table-cell font-medium text-gray-900">{item.nome}</td>
+                <td className="table-cell font-medium text-gray-900">
+                  {item.nome}
+                  {item.nomeNaBase && item.nomeNaBase !== item.nome && (
+                    <div className="text-xs font-normal text-gray-400" title="O certificado sai com o nome do cadastro no sistema">
+                      Na planilha: {item.nomeNaBase}
+                    </div>
+                  )}
+                </td>
                 <td className="table-cell">{item.cpf}</td>
                 <td className="table-cell font-mono">{item.codigo}</td>
                 <td className="table-cell">
