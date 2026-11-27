@@ -3,7 +3,7 @@ import { Clock, X } from 'lucide-react'
 import CapaCurso from './CapaCurso'
 
 /**
- * Alerta de abertura da Home: o aviso de encerramento (27/11).
+ * Alerta de abertura da Home: o aviso de encerramento (27/11, 13h).
  *
  * Cronometro unico e os oito cursos das tres trilhas, que encerram no mesmo
  * dia. So informacao -- sem botoes: fecha no X, no Esc
@@ -15,8 +15,8 @@ import CapaCurso from './CapaCurso'
  * acabar, escrito pela coordenacao. Passado o prazo, sai sozinho.
  */
 
-// 27 de novembro, fim do dia, no horario de Brasilia.
-const PRAZO_FINAL = new Date('2026-11-27T23:59:59-03:00').getTime()
+// 27 de novembro, 13h, no horario de Brasilia.
+const PRAZO_FINAL = new Date('2026-11-27T13:00:00-03:00').getTime()
 
 const TRILHAS = [
   {
@@ -75,9 +75,9 @@ function CursoDoAviso({ curso, dadosDoCurso }) {
         <CapaCurso curso={dadosDoCurso || { id: curso.id, hasImage: true, trail: '' }} />
       </div>
       <div className="min-w-0 flex-1">
-        <span className="inline-block rounded-full bg-red-100 px-2 py-0.5 text-[10.5px] font-black text-red-700 ring-1 ring-red-200">Encerra em 27/11</span>
+        <span className="inline-block rounded-full bg-red-100 px-2 py-0.5 text-[10.5px] font-black text-red-700 ring-1 ring-red-200">Encerra hoje às 13h</span>
         <span className="mt-1 block text-[13px] font-black leading-snug text-[#1c1033]">{curso.nome}</span>
-        <span className="mt-0.5 block text-[11.5px] leading-snug text-[#566176]">Conclua as atividades até o fim do dia 27.</span>
+        <span className="mt-0.5 block text-[11.5px] leading-snug text-[#566176]">Conclua as atividades até as 13h de 27/11.</span>
       </div>
     </div>
   )
@@ -143,10 +143,10 @@ export default function AlertaInscricoes({ cursos }) {
               <Clock size={12} /> Prazo final
             </span>
             <h2 id="alerta-inscricoes-titulo" className="mt-3 text-[24px] font-black leading-tight sm:text-[32px]">
-              Todos os cursos encerram em 27 de novembro
+              Todos os cursos encerram hoje, 27 de novembro, às 13h
             </h2>
             <p className="mx-auto mt-2 max-w-[700px] text-[14px] leading-relaxed text-white/85">
-              Os <strong className="text-white">oito cursos</strong> das trilhas Institucional, da BNCC e Transversal encerram no dia 27. Garanta a conclusão
+              Os <strong className="text-white">oito cursos</strong> das trilhas Institucional, da BNCC e Transversal encerram hoje, às 13h. Garanta a conclusão
               das atividades antes do prazo.
             </p>
             <div className="mx-auto mt-5 grid max-w-[460px] grid-cols-4 gap-2 sm:gap-3">
